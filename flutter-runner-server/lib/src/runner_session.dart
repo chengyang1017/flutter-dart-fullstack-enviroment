@@ -34,6 +34,8 @@ class RunnerSession {
   Process? process;
   Process? backendProcess;
 
+  final Set<String> firebaseCapabilities = <String>{};
+
   // Runtime-specific state is intentionally not serialized to clients.
   // Local execution does not need these fields; the Docker backend uses them
   // for its container id/name and host ports mapped to the two dev servers.
@@ -41,9 +43,10 @@ class RunnerSession {
   int? runtimePreviewPort;
   int? runtimeBackendPort;
 
-  // Database / network sidecar runtime identifiers (used by Docker postgres helper)
-  String? databaseRuntimeId;
+  // Database runtime state is also private to the runner. A Serverpod session
+  // only receives these values when its workspace contains a persisted model.
   String? runtimeNetworkId;
+  String? databaseRuntimeId;
   String? databasePassword;
 
   final List<RunnerLogEntry> logs = <RunnerLogEntry>[];
@@ -51,6 +54,13 @@ class RunnerSession {
 
   void setStatus(String value) {
     status = value;
+    touch();
+  }
+
+  void setFirebaseCapabilities(Iterable<String> values) {
+    firebaseCapabilities
+      ..clear()
+      ..addAll(values);
     touch();
   }
 
@@ -70,13 +80,17 @@ class RunnerSession {
     touch();
   }
 
-  Map<String, Object?> toJson() => {
-        'id': id,
-        'projectType': projectType,
-        'status': status,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-        'lastActivityAt': lastActivityAt.toUtc().toIso8601String(),
-        'previewUrl': previewUrl,
-        'backendUrl': backendUrl,
-      };
+  Map<String, Object?> toJson() {
+    final capabilities = firebaseCapabilities.toList()..sort();
+    return {
+      'id': id,
+      'projectType': projectType,
+      'status': status,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'lastActivityAt': lastActivityAt.toUtc().toIso8601String(),
+      'firebaseCapabilities': capabilities,
+      'previewUrl': previewUrl,
+      'backendUrl': backendUrl,
+    };
+  }
 }

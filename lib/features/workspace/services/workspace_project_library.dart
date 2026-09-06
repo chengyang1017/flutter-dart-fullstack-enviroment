@@ -1,3 +1,4 @@
+import '../models/workspace_git_remote.dart';
 import '../models/workspace_project.dart';
 import '../models/workspace_snapshot.dart';
 import 'workspace_persistence.dart';
@@ -131,11 +132,7 @@ class WorkspaceProjectLibrary {
   }
 
   Future<void> renameProject(String id, String name) async {
-    final index = _projects.indexWhere((project) => project.id == id);
-    if (index == -1) {
-      throw ArgumentError('Workspace project does not exist: $id');
-    }
-
+    final index = _projectIndex(id);
     final now = DateTime.now().toUtc();
     _projects[index] = _projects[index].copyWith(
       name: _validateName(name),
@@ -145,14 +142,54 @@ class WorkspaceProjectLibrary {
   }
 
   Future<void> keepProject(String id) async {
-    final index = _projects.indexWhere((project) => project.id == id);
-    if (index == -1) {
-      throw ArgumentError('Workspace project does not exist: $id');
-    }
+    final index = _projectIndex(id);
     if (_projects[index].lifecycle == WorkspaceLifecycle.saved) return;
 
     _projects[index] = _projects[index].copyWith(
       lifecycle: WorkspaceLifecycle.saved,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    await catalogStore.saveProjects(projects);
+  }
+
+  Future<void> bindGitRemote(String id, WorkspaceGitRemote remote) async {
+    final index = _projectIndex(id);
+    final existing = _projects[index].gitRemote;
+    final targetChanged = existing != null &&
+        (existing.repositoryUrl != remote.repositoryUrl ||
+            existing.remoteName != remote.remoteName ||
+            existing.branch != remote.branch ||
+            existing.projectPath != remote.projectPath);
+    final binding = targetChanged && remote.lastSyncedHead != null
+        ? remote.copyWith(clearLastSyncedHead: true)
+        : remote;
+
+    _projects[index] = _projects[index].copyWith(
+      gitRemote: binding,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    await catalogStore.saveProjects(projects);
+  }
+
+  Future<void> markGitSyncedHead(String id, String remoteHead) async {
+    final index = _projectIndex(id);
+    final remote = _projects[index].gitRemote;
+    if (remote == null) {
+      throw StateError('Workspace has no Git remote binding.');
+    }
+    _projects[index] = _projects[index].copyWith(
+      gitRemote: remote.copyWith(lastSyncedHead: remoteHead),
+      updatedAt: DateTime.now().toUtc(),
+    );
+    await catalogStore.saveProjects(projects);
+  }
+
+  Future<void> unbindGitRemote(String id) async {
+    final index = _projectIndex(id);
+    if (_projects[index].gitRemote == null) return;
+
+    _projects[index] = _projects[index].copyWith(
+      clearGitRemote: true,
       updatedAt: DateTime.now().toUtc(),
     );
     await catalogStore.saveProjects(projects);
@@ -192,6 +229,14 @@ class WorkspaceProjectLibrary {
   Future<void> _persistCatalog() async {
     await catalogStore.saveProjects(projects);
     await catalogStore.saveActiveProjectId(_activeProjectId);
+  }
+
+  int _projectIndex(String id) {
+    final index = _projects.indexWhere((project) => project.id == id);
+    if (index == -1) {
+      throw ArgumentError('Workspace project does not exist: $id');
+    }
+    return index;
   }
 
   String _validateName(String value) {
