@@ -57,6 +57,58 @@ void persistCart() {}
       graph.root.children.single.children.single.children.single.displayName,
       'persistCart',
     );
+    expect(graph.directCalleeCount, 1);
+    expect(graph.directCallerCount, 0);
+    expect(graph.callersRoot.displayName, 'CartPage.build');
+  });
+
+  test('traces callers backwards across workspace files', () {
+    const entries = <WorkspaceEntry>[
+      WorkspaceEntry(
+        id: 'app',
+        path: 'lib/app.dart',
+        type: WorkspaceEntryType.file,
+        content: '''
+void main() {
+  startCheckout();
+}
+
+void startCheckout() {
+  submitOrder();
+}
+''',
+      ),
+      WorkspaceEntry(
+        id: 'repo',
+        path: 'lib/order_repository.dart',
+        type: WorkspaceEntryType.file,
+        content: '''
+void submitOrder() {
+  persistOrder();
+}
+
+void persistOrder() {}
+''',
+      ),
+    ];
+
+    final graph = analyzer.analyze(
+      entries: entries,
+      activeFilePath: 'lib/order_repository.dart',
+      cursorLine: 1,
+      cursorColumn: 5,
+    );
+
+    expect(graph.root.displayName, 'submitOrder');
+    expect(graph.root.children.single.displayName, 'persistOrder');
+    expect(graph.directCalleeCount, 1);
+    expect(graph.callersRoot.displayName, 'submitOrder');
+    expect(graph.directCallerCount, 1);
+    expect(graph.callersRoot.children.single.displayName, 'startCheckout');
+    expect(
+      graph.callersRoot.children.single.children.single.displayName,
+      'main',
+    );
   });
 
   test('detects recursive calls without infinitely expanding the tree', () {
@@ -88,6 +140,11 @@ void second() {
     expect(cycle.displayName, 'first');
     expect(cycle.isCycle, isTrue);
     expect(cycle.children, isEmpty);
+
+    final callerCycle = graph.callersRoot.children.single.children.single;
+    expect(callerCycle.displayName, 'first');
+    expect(callerCycle.isCycle, isTrue);
+    expect(callerCycle.children, isEmpty);
   });
 
   test('requires the cursor to identify a method or function', () {

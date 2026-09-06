@@ -37,13 +37,22 @@ class CodeFlowNode {
 class CodeFlowGraph {
   const CodeFlowGraph({
     required this.root,
+    required this.callersRoot,
     required this.scannedFiles,
     required this.declarationCount,
   });
 
+  /// Methods/functions called by the declaration under the cursor.
   final CodeFlowNode root;
+
+  /// Methods/functions that call the declaration under the cursor.
+  final CodeFlowNode callersRoot;
+
   final int scannedFiles;
   final int declarationCount;
+
+  int get directCalleeCount => root.children.length;
+  int get directCallerCount => callersRoot.children.length;
 }
 
 class CodeFlowAnalysisException implements Exception {
@@ -120,6 +129,11 @@ class DartCodeFlowAnalyzer {
           );
     }
 
+    final callersByTargetKey = _buildCallersIndex(
+      declarations: declarations,
+      byName: byName,
+    );
+
     final activeSource = sourceByPath[activeFilePath];
     if (activeSource == null) {
       throw const CodeFlowAnalysisException('请先打开一个 Dart 文件，再分析调用链。');
@@ -145,15 +159,47 @@ class DartCodeFlowAnalyzer {
     }
 
     return CodeFlowGraph(
-      root: _buildNode(
+      root: _buildOutgoingNode(
         rootDeclaration,
         byName: byName,
+        depth: 0,
+        stack: const <String>{},
+      ),
+      callersRoot: _buildIncomingNode(
+        rootDeclaration,
+        callersByTargetKey: callersByTargetKey,
         depth: 0,
         stack: const <String>{},
       ),
       scannedFiles: dartFiles.length,
       declarationCount: declarations.length,
     );
+  }
+
+  Map<String, List<_FlowDeclaration>> _buildCallersIndex({
+    required List<_FlowDeclaration> declarations,
+    required Map<String, List<_FlowDeclaration>> byName,
+  }) {
+    final callersByTargetKey = <String, List<_FlowDeclaration>>{};
+
+    for (final caller in declarations) {
+      final linkedTargets = <String>{};
+      for (final callName in caller.calls) {
+        final targets = _resolveTargets(
+          caller,
+          callName,
+          byName[callName] ?? const <_FlowDeclaration>[],
+        );
+        for (final target in targets) {
+          if (!linkedTargets.add(target.key)) continue;
+          callersByTargetKey
+              .putIfAbsent(target.key, () => <_FlowDeclaration>[])
+              .add(caller);
+        }
+      }
+    }
+
+    return callersByTargetKey;
   }
 
   _FlowDeclaration? _findRootDeclaration({
@@ -191,7 +237,7 @@ class DartCodeFlowAnalyzer {
     return candidates.length == 1 ? candidates.single : null;
   }
 
-  CodeFlowNode _buildNode(
+  CodeFlowNode _buildOutgoingNode(
     _FlowDeclaration declaration, {
     required Map<String, List<_FlowDeclaration>> byName,
     required int depth,
@@ -216,7 +262,7 @@ class DartCodeFlowAnalyzer {
       for (final target in targets) {
         if (!addedTargets.add(target.key)) continue;
         children.add(
-          _buildNode(
+          _buildOutgoingNode(
             target,
             byName: byName,
             depth: depth + 1,
@@ -224,6 +270,38 @@ class DartCodeFlowAnalyzer {
           ),
         );
       }
+    }
+
+    return declaration.toNode(children: children);
+  }
+
+  CodeFlowNode _buildIncomingNode(
+    _FlowDeclaration declaration, {
+    required Map<String, List<_FlowDeclaration>> callersByTargetKey,
+    required int depth,
+    required Set<String> stack,
+  }) {
+    final key = declaration.key;
+    final cycle = stack.contains(key);
+    if (cycle || depth >= maxDepth) {
+      return declaration.toNode(isCycle: cycle);
+    }
+
+    final nextStack = <String>{...stack, key};
+    final children = <CodeFlowNode>[];
+    final addedCallers = <String>{};
+
+    for (final caller in
+        callersByTargetKey[key] ?? const <_FlowDeclaration>[]) {
+      if (!addedCallers.add(caller.key)) continue;
+      children.add(
+        _buildIncomingNode(
+          caller,
+          callersByTargetKey: callersByTargetKey,
+          depth: depth + 1,
+          stack: nextStack,
+        ),
+      );
     }
 
     return declaration.toNode(children: children);

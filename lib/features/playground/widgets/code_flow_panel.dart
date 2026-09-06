@@ -18,12 +18,15 @@ class CodeFlowPanel extends StatefulWidget {
   State<CodeFlowPanel> createState() => _CodeFlowPanelState();
 }
 
+enum _FlowDirection { outgoing, incoming }
+
 class _CodeFlowPanelState extends State<CodeFlowPanel> {
   static const _analyzer = DartCodeFlowAnalyzer();
 
   CodeFlowGraph? _graph;
   String? _error;
   bool _analyzing = false;
+  _FlowDirection _direction = _FlowDirection.outgoing;
 
   @override
   void didUpdateWidget(covariant CodeFlowPanel oldWidget) {
@@ -32,6 +35,7 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
       _graph = null;
       _error = null;
       _analyzing = false;
+      _direction = _FlowDirection.outgoing;
     }
   }
 
@@ -143,7 +147,7 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
             ),
           ),
           const SizedBox(height: 8),
-          if (graph != null)
+          if (graph != null) ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Text(
@@ -154,6 +158,32 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: SegmentedButton<_FlowDirection>(
+                key: const ValueKey('code-flow-direction-selector'),
+                showSelectedIcon: false,
+                segments: <ButtonSegment<_FlowDirection>>[
+                  ButtonSegment<_FlowDirection>(
+                    value: _FlowDirection.outgoing,
+                    icon: const Icon(Icons.call_made_outlined, size: 16),
+                    label: Text('下游 ${graph.directCalleeCount}'),
+                  ),
+                  ButtonSegment<_FlowDirection>(
+                    value: _FlowDirection.incoming,
+                    icon: const Icon(Icons.call_received_outlined, size: 16),
+                    label: Text('上游 ${graph.directCallerCount}'),
+                  ),
+                ],
+                selected: <_FlowDirection>{_direction},
+                onSelectionChanged: (selection) {
+                  if (selection.isEmpty) return;
+                  setState(() => _direction = selection.first);
+                },
+              ),
+            ),
+          ],
           const Divider(height: 16),
           Expanded(
             child: _buildBody(context, graph),
@@ -177,22 +207,46 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
         icon: Icons.route_outlined,
         title: '从一个方法开始',
         message: '把光标放在 Dart 方法或函数内部，然后点击“分析光标所在方法”。\n\n'
-            '第一版会追踪 Workspace 内能解析到的调用，并允许点击节点跳回源码。',
+            '可以查看它调用了谁，也可以反向查看 Workspace 内是谁调用了它。',
       );
     }
 
+    final root = _direction == _FlowDirection.outgoing
+        ? graph.root
+        : graph.callersRoot;
     final rows = <_FlowRow>[];
-    _flatten(graph.root, 0, rows);
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
-      itemCount: rows.length,
-      itemBuilder: (context, index) {
-        final row = rows[index];
-        return _FlowNodeRow(
-          row: row,
-          onTap: () => _openNode(row.node),
-        );
-      },
+    _flatten(root, 0, rows);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            itemCount: rows.length,
+            itemBuilder: (context, index) {
+              final row = rows[index];
+              return _FlowNodeRow(
+                row: row,
+                direction: _direction,
+                onTap: () => _openNode(row.node),
+              );
+            },
+          ),
+        ),
+        if (root.children.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 14),
+            child: Text(
+              _direction == _FlowDirection.outgoing
+                  ? 'Workspace 内没有解析到这个方法继续调用的本地方法。'
+                  : 'Workspace 内没有解析到调用这个方法的本地方法。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -214,10 +268,12 @@ class _FlowRow {
 class _FlowNodeRow extends StatelessWidget {
   const _FlowNodeRow({
     required this.row,
+    required this.direction,
     required this.onTap,
   });
 
   final _FlowRow row;
+  final _FlowDirection direction;
   final VoidCallback onTap;
 
   @override
@@ -237,11 +293,7 @@ class _FlowNodeRow extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 1),
                 child: Icon(
-                  node.isCycle
-                      ? Icons.replay_outlined
-                      : row.depth == 0
-                          ? Icons.radio_button_checked
-                          : Icons.subdirectory_arrow_right,
+                  _nodeIcon(node),
                   size: 17,
                   color: node.isCycle
                       ? theme.colorScheme.tertiary
@@ -281,6 +333,14 @@ class _FlowNodeRow extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _nodeIcon(CodeFlowNode node) {
+    if (node.isCycle) return Icons.replay_outlined;
+    if (row.depth == 0) return Icons.radio_button_checked;
+    return direction == _FlowDirection.outgoing
+        ? Icons.subdirectory_arrow_right
+        : Icons.subdirectory_arrow_left;
   }
 }
 
