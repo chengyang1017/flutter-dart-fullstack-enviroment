@@ -1,0 +1,56 @@
+name: One-time merged branch cleanup
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/cleanup-merged-branches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          branches=(
+            "chengyang1017-flutter-fullstack-enhancement"
+            "ci/failure-logs-20260905"
+            "feature/binary-safe-workspace-protocol"
+            "feature/cloud-workspace-hydration-contract"
+            "feature/dart-frog-api-lab"
+            "feature/dart-frog-fullstack"
+            "feature/docker-runner-sandbox"
+            "feature/durable-browser-workspace"
+            "feature/flutterpractice-create-cli"
+            "feature/import-existing-flutter-zip"
+            "feature/learner-friendly-export-guide"
+            "feature/local-workspace-library"
+            "feature/real-run-device-targets"
+            "feature/real-run-orientation"
+            "feature/restore-editor-ui-state"
+            "feature/serverpod-mini-e2e-smoke"
+            "feature/serverpod-mini-fullstack"
+            "feature/serverpod-postgres-sidecar"
+            "feature/workspace-git-binding-ui"
+            "feature/workspace-git-connection-check"
+            "feature/workspace-git-pull-ui"
+            "feature/workspace-git-push-ui"
+            "feature/workspace-git-subdirectory-binding"
+            "feature/workspace-lifecycle"
+            "feature/workspace-persistence-boundary"
+            "noop"
+          )
+
+          for branch in "${branches[@]}"; do
+            echo "Deleting ${branch}"
+            gh api --method DELETE "repos/${REPOSITORY}/git/refs/heads/${branch}"
+          done
