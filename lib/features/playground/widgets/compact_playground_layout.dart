@@ -7,6 +7,7 @@ import '../../workspace/widgets/workspace_editor_tabs.dart';
 import '../../workspace/widgets/workspace_file_explorer.dart';
 import '../controllers/playground_controller.dart';
 import 'code_editor_panel.dart';
+import 'code_flow_panel.dart';
 import 'error_panel.dart';
 
 class CompactPlaygroundLayout extends StatelessWidget {
@@ -43,10 +44,7 @@ class CompactPlaygroundLayout extends StatelessWidget {
                   playground: controller,
                   runner: runner,
                 ),
-                WorkspaceFileExplorer(
-                  workspace: controller.workspace,
-                  onOpenFile: controller.selectWorkspaceFile,
-                ),
+                _FilesAndFlow(controller: controller),
                 RunnerConsolePanel(runner: runner),
               ],
             ),
@@ -76,6 +74,47 @@ class _EditorWithErrors extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _FilesAndFlow extends StatelessWidget {
+  const _FilesAndFlow({required this.controller});
+
+  final PlaygroundController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          const Material(
+            child: TabBar(
+              tabs: [
+                Tab(text: '文件', icon: Icon(Icons.folder_outlined)),
+                Tab(text: '调用链', icon: Icon(Icons.account_tree_outlined)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                WorkspaceFileExplorer(
+                  workspace: controller.workspace,
+                  onOpenFile: controller.selectWorkspaceFile,
+                ),
+                CodeFlowPanel(
+                  controller: controller,
+                  onNavigate: () {
+                    DefaultTabController.of(context).animateTo(0);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _TitleBar extends StatelessWidget {
