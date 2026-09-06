@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 
 import '../../workspace/controllers/workspace_controller.dart';
-import '../../workspace/models/workspace_change.dart';
 import '../models/export_manifest.dart';
 import '../models/workspace_export_bundle.dart';
 
@@ -16,19 +15,11 @@ class WorkspaceExportService {
     DateTime? exportedAt,
   }) {
     final changes = workspace.changes;
-    final changedPayloadPaths = <String>{};
-
-    for (final change in changes) {
-      if (change.type == WorkspaceChangeType.created ||
-          change.type == WorkspaceChangeType.modified) {
-        final entry = workspace.entryAt(change.path);
-        if (entry != null && entry.isFile) {
-          changedPayloadPaths.add(change.path);
-        }
-      }
-    }
-
-    final payloadFiles = changedPayloadPaths.toList()..sort();
+    final payloadEntries = workspace.entries.where((entry) => entry.isFile).toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    final payloadFiles = payloadEntries
+        .map((entry) => entry.path)
+        .toList(growable: false);
     final projectType = _projectType(workspace);
     final manifest = ExportManifest(
       exportedAt: exportedAt ?? DateTime.now(),
@@ -45,10 +36,13 @@ class WorkspaceExportService {
       const JsonEncoder.withIndent('  ').convert(manifest.toJson()),
     );
 
-    for (final path in payloadFiles) {
-      final entry = workspace.entryAt(path);
-      if (entry == null || !entry.isFile) continue;
-      _addTextFile(archive, path, entry.content);
+    for (final entry in payloadEntries) {
+      if (entry.isBinary) {
+        final bytes = entry.bytes;
+        archive.addFile(ArchiveFile(entry.path, bytes.length, bytes));
+      } else {
+        _addTextFile(archive, entry.path, entry.content);
+      }
     }
 
     final encoded = ZipEncoder().encodeBytes(archive);

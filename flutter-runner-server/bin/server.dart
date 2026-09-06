@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_practice_runner_server/src/execution/docker_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/execution/execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/execution/local_execution_backend.dart';
+import 'package:flutter_practice_runner_server/src/runner_authenticator.dart';
 import 'package:flutter_practice_runner_server/src/runner_server.dart';
 import 'package:flutter_practice_runner_server/src/session_manager.dart';
 
@@ -24,6 +25,25 @@ Future<void> main() async {
     environment['RUNNER_WORKSPACE_ROOT'] ??
         '${Directory.systemTemp.path}${Platform.pathSeparator}flutter-practice-runner',
   );
+  final authTokens = environment['RUNNER_AUTH_TOKENS'];
+  if (authTokens == null || authTokens.trim().isEmpty) {
+    stderr.writeln(
+      'RUNNER_AUTH_TOKENS is required. Example: '
+      '''{"dev-runner-token":"user-1"}''',
+    );
+    exitCode = 64;
+    return;
+  }
+
+  late final StaticBearerRunnerAuthenticator authenticator;
+  try {
+    authenticator = StaticBearerRunnerAuthenticator.fromJson(authTokens);
+  } on FormatException catch (error) {
+    stderr.writeln(error.message);
+    exitCode = 64;
+    return;
+  }
+
   final executionBackend = _createExecutionBackend(environment);
 
   final manager = SessionManager(
@@ -34,6 +54,7 @@ Future<void> main() async {
   );
   final runnerServer = RunnerServer(
     manager: manager,
+    authenticator: authenticator,
     allowedOrigin: allowedOrigin,
   );
 
@@ -44,6 +65,7 @@ Future<void> main() async {
   stdout.writeln('Workspace root: ${workspaceRoot.path}');
   stdout.writeln('Execution backend: ${executionBackend.name}');
   stdout.writeln('Idle session timeout: $idleMinutes minutes');
+  stdout.writeln('Runner authentication: bearer ownership enabled');
 
   final cleanupTimer = Timer.periodic(
     const Duration(minutes: 1),

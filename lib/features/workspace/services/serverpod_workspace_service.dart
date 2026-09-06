@@ -8,6 +8,7 @@ class ServerpodWorkspaceService {
   static const clientPackage = '$serverRoot/practice_client';
   static const serverPubspecPath = '$serverPackage/pubspec.yaml';
   static const clientPubspecPath = '$clientPackage/pubspec.yaml';
+  static const clientLibraryPath = '$clientPackage/lib/practice_client.dart';
   static const generatorConfigPath = '$serverPackage/config/generator.yaml';
   static const developmentConfigPath = '$serverPackage/config/development.yaml';
   static const serverMainPath = '$serverPackage/bin/main.dart';
@@ -47,6 +48,7 @@ class ServerpodWorkspaceService {
 
     _ensureFile(workspace, serverPubspecPath, _serverPubspec);
     _ensureFile(workspace, clientPubspecPath, _clientPubspec);
+    _ensureFile(workspace, clientLibraryPath, _clientLibrary);
     _ensureFile(workspace, generatorConfigPath, _generatorConfig);
     _ensureFile(workspace, developmentConfigPath, _developmentConfig);
     _ensureFile(workspace, serverMainPath, _serverMain);
@@ -147,6 +149,10 @@ environment:
 
 dependencies:
   serverpod_client: 3.4.13
+''';
+
+  static const _clientLibrary = '''export 'src/protocol/client.dart';
+export 'src/protocol/protocol.dart';
 ''';
 
   static const _generatorConfig = '''type: server

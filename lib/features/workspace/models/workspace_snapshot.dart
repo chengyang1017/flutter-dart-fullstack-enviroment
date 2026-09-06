@@ -64,7 +64,7 @@ class WorkspaceSnapshot {
     this.formatVersion = currentFormatVersion,
   });
 
-  static const currentFormatVersion = 2;
+  static const currentFormatVersion = 3;
   static const oldestSupportedFormatVersion = 1;
 
   final int formatVersion;
@@ -99,8 +99,8 @@ class WorkspaceSnapshot {
       throw FormatException('Unsupported workspace snapshot version: $version');
     }
 
-    final entries = _readEntries(json['entries']);
-    final baseEntries = _readEntries(json['baseEntries']);
+    final entries = _readEntries(json['entries'], version: version);
+    final baseEntries = _readEntries(json['baseEntries'], version: version);
     final rawOpenFiles = json['openFiles'];
     final openFiles = rawOpenFiles is Iterable
         ? rawOpenFiles.whereType<String>().toList(growable: false)
@@ -134,9 +134,13 @@ class WorkspaceSnapshot {
         'path': entry.path,
         'type': entry.isDirectory ? 'directory' : 'file',
         'content': entry.content,
+        if (entry.isFile) 'encoding': entry.encoding.name,
       };
 
-  static List<WorkspaceEntry> _readEntries(dynamic value) {
+  static List<WorkspaceEntry> _readEntries(
+    dynamic value, {
+    required int version,
+  }) {
     if (value is! Iterable) {
       throw const FormatException('Workspace snapshot entries are missing.');
     }
@@ -155,17 +159,54 @@ class WorkspaceSnapshot {
         throw const FormatException('Workspace entry id/path is invalid.');
       }
 
+      final entryType = switch (type) {
+        'directory' => WorkspaceEntryType.directory,
+        'file' => WorkspaceEntryType.file,
+        _ => throw FormatException('Unknown workspace entry type: $type'),
+      };
+      final encoding = _readEncoding(
+        item['encoding'],
+        entryType: entryType,
+        version: version,
+      );
+      final payload = content is String ? content : '';
+      if (encoding == WorkspaceFileEncoding.base64) {
+        try {
+          WorkspaceEntry(
+            id: id,
+            path: path,
+            type: entryType,
+            content: payload,
+            encoding: encoding,
+          ).bytes;
+        } on FormatException {
+          throw FormatException('Invalid base64 Workspace file: $path');
+        }
+      }
+
       return WorkspaceEntry(
         id: id,
         path: path,
-        type: switch (type) {
-          'directory' => WorkspaceEntryType.directory,
-          'file' => WorkspaceEntryType.file,
-          _ => throw FormatException('Unknown workspace entry type: $type'),
-        },
-        content: content is String ? content : '',
+        type: entryType,
+        content: payload,
+        encoding: encoding,
       );
     }).toList(growable: false);
+  }
+
+  static WorkspaceFileEncoding _readEncoding(
+    dynamic value, {
+    required WorkspaceEntryType entryType,
+    required int version,
+  }) {
+    if (entryType == WorkspaceEntryType.directory || version < 3) {
+      return WorkspaceFileEncoding.utf8;
+    }
+    return switch (value) {
+      null || 'utf8' => WorkspaceFileEncoding.utf8,
+      'base64' => WorkspaceFileEncoding.base64,
+      _ => throw FormatException('Unknown Workspace file encoding: $value'),
+    };
   }
 
   static List<String> _readExpandedDirectoryIds(
@@ -177,7 +218,7 @@ class WorkspaceSnapshot {
     }
 
     // v1 snapshots did not store explorer expansion state. Preserve the old
-    // visual behavior by expanding root-level directories on first v2 load.
+    // visual behavior by expanding root-level directories on first v2+ load.
     return entries
         .where((entry) => entry.isDirectory && entry.parentPath.isEmpty)
         .map((entry) => entry.id)

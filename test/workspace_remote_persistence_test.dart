@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_ui_playground/features/workspace/models/workspace_entry.dart';
+import 'package:flutter_ui_playground/features/workspace/models/workspace_identity.dart';
 import 'package:flutter_ui_playground/features/workspace/models/workspace_project.dart';
 import 'package:flutter_ui_playground/features/workspace/models/workspace_remote_models.dart';
 import 'package:flutter_ui_playground/features/workspace/models/workspace_snapshot.dart';
@@ -125,6 +126,9 @@ class _FakeRemotePersistence implements WorkspaceRemotePersistence {
           revision: 'catalog-1',
         );
 
+  @override
+  final WorkspaceIdentity identity =
+      const WorkspaceIdentity(userId: 'test-user');
   final WorkspaceRemoteCatalog catalog;
   final Map<String, WorkspaceRemoteDocument> documents;
   final List<String> loadedWorkspaceIds = [];
