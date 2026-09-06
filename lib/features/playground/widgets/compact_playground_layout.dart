@@ -32,7 +32,7 @@ class CompactPlaygroundLayout extends StatelessWidget {
             tabs: [
               Tab(text: '代码', icon: Icon(Icons.code)),
               Tab(text: '预览', icon: Icon(Icons.phone_android)),
-              Tab(text: '文件/调用链', icon: Icon(Icons.folder_outlined)),
+              Tab(text: '文件', icon: Icon(Icons.folder_outlined)),
               Tab(text: '控制台', icon: Icon(Icons.terminal)),
             ],
           ),
