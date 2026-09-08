@@ -4,6 +4,7 @@ import '../../export/services/workspace_import_picker.dart';
 import '../../playground/screens/playground_screen.dart';
 import '../../project_creation/services/flutter_project_scaffold_service.dart';
 import '../../project_creation/widgets/create_flutter_project_dialog.dart';
+import '../../project_import/services/flutter_project_directory_import_service.dart';
 import '../../project_import/services/flutter_project_zip_import_service.dart';
 import '../../workspace/models/workspace_identity.dart';
 import '../../workspace/models/workspace_project.dart';
@@ -18,13 +19,7 @@ class ProjectModeScreen extends StatefulWidget {
     this.identity,
   });
 
-  /// Test/embedding seam. Normal app navigation resolves the browser project
-  /// library from Hive so Project Mode opens as a project launcher instead of
-  /// immediately exposing the legacy default Workspace template.
   final WorkspaceProjectLibrary? projectLibrary;
-
-  /// Test/embedding seam for the authenticated account. Normal app navigation
-  /// reads the server-resolved identity from [WorkspaceCloudRuntime].
   final WorkspaceIdentity? identity;
 
   @override
@@ -135,7 +130,51 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
     }
   }
 
-  Future<void> _importProject() async {
+  Future<void> _openLocalFolder() async {
+    final library = _library;
+    if (library == null || !supportsWorkspaceDirectoryPicker) return;
+
+    try {
+      final files = await pickWorkspaceDirectory();
+      if (files == null || files.isEmpty || !mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            WorkspaceCloudRuntime.enabled
+                ? '正在读取本地项目并保存到云端...'
+                : '正在读取本地项目... 当前未连接云端，将先保存到浏览器。',
+          ),
+        ),
+      );
+
+      final bundle = const FlutterProjectDirectoryImportService().parse(files);
+      final project = await library.createImportedFlutter(
+        name: bundle.projectName,
+        snapshot: bundle.snapshot,
+      );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            WorkspaceCloudRuntime.enabled
+                ? '已打开 ${bundle.projectName}，${bundle.importedFileCount} 个文件已进入云端 Workspace。'
+                : '已打开 ${bundle.projectName}，${bundle.importedFileCount} 个文件已保存到本地 Workspace。',
+          ),
+        ),
+      );
+
+      await _openProject(project);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('打开本地 Flutter 文件夹失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _importProjectZip() async {
     final library = _library;
     if (library == null || !supportsWorkspaceImportPicker) return;
 
@@ -173,7 +212,7 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 980),
+            constraints: const BoxConstraints(maxWidth: 1040),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
               child: library == null
@@ -184,8 +223,11 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
                         _ProjectModeHeader(
                           accountUsername: accountUsername,
                           onCreate: _createProject,
-                          onImport: supportsWorkspaceImportPicker
-                              ? _importProject
+                          onOpenFolder: supportsWorkspaceDirectoryPicker
+                              ? _openLocalFolder
+                              : null,
+                          onImportZip: supportsWorkspaceImportPicker
+                              ? _importProjectZip
                               : null,
                         ),
                         const SizedBox(height: 28),
@@ -193,9 +235,10 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
                           children: [
                             Text(
                               '你的项目',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                             const Spacer(),
                             Text(
@@ -209,12 +252,17 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
                           child: projects.isEmpty
                               ? _EmptyProjectList(
                                   onCreate: _createProject,
-                                  onImport: supportsWorkspaceImportPicker
-                                      ? _importProject
+                                  onOpenFolder: supportsWorkspaceDirectoryPicker
+                                      ? _openLocalFolder
+                                      : null,
+                                  onImportZip: supportsWorkspaceImportPicker
+                                      ? _importProjectZip
                                       : null,
                                 )
                               : ListView.separated(
-                                  key: const ValueKey('project-mode-project-list'),
+                                  key: const ValueKey(
+                                    'project-mode-project-list',
+                                  ),
                                   itemCount: projects.length,
                                   separatorBuilder: (_, __) =>
                                       const SizedBox(height: 10),
@@ -245,12 +293,14 @@ class _ProjectModeHeader extends StatelessWidget {
   const _ProjectModeHeader({
     required this.accountUsername,
     required this.onCreate,
-    required this.onImport,
+    required this.onOpenFolder,
+    required this.onImportZip,
   });
 
   final String? accountUsername;
   final VoidCallback onCreate;
-  final VoidCallback? onImport;
+  final VoidCallback? onOpenFolder;
+  final VoidCallback? onImportZip;
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +310,7 @@ class _ProjectModeHeader extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         SizedBox(
-          width: 430,
+          width: 390,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -272,7 +322,7 @@ class _ProjectModeHeader extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                '项目模式不会再自动打开默认模板。创建新 Flutter 项目，或从下面的项目列表继续。',
+                '像普通 IDE 一样打开本地 Flutter 根目录；打开后会建立 Workspace，并在云端连接可用时自动同步。',
               ),
               if (accountUsername != null) ...[
                 const SizedBox(height: 10),
@@ -286,16 +336,22 @@ class _ProjectModeHeader extends StatelessWidget {
           ),
         ),
         FilledButton.icon(
+          key: const ValueKey('project-mode-open-folder'),
+          onPressed: onOpenFolder,
+          icon: const Icon(Icons.folder_open_rounded),
+          label: const Text('打开本地文件夹'),
+        ),
+        OutlinedButton.icon(
           key: const ValueKey('project-mode-create'),
           onPressed: onCreate,
           icon: const Icon(Icons.add_rounded),
           label: const Text('创建 Flutter 项目'),
         ),
-        OutlinedButton.icon(
+        TextButton.icon(
           key: const ValueKey('project-mode-import'),
-          onPressed: onImport,
-          icon: const Icon(Icons.folder_open_rounded),
-          label: const Text('导入 Flutter ZIP'),
+          onPressed: onImportZip,
+          icon: const Icon(Icons.archive_outlined),
+          label: const Text('导入 ZIP'),
         ),
       ],
     );
@@ -305,11 +361,13 @@ class _ProjectModeHeader extends StatelessWidget {
 class _EmptyProjectList extends StatelessWidget {
   const _EmptyProjectList({
     required this.onCreate,
-    required this.onImport,
+    required this.onOpenFolder,
+    required this.onImportZip,
   });
 
   final VoidCallback onCreate;
-  final VoidCallback? onImport;
+  final VoidCallback? onOpenFolder;
+  final VoidCallback? onImportZip;
 
   @override
   Widget build(BuildContext context) {
@@ -318,7 +376,7 @@ class _EmptyProjectList extends StatelessWidget {
     return Center(
       child: Container(
         key: const ValueKey('project-mode-empty'),
-        width: 560,
+        width: 600,
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerLow,
@@ -342,7 +400,7 @@ class _EmptyProjectList extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Text(
-              '创建一个新的 Flutter 项目，或导入你已有的 Flutter 项目。',
+              '直接打开电脑里的 Flutter 根目录，或者创建/导入一个项目。',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 18),
@@ -352,16 +410,22 @@ class _EmptyProjectList extends StatelessWidget {
               alignment: WrapAlignment.center,
               children: [
                 FilledButton.icon(
+                  key: const ValueKey('project-mode-empty-open-folder'),
+                  onPressed: onOpenFolder,
+                  icon: const Icon(Icons.folder_open_rounded),
+                  label: const Text('打开本地文件夹'),
+                ),
+                OutlinedButton.icon(
                   key: const ValueKey('project-mode-empty-create'),
                   onPressed: onCreate,
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('创建项目'),
                 ),
-                OutlinedButton.icon(
+                TextButton.icon(
                   key: const ValueKey('project-mode-empty-import'),
-                  onPressed: onImport,
-                  icon: const Icon(Icons.upload_file_outlined),
-                  label: const Text('导入项目'),
+                  onPressed: onImportZip,
+                  icon: const Icon(Icons.archive_outlined),
+                  label: const Text('导入 ZIP'),
                 ),
               ],
             ),
@@ -474,7 +538,7 @@ class _ProjectCard extends StatelessWidget {
       return platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
     }
     if (project.kind == WorkspaceProjectKind.importedFlutter) {
-      return '导入的 Flutter 项目';
+      return '本地打开 / 导入的 Flutter 项目';
     }
     return 'Workspace 项目';
   }
