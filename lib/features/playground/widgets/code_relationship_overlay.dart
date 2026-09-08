@@ -25,6 +25,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
   static const _maxFallbackWires = 4;
   static const _laneStartX = 16.0;
   static const _laneSpacing = 18.0;
+  static const _codeDockX = 5.0;
 
   final List<CodeRelationship> relationships;
   final Set<int> activeRelationshipIndexes;
@@ -78,7 +79,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
             for (final layout in layouts) ...[
               if (layout.sourceVisible)
                 _EndpointHitTarget(
-                  point: layout.source,
+                  point: layout.sourceDock,
                   tooltip: '${layout.relationship.kind.label}: '
                       '${layout.relationship.description}\n点击跳到另一端',
                   onEnter: () => onHoverRelationship(layout.index),
@@ -87,7 +88,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
                 ),
               if (layout.targetVisible)
                 _EndpointHitTarget(
-                  point: layout.target,
+                  point: layout.targetDock,
                   tooltip: '${layout.relationship.kind.label}: '
                       '${layout.relationship.description}\n点击跳到另一端',
                   onEnter: () => onHoverRelationship(layout.index),
@@ -217,11 +218,8 @@ class CodeRelationshipOverlay extends StatelessWidget {
     final sourceVisible = _isVerticallyVisible(rawSourceY, size);
     final targetVisible = _isVerticallyVisible(rawTargetY, size);
 
-    // This overlay now lives in a dedicated trailing gutter to the right of
-    // the editor. Spread each focused relationship across a roomy independent
-    // lane instead of packing several bright wires beside the line numbers.
     final requestedX = _laneStartX + (laneIndex * _laneSpacing);
-    final laneX = requestedX.clamp(10.0, size.width - 10.0).toDouble();
+    final laneX = requestedX.clamp(14.0, size.width - 10.0).toDouble();
 
     final source = Offset(
       laneX,
@@ -231,12 +229,16 @@ class CodeRelationshipOverlay extends StatelessWidget {
       laneX,
       rawTargetY.clamp(0, size.height).toDouble(),
     );
+    final sourceDock = Offset(_codeDockX, source.dy);
+    final targetDock = Offset(_codeDockX, target.dy);
 
     return _WireLayout(
       relationship: relationship,
       index: relationshipIndex,
       source: source,
       target: target,
+      sourceDock: sourceDock,
+      targetDock: targetDock,
       active: active,
       sourceVisible: sourceVisible,
       targetVisible: targetVisible,
@@ -322,6 +324,8 @@ class _WireLayout {
     required this.index,
     required this.source,
     required this.target,
+    required this.sourceDock,
+    required this.targetDock,
     required this.active,
     required this.sourceVisible,
     required this.targetVisible,
@@ -332,6 +336,8 @@ class _WireLayout {
   final int index;
   final Offset source;
   final Offset target;
+  final Offset sourceDock;
+  final Offset targetDock;
   final bool active;
   final bool sourceVisible;
   final bool targetVisible;
@@ -404,18 +410,32 @@ class _RelationshipWirePainter extends CustomPainter {
         _drawSourceMarker(canvas, layout, markerPaint, highlighted);
       }
 
-      // The arrow head belongs to the real target line. Off-screen targets do
-      // not get a fake arrow at the top or bottom of the viewport.
+      // The target wire turns back toward the editor. The arrow head exists
+      // only when the real target line is visible, and points left into code.
       if (layout.targetVisible) {
-        _drawVerticalArrow(canvas, layout, markerPaint, highlighted);
+        _drawCodeFacingArrow(canvas, layout, markerPaint, highlighted);
       }
     }
   }
 
   Path _pathFor(_WireLayout layout) {
-    return Path()
+    final path = Path();
+
+    if (layout.sourceVisible) {
+      path
+        ..moveTo(layout.sourceDock.dx, layout.sourceDock.dy)
+        ..lineTo(layout.source.dx, layout.source.dy);
+    }
+
+    path
       ..moveTo(layout.source.dx, layout.source.dy)
       ..lineTo(layout.target.dx, layout.target.dy);
+
+    if (layout.targetVisible) {
+      path.lineTo(layout.targetDock.dx, layout.targetDock.dy);
+    }
+
+    return path;
   }
 
   void _drawSourceMarker(
@@ -427,7 +447,7 @@ class _RelationshipWirePainter extends CustomPainter {
     final size = highlighted ? 5.5 : 4.2;
     canvas.drawRect(
       Rect.fromCenter(
-        center: layout.source,
+        center: layout.sourceDock,
         width: size,
         height: size,
       ),
@@ -435,32 +455,21 @@ class _RelationshipWirePainter extends CustomPainter {
     );
   }
 
-  void _drawVerticalArrow(
+  void _drawCodeFacingArrow(
     Canvas canvas,
     _WireLayout layout,
     Paint paint,
     bool highlighted,
   ) {
-    final target = layout.target;
-    final targetLine = layout.relationship.target.line;
-    final sourceLine = layout.relationship.source.line;
-    final pointsDown = targetLine >= sourceLine;
-    final length = highlighted ? 9.5 : 7.5;
-    final halfWidth = highlighted ? 5.0 : 4.0;
+    final target = layout.targetDock;
+    final length = highlighted ? 10.0 : 8.0;
+    final halfHeight = highlighted ? 5.5 : 4.5;
 
-    final arrow = Path();
-    if (pointsDown) {
-      arrow
-        ..moveTo(target.dx, target.dy)
-        ..lineTo(target.dx - halfWidth, target.dy - length)
-        ..lineTo(target.dx + halfWidth, target.dy - length);
-    } else {
-      arrow
-        ..moveTo(target.dx, target.dy)
-        ..lineTo(target.dx - halfWidth, target.dy + length)
-        ..lineTo(target.dx + halfWidth, target.dy + length);
-    }
-    arrow.close();
+    final arrow = Path()
+      ..moveTo(target.dx, target.dy)
+      ..lineTo(target.dx + length, target.dy - halfHeight)
+      ..lineTo(target.dx + length, target.dy + halfHeight)
+      ..close();
     canvas.drawPath(arrow, paint);
   }
 
