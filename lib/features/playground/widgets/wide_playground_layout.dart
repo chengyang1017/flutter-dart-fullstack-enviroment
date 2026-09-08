@@ -96,24 +96,25 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                                 const Expanded(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        '电线模式',
+                                        'ç”µçº¿æ¨¡å¼',
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
                                       Text(
-                                        '持续显示 · 自动跟随代码',
+                                        'æŒç»­æ˜¾ç¤º Â· è‡ªåŠ¨è·Ÿéšä»£ç ',
                                         style: TextStyle(fontSize: 10),
                                       ),
                                     ],
                                   ),
                                 ),
                                 IconButton(
-                                  tooltip: '关闭电线模式',
+                                  tooltip: 'å…³é—­ç”µçº¿æ¨¡å¼',
                                   visualDensity: VisualDensity.compact,
                                   onPressed: () {
                                     setState(() => _wireModeEnabled = false);
@@ -196,7 +197,12 @@ class _EditorArea extends StatelessWidget {
           onSelect: controller.selectWorkspaceFile,
           onClose: controller.closeWorkspaceFile,
         ),
-        Expanded(child: CodeEditorPanel(controller: controller)),
+        Expanded(
+          child: CodeEditorPanel(
+            controller: controller,
+            wireModeEnabled: wireModeEnabled,
+          ),
+        ),
         ErrorPanel(controller: controller, maxHeight: 110),
         _ConsoleBar(expanded: showConsole, onPressed: onToggleConsole),
         AnimatedContainer(
@@ -239,7 +245,7 @@ class _EditorCommandBar extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            tooltip: explorerVisible ? '收起文件树' : '展开文件树',
+            tooltip: explorerVisible ? 'æ”¶èµ·æ–‡ä»¶æ ‘' : 'å±•å¼€æ–‡ä»¶æ ‘',
             visualDensity: VisualDensity.compact,
             onPressed: onToggleExplorer,
             icon: Icon(
@@ -265,9 +271,22 @@ class _EditorCommandBar extends StatelessWidget {
               ),
             ),
           const SizedBox(width: 8),
+          if (wireModeEnabled)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                '电线 ON',
+                key: const ValueKey('wire-mode-active-label'),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
           IconButton(
             key: const ValueKey('wire-mode-toggle'),
-            tooltip: wireModeEnabled ? '关闭电线模式' : '打开电线模式',
+            tooltip:
+                wireModeEnabled ? 'å…³é—­ç”µçº¿æ¨¡å¼' : 'æ‰“å¼€ç”µçº¿æ¨¡å¼',
             visualDensity: VisualDensity.compact,
             style: IconButton.styleFrom(
               backgroundColor: wireModeEnabled
@@ -279,14 +298,13 @@ class _EditorCommandBar extends StatelessWidget {
             ),
             onPressed: onToggleWireMode,
             icon: Icon(
-              wireModeEnabled
-                  ? Icons.account_tree
-                  : Icons.account_tree_outlined,
+              wireModeEnabled ? Icons.cable : Icons.cable_outlined,
               size: 18,
             ),
           ),
           IconButton(
-            tooltip: previewVisible ? '收起设备预览' : '展开设备预览',
+            tooltip:
+                previewVisible ? 'æ”¶èµ·è®¾å¤‡é¢„è§ˆ' : 'å±•å¼€è®¾å¤‡é¢„è§ˆ',
             visualDensity: VisualDensity.compact,
             onPressed: onTogglePreview,
             icon: Icon(
@@ -388,7 +406,7 @@ class _PreviewArea extends StatelessWidget {
                   ),
                   const Spacer(),
                   IconButton(
-                    tooltip: '收起',
+                    tooltip: 'æ”¶èµ·',
                     visualDensity: VisualDensity.compact,
                     onPressed: onClose,
                     icon: const Icon(Icons.chevron_right, size: 19),
