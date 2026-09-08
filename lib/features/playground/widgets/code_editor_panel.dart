@@ -38,7 +38,7 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   static const _analysisDelay = Duration(milliseconds: 160);
   static const _verticalPadding = 14.0;
   static const _normalCodeLeftPadding = 18.0;
-  static const _wireModeCodeLeftPadding = 58.0;
+  static const _wireModeGutterWidth = 128.0;
 
   Timer? _analysisDebounce;
   List<CodeRelationship> _relationships = const <CodeRelationship>[];
@@ -285,9 +285,7 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
     final charWidth = textPainter.width;
     final lineDigits = widget.controller.code.split('\n').length.toString().length;
     final gutterWidth = 48.0 + ((lineDigits - 3).clamp(0, 4) * 8.0);
-    final codeLeftPadding = widget.wireModeEnabled
-        ? _wireModeCodeLeftPadding
-        : _normalCodeLeftPadding;
+    const codeLeftPadding = _normalCodeLeftPadding;
     final codeOriginX = gutterWidth + 1 + codeLeftPadding;
     final verticalScroller = widget.controller.editorScrollController.verticalScroller;
     final horizontalScroller =
@@ -304,7 +302,7 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
       autocompleteSymbols: true,
       chunkAnalyzer: NonCodeChunkAnalyzer(),
       autofocus: false,
-      padding: EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         codeLeftPadding,
         _verticalPadding,
         18,
@@ -369,28 +367,35 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
       borderRadius: BorderRadius.circular(8),
       child: ColoredBox(
         color: const Color(0xff111318),
-        child: Stack(
-          fit: StackFit.expand,
+        child: Row(
           children: [
-            editor,
-            if (widget.wireModeEnabled)
-              CodeRelationshipOverlay(
-                relationships: _relationships,
-                activeRelationshipIndexes: _activeRelationshipIndexes(),
-                focusLine: _focusLine(),
-                codeOriginX: codeOriginX,
-                charWidth: charWidth,
-                lineHeight: lineHeight,
-                verticalPadding: _verticalPadding,
-                verticalScrollOffset: verticalOffset,
-                horizontalScrollOffset: horizontalOffset,
-                highlightedIndex: _highlightedRelationship,
-                onHoverRelationship: (index) {
-                  if (!mounted || _highlightedRelationship == index) return;
-                  setState(() => _highlightedRelationship = index);
-                },
-                onJumpTo: _jumpTo,
+            Expanded(child: editor),
+            if (widget.wireModeEnabled) ...[
+              Container(
+                width: 1,
+                color: const Color(0xff2c313c),
               ),
+              SizedBox(
+                width: _wireModeGutterWidth,
+                child: CodeRelationshipOverlay(
+                  relationships: _relationships,
+                  activeRelationshipIndexes: _activeRelationshipIndexes(),
+                  focusLine: _focusLine(),
+                  codeOriginX: codeOriginX,
+                  charWidth: charWidth,
+                  lineHeight: lineHeight,
+                  verticalPadding: _verticalPadding,
+                  verticalScrollOffset: verticalOffset,
+                  horizontalScrollOffset: horizontalOffset,
+                  highlightedIndex: _highlightedRelationship,
+                  onHoverRelationship: (index) {
+                    if (!mounted || _highlightedRelationship == index) return;
+                    setState(() => _highlightedRelationship = index);
+                  },
+                  onJumpTo: _jumpTo,
+                ),
+              ),
+            ],
           ],
         ),
       ),
