@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter Web (fixed localhost:7357)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "chrome",
+      "toolArgs": [
+        "--web-hostname=localhost",
+        "--web-port=7357",
+        "--dart-define=RUNNER_API_URL=http://127.0.0.1:8787",
+        "--dart-define=RUNNER_API_TOKEN=dev-runner-token"
+      ]
+    }
+  ]
+}
