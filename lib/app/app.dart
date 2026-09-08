@@ -13,6 +13,8 @@ class PlaygroundApp extends StatefulWidget {
 }
 
 class _PlaygroundAppState extends State<PlaygroundApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
   Future<void> _login({
     required String email,
     required String password,
@@ -44,12 +46,15 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
 
   Future<void> _showClaimExistingAccount() async {
     final identity = WorkspaceAuthRuntime.identity;
-    if (identity == null || !WorkspaceAuthRuntime.canClaimExistingAccount) {
+    final dialogContext = _navigatorKey.currentContext;
+    if (identity == null ||
+        !WorkspaceAuthRuntime.canClaimExistingAccount ||
+        dialogContext == null) {
       return;
     }
 
     final claimed = await showDialog<bool>(
-      context: context,
+      context: dialogContext,
       barrierDismissible: false,
       builder: (_) => ClaimExistingAccountDialog(
         username: identity.accountNamespace,
@@ -71,6 +76,7 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
     final identity = WorkspaceAuthRuntime.identity;
 
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Flutter UI Playground',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
