@@ -7,9 +7,11 @@ import '../../workspace/models/workspace_capability.dart';
 import '../../workspace/models/workspace_change.dart';
 import '../models/run_session.dart';
 import '../models/runner_event.dart';
+import '../models/runner_pub_get_result.dart';
 import 'flutter_runner_client.dart';
 
-class HttpFlutterRunnerClient implements FlutterRunnerClient {
+class HttpFlutterRunnerClient
+    implements FlutterRunnerClient, FlutterPackageRunnerClient {
   HttpFlutterRunnerClient({
     required String baseUrl,
     this.accessToken = const String.fromEnvironment('RUNNER_API_TOKEN'),
@@ -128,6 +130,16 @@ class HttpFlutterRunnerClient implements FlutterRunnerClient {
       }),
     );
     _decodeObject(response);
+  }
+
+  @override
+  Future<RunnerPubGetResult> pubGet(String sessionId) async {
+    final response = await _http.post(
+      _uri('/sessions/$sessionId/pub-get'),
+      headers: _headers(json: true),
+    );
+    final body = _decodeObject(response, expected: const {200});
+    return RunnerPubGetResult.fromJson(body);
   }
 
   @override

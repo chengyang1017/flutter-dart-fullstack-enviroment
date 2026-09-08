@@ -6,6 +6,7 @@ import '../../workspace/controllers/workspace_controller.dart';
 import '../models/run_session.dart';
 import '../models/runner_event.dart';
 import '../models/runner_preview_target.dart';
+import '../models/runner_pub_get_result.dart';
 import '../models/workspace_runner_source.dart';
 import '../services/flutter_runner_client.dart';
 import '../services/workspace_runner_source_provider.dart';
@@ -16,7 +17,14 @@ class FlutterRunnerController extends ChangeNotifier {
     required this.client,
     WorkspaceRunnerSourceProvider? sourceProvider,
   }) : sourceProvider =
-            sourceProvider ?? LocalWorkspaceRunnerSourceProvider(workspace);
+            sourceProvider ?? LocalWorkspaceRunnerSourceProvider(workspace) {
+    activeInstance = this;
+  }
+
+  /// The playground owns one active Runner controller at a time. The package
+  /// manager button in the Workspace project bar uses this to target the
+  /// currently selected project without introducing a second Workspace state.
+  static FlutterRunnerController? activeInstance;
 
   final WorkspaceController workspace;
   final FlutterRunnerClient client;
@@ -29,9 +37,11 @@ class FlutterRunnerController extends ChangeNotifier {
       RunnerPreviewOrientation.portrait;
   final List<String> logs = [];
   String? lastSyncedSourceRevision;
+  RunnerPubGetResult? lastPubGetResult;
 
   StreamSubscription<RunnerEvent>? _eventsSubscription;
   bool _disposed = false;
+  String? _lastPubGetPubspec;
 
   bool get isMock => client.isMock;
   String get runnerName => client.displayName;
@@ -49,11 +59,20 @@ class FlutterRunnerController extends ChangeNotifier {
   bool get canRun => !isBusy && status != RunnerStatus.running;
   bool get canHotReload => !isBusy && status == RunnerStatus.running;
   bool get canHotRestart => !isBusy && status == RunnerStatus.running;
+  bool get canPubGet =>
+      client is FlutterPackageRunnerClient &&
+      !isBusy &&
+      status != RunnerStatus.running;
   bool get canStop =>
       !isBusy &&
       session != null &&
       status != RunnerStatus.idle &&
       status != RunnerStatus.stopped;
+
+  bool get isPubGetVerifiedForCurrentPubspec {
+    final current = _currentPubspecContent();
+    return current != null && _lastPubGetPubspec == current;
+  }
 
   void selectPreviewTarget(RunnerPreviewTarget target) {
     if (previewTarget == target) return;
@@ -71,6 +90,46 @@ class FlutterRunnerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<RunnerPubGetResult> pubGet() async {
+    if (client is! FlutterPackageRunnerClient) {
+      throw StateError('当前 Runner 不支持独立 Pub Get。');
+    }
+    final packageClient = client as FlutterPackageRunnerClient;
+
+    if (!canPubGet) {
+      throw StateError(
+        status == RunnerStatus.running
+            ? '请先停止正在运行的 App，再执行 Pub Get。'
+            : 'Runner 正忙，请稍后再执行 Pub Get。',
+      );
+    }
+
+    final restoreStopped = status == RunnerStatus.stopped;
+
+    try {
+      _setStatus(RunnerStatus.syncing);
+      final source = await sourceProvider.prepare();
+      final currentSession = await _ensureSession(source);
+      _setStatus(RunnerStatus.syncing);
+      await _syncSource(currentSession.id, source);
+      _appendLog('Resolving Flutter packages...');
+
+      final result = await packageClient.pubGet(currentSession.id);
+      lastPubGetResult = result;
+      _lastPubGetPubspec = _currentPubspecContent();
+      _storeLockFile(result.lockFile);
+
+      _setStatus(
+        restoreStopped ? RunnerStatus.stopped : RunnerStatus.ready,
+      );
+      _appendLog('flutter pub get completed.');
+      return result;
+    } catch (error) {
+      _fail('Pub get failed', error);
+      rethrow;
+    }
+  }
+
   Future<void> run() async {
     if (!canRun) return;
 
@@ -82,6 +141,7 @@ class FlutterRunnerController extends ChangeNotifier {
       await _syncSource(currentSession.id, source);
       _setStatus(RunnerStatus.starting);
       await client.run(currentSession.id);
+      _lastPubGetPubspec = _currentPubspecContent();
     } catch (error) {
       _fail('Run failed', error);
     }
@@ -147,10 +207,12 @@ class FlutterRunnerController extends ChangeNotifier {
     _setStatus(created.status);
 
     await _eventsSubscription?.cancel();
-    _eventsSubscription = client.watchSession(created.id).listen(_handleEvent,
-        onError: (Object error) {
-      _fail('Runner event stream failed', error);
-    });
+    _eventsSubscription = client.watchSession(created.id).listen(
+      _handleEvent,
+      onError: (Object error) {
+        _fail('Runner event stream failed', error);
+      },
+    );
 
     _appendLog('Runner session ready: ${created.id}');
     return created;
@@ -170,6 +232,30 @@ class FlutterRunnerController extends ChangeNotifier {
     final revision = source.remoteRevision;
     if (revision != null) {
       _appendLog('Synced persisted Workspace revision $revision to Runner.');
+    }
+  }
+
+  String? _currentPubspecContent() {
+    final entry = workspace.entryAt('pubspec.yaml');
+    if (entry == null || !entry.isFile || !entry.isText) return null;
+    return entry.content;
+  }
+
+  void _storeLockFile(String? content) {
+    if (content == null || content.trim().isEmpty) return;
+
+    final existing = workspace.entryAt('pubspec.lock');
+    if (existing != null && existing.isFile) {
+      workspace.updateFileContent('pubspec.lock', content);
+      return;
+    }
+
+    final previousPath = workspace.activePath;
+    workspace.createFile('', 'pubspec.lock', content: content);
+
+    if (previousPath.isNotEmpty && workspace.entryAt(previousPath) != null) {
+      workspace.openFile(previousPath);
+      workspace.closeFile('pubspec.lock');
     }
   }
 
@@ -233,6 +319,9 @@ class FlutterRunnerController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    if (identical(activeInstance, this)) {
+      activeInstance = null;
+    }
     unawaited(_eventsSubscription?.cancel());
     final current = session;
     if (current != null) {

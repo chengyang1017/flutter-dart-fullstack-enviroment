@@ -4,9 +4,11 @@ import '../../workspace/models/workspace_capability.dart';
 import '../../workspace/models/workspace_change.dart';
 import '../models/run_session.dart';
 import '../models/runner_event.dart';
+import '../models/runner_pub_get_result.dart';
 import 'flutter_runner_client.dart';
 
-class MockFlutterRunnerClient implements FlutterRunnerClient {
+class MockFlutterRunnerClient
+    implements FlutterRunnerClient, FlutterPackageRunnerClient {
   final Map<String, StreamController<RunnerEvent>> _streams = {};
   int _nextSession = 1;
 
@@ -58,6 +60,17 @@ class MockFlutterRunnerClient implements FlutterRunnerClient {
       'Firebase: ${firebaseLabel.isEmpty ? 'none' : firebaseLabel.join(', ')}).',
     );
     await Future<void>.delayed(const Duration(milliseconds: 80));
+  }
+
+  @override
+  Future<RunnerPubGetResult> pubGet(String sessionId) async {
+    _emitStatus(sessionId, RunnerStatus.syncing);
+    _emitLog(sessionId, '[mock] flutter pub get');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    _emitStatus(sessionId, RunnerStatus.ready);
+    return const RunnerPubGetResult(
+      hasPackageConfig: true,
+    );
   }
 
   @override

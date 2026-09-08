@@ -45,7 +45,11 @@ class RunnerServer {
       }
 
       if (segments.isEmpty || segments.first != 'sessions') {
-        await _sendError(request.response, HttpStatus.notFound, 'Route not found.');
+        await _sendError(
+          request.response,
+          HttpStatus.notFound,
+          'Route not found.',
+        );
         return;
       }
 
@@ -59,23 +63,19 @@ class RunnerServer {
         return;
       }
 
-            if (segments.length == 1 && request.method == 'POST') {
+      if (segments.length == 1 && request.method == 'POST') {
         final body = await _readJsonObject(request);
-
         final files = _readFiles(body['files']);
-
         final capabilities = _readFirebaseCapabilities(
           body['firebaseCapabilities'],
         );
-
-        final projectName =
-            _readOptionalProjectName(body['projectName']);
-
-        final platforms =
-            _readOptionalPlatforms(body['platforms']);
-
-        final includeWorkspace =
-            body['includeWorkspace'] == true;
+        final projectName = _readOptionalProjectName(
+          body['projectName'],
+        );
+        final platforms = _readOptionalPlatforms(
+          body['platforms'],
+        );
+        final includeWorkspace = body['includeWorkspace'] == true;
 
         final session = await manager.createSession(
           files,
@@ -83,13 +83,8 @@ class RunnerServer {
           platforms: platforms ?? const <String>['web'],
         );
 
-        await _restoreBinaryFiles(
-          session,
-          files,
-        );
-
+        await _restoreBinaryFiles(session, files);
         _sessionOwners[session.id] = userId;
-
         session.setFirebaseCapabilities(
           capabilities ?? const <String>{},
         );
@@ -99,8 +94,7 @@ class RunnerServer {
         };
 
         if (includeWorkspace) {
-          responseBody['workspace'] =
-              await manager.readWorkspaceTree(session);
+          responseBody['workspace'] = await manager.readWorkspaceTree(session);
         }
 
         await _sendJson(
@@ -108,16 +102,20 @@ class RunnerServer {
           HttpStatus.created,
           responseBody,
         );
-
         return;
       }
 
       if (segments.length < 2) {
-        await _sendError(request.response, HttpStatus.notFound, 'Route not found.');
+        await _sendError(
+          request.response,
+          HttpStatus.notFound,
+          'Route not found.',
+        );
         return;
       }
 
       final sessionId = segments[1];
+
       if (segments.length == 2 && request.method == 'GET') {
         final session = _requireOwnedSession(sessionId, userId);
         session.touch();
@@ -152,7 +150,9 @@ class RunnerServer {
         final session = _requireOwnedSession(sessionId, userId);
         final body = await _readJsonObject(request);
         final files = _readFiles(body['files']);
-        final capabilities = _readFirebaseCapabilities(body['firebaseCapabilities']);
+        final capabilities = _readFirebaseCapabilities(
+          body['firebaseCapabilities'],
+        );
         await manager.syncWorkspace(session, files);
         await _restoreBinaryFiles(session, files);
         if (capabilities != null) {
@@ -169,6 +169,14 @@ class RunnerServer {
       if (segments.length == 3 && request.method == 'POST') {
         final session = _requireOwnedSession(sessionId, userId);
         switch (segments[2]) {
+          case 'pub-get':
+            final result = await _runPubGet(session);
+            await _sendJson(
+              request.response,
+              HttpStatus.ok,
+              result,
+            );
+            return;
           case 'run':
             await manager.run(session);
             await _sendAccepted(request.response, session);
@@ -188,7 +196,11 @@ class RunnerServer {
         }
       }
 
-      await _sendError(request.response, HttpStatus.notFound, 'Route not found.');
+      await _sendError(
+        request.response,
+        HttpStatus.notFound,
+        'Route not found.',
+      );
     } on RunnerSessionNotFound catch (error) {
       await _sendError(request.response, HttpStatus.notFound, error.toString());
     } on FormatException catch (error) {
@@ -206,7 +218,73 @@ class RunnerServer {
     }
   }
 
-    String? _readOptionalProjectName(Object? value) {
+  Future<Map<String, Object?>> _runPubGet(
+    RunnerSession session,
+  ) async {
+    if (session.process != null || session.backendProcess != null) {
+      throw StateError(
+        'Stop the running Flutter/backend process before flutter pub get.',
+      );
+    }
+
+    final previousStatus = session.status;
+    session.setStatus('syncing');
+    session.addLog('[runner] flutter pub get');
+
+    try {
+      final exitCode = await manager.executionBackend.runFlutterCommand(
+        session,
+        const <String>['pub', 'get'],
+      );
+
+      if (exitCode != 0) {
+        throw StateError(
+          'flutter pub get exited with code $exitCode',
+        );
+      }
+
+      await manager.executionBackend.pullWorkspace(session);
+
+      final lockFile = _workspaceFile(session, 'pubspec.lock');
+      final packageConfig = _workspaceFile(
+        session,
+        '.dart_tool/package_config.json',
+      );
+
+      final lockContent = await lockFile.exists()
+          ? await lockFile.readAsString()
+          : null;
+      final hasPackageConfig = await packageConfig.exists();
+
+      session.setStatus(
+        previousStatus == 'stopped' ? 'stopped' : 'ready',
+      );
+      session.addLog('[runner] flutter pub get completed.');
+
+      return <String, Object?>{
+        'session': session.toJson(),
+        'lockFile': lockContent,
+        'hasPackageConfig': hasPackageConfig,
+      };
+    } catch (_) {
+      session.setStatus('error');
+      rethrow;
+    }
+  }
+
+  File _workspaceFile(
+    RunnerSession session,
+    String path,
+  ) {
+    return File(
+      <String>[
+        session.directory.path,
+        ...path.split('/'),
+      ].join(Platform.pathSeparator),
+    );
+  }
+
+  String? _readOptionalProjectName(Object? value) {
     if (value == null) return null;
 
     if (value is! String) {
@@ -267,7 +345,9 @@ class RunnerServer {
       try {
         bytes = base64Decode(encoded);
       } on FormatException {
-        throw FormatException('Invalid binary Workspace payload: ${entry.key}');
+        throw FormatException(
+          'Invalid binary Workspace payload: ${entry.key}',
+        );
       }
 
       final file = File(
@@ -283,9 +363,6 @@ class RunnerServer {
 
     if (restored == 0) return;
 
-    // SessionManager first performs its normal text-compatible sync. Restore
-    // binary bytes on the host Workspace and mirror the corrected files into
-    // Docker (LocalExecutionBackend treats this as a no-op).
     await manager.executionBackend.syncWorkspace(
       session,
       removedPaths: const <String>{},
@@ -330,7 +407,9 @@ class RunnerServer {
   Set<String>? _readFirebaseCapabilities(Object? value) {
     if (value == null) return null;
     if (value is! Iterable) {
-      throw const FormatException('firebaseCapabilities must be a JSON array.');
+      throw const FormatException(
+        'firebaseCapabilities must be a JSON array.',
+      );
     }
     final result = <String>{};
     for (final item in value) {

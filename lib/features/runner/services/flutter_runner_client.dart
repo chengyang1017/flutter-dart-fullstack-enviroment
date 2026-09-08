@@ -2,6 +2,7 @@ import '../../workspace/models/workspace_capability.dart';
 import '../../workspace/models/workspace_change.dart';
 import '../models/run_session.dart';
 import '../models/runner_event.dart';
+import '../models/runner_pub_get_result.dart';
 
 abstract interface class FlutterRunnerClient {
   String get displayName;
@@ -30,4 +31,10 @@ abstract interface class FlutterRunnerClient {
   Future<void> stop(String sessionId);
 
   Future<void> disposeSession(String sessionId);
+}
+
+/// Optional runner capability used by the visual package manager.
+/// Keeping this separate preserves compatibility with lightweight Runner fakes.
+abstract interface class FlutterPackageRunnerClient {
+  Future<RunnerPubGetResult> pubGet(String sessionId);
 }
