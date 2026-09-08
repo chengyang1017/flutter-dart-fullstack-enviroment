@@ -8,6 +8,7 @@ import '../../workspace/widgets/workspace_file_explorer.dart';
 import '../controllers/playground_controller.dart';
 import 'code_editor_panel.dart';
 import 'code_flow_panel.dart';
+import 'concept_label_editor_layer.dart';
 import 'error_panel.dart';
 
 class WidePlaygroundLayout extends StatefulWidget {
@@ -31,6 +32,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
   bool _showPreview = true;
   bool _showConsole = true;
   bool _wireModeEnabled = false;
+  bool _labelModeEnabled = false;
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +61,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                     runner: widget.runner,
                     showConsole: _showConsole,
                     wireModeEnabled: _wireModeEnabled,
+                    labelModeEnabled: _labelModeEnabled,
                     onToggleConsole: () {
                       setState(() => _showConsole = !_showConsole);
                     },
@@ -70,6 +73,9 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                     },
                     onToggleWireMode: () {
                       setState(() => _wireModeEnabled = !_wireModeEnabled);
+                    },
+                    onToggleLabelMode: () {
+                      setState(() => _labelModeEnabled = !_labelModeEnabled);
                     },
                     explorerVisible: _showExplorer,
                     previewVisible: _showPreview,
@@ -160,10 +166,12 @@ class _EditorArea extends StatelessWidget {
     required this.runner,
     required this.showConsole,
     required this.wireModeEnabled,
+    required this.labelModeEnabled,
     required this.onToggleConsole,
     required this.onToggleExplorer,
     required this.onTogglePreview,
     required this.onToggleWireMode,
+    required this.onToggleLabelMode,
     required this.explorerVisible,
     required this.previewVisible,
   });
@@ -172,12 +180,14 @@ class _EditorArea extends StatelessWidget {
   final FlutterRunnerController runner;
   final bool showConsole;
   final bool wireModeEnabled;
+  final bool labelModeEnabled;
   final bool explorerVisible;
   final bool previewVisible;
   final VoidCallback onToggleConsole;
   final VoidCallback onToggleExplorer;
   final VoidCallback onTogglePreview;
   final VoidCallback onToggleWireMode;
+  final VoidCallback onToggleLabelMode;
 
   @override
   Widget build(BuildContext context) {
@@ -188,9 +198,11 @@ class _EditorArea extends StatelessWidget {
           explorerVisible: explorerVisible,
           previewVisible: previewVisible,
           wireModeEnabled: wireModeEnabled,
+          labelModeEnabled: labelModeEnabled,
           onToggleExplorer: onToggleExplorer,
           onTogglePreview: onTogglePreview,
           onToggleWireMode: onToggleWireMode,
+          onToggleLabelMode: onToggleLabelMode,
         ),
         WorkspaceEditorTabs(
           workspace: controller.workspace,
@@ -198,9 +210,13 @@ class _EditorArea extends StatelessWidget {
           onClose: controller.closeWorkspaceFile,
         ),
         Expanded(
-          child: CodeEditorPanel(
+          child: ConceptLabelEditorLayer(
             controller: controller,
-            wireModeEnabled: wireModeEnabled,
+            enabled: labelModeEnabled,
+            child: CodeEditorPanel(
+              controller: controller,
+              wireModeEnabled: wireModeEnabled,
+            ),
           ),
         ),
         ErrorPanel(controller: controller, maxHeight: 110),
@@ -221,18 +237,22 @@ class _EditorCommandBar extends StatelessWidget {
     required this.explorerVisible,
     required this.previewVisible,
     required this.wireModeEnabled,
+    required this.labelModeEnabled,
     required this.onToggleExplorer,
     required this.onTogglePreview,
     required this.onToggleWireMode,
+    required this.onToggleLabelMode,
   });
 
   final PlaygroundController controller;
   final bool explorerVisible;
   final bool previewVisible;
   final bool wireModeEnabled;
+  final bool labelModeEnabled;
   final VoidCallback onToggleExplorer;
   final VoidCallback onTogglePreview;
   final VoidCallback onToggleWireMode;
+  final VoidCallback onToggleLabelMode;
 
   @override
   Widget build(BuildContext context) {
@@ -271,6 +291,36 @@ class _EditorCommandBar extends StatelessWidget {
               ),
             ),
           const SizedBox(width: 8),
+          if (labelModeEnabled)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                '标签 ON',
+                key: const ValueKey('label-mode-active-label'),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.tertiary,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          IconButton(
+            key: const ValueKey('label-mode-toggle'),
+            tooltip: labelModeEnabled ? '切回原代码视角' : '打开标签视角（Dart / Flutter）',
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              backgroundColor: labelModeEnabled
+                  ? scheme.tertiaryContainer
+                  : Colors.transparent,
+              foregroundColor: labelModeEnabled
+                  ? scheme.onTertiaryContainer
+                  : scheme.onSurfaceVariant,
+            ),
+            onPressed: onToggleLabelMode,
+            icon: Icon(
+              labelModeEnabled ? Icons.label : Icons.label_outline,
+              size: 18,
+            ),
+          ),
           if (wireModeEnabled)
             Padding(
               padding: const EdgeInsets.only(right: 4),
