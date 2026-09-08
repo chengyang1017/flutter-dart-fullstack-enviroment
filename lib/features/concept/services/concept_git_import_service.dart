@@ -106,9 +106,24 @@ class ConceptGitImportService {
 
       await library.snapshotStore.save(created.storageKey, snapshot);
       await library.renameProject(created.id, pulled.projectName);
-      await library.markGitSyncedHead(created.id, pulled.remoteHead);
+      await library.markGitPullSynced(
+        created.id,
+        remoteHead: pulled.remoteHead,
+        projectPath: pulled.projectPath,
+      );
 
       final savedProject = library.projectById(created.id)!;
+
+      // Stage the resolved projectPath back to Workspace Storage immediately.
+      // This matters when an initially unique monorepo later gains another
+      // Flutter app: future pulls still target the originally selected app.
+      await runtime.coordinator.check(
+        project: savedProject,
+        snapshot: snapshot,
+        secretName: _clean(request.secretName),
+        username: _clean(request.username),
+      );
+
       final projectRoot = savedProject.gitRemote?.projectPath ?? '';
       final projection = ConceptProjectProjection(
         context: ConceptProjectContext(

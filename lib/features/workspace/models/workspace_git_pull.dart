@@ -7,6 +7,7 @@ class WorkspaceGitPullResult {
     required this.branch,
     required this.provider,
     required this.projectName,
+    this.projectPath,
     required this.remoteHead,
     required Map<String, String> files,
     required this.importedFileCount,
@@ -17,6 +18,7 @@ class WorkspaceGitPullResult {
   final String branch;
   final String provider;
   final String projectName;
+  final String? projectPath;
   final String remoteHead;
 
   /// Text files are raw UTF-8 strings. Binary files use the same guarded
@@ -30,6 +32,7 @@ class WorkspaceGitPullResult {
     final branch = json['branch'];
     final provider = json['provider'];
     final projectName = json['projectName'];
+    final projectPath = json['projectPath'];
     final remoteHead = json['remoteHead'];
     final importedFileCount = json['importedFileCount'];
     final ignoredFileCount = json['ignoredFileCount'];
@@ -40,6 +43,7 @@ class WorkspaceGitPullResult {
         provider is! String ||
         projectName is! String ||
         projectName.isEmpty ||
+        (projectPath != null && projectPath is! String) ||
         remoteHead is! String ||
         remoteHead.isEmpty ||
         importedFileCount is! int ||
@@ -50,6 +54,7 @@ class WorkspaceGitPullResult {
       throw const FormatException('Invalid Git pull response.');
     }
 
+    final normalizedProjectPath = _validateProjectPath(projectPath as String?);
     final files = <String, String>{};
     for (final entry in rawFiles.entries) {
       if (entry.key is! String || entry.value is! String) {
@@ -84,6 +89,7 @@ class WorkspaceGitPullResult {
       branch: branch,
       provider: provider,
       projectName: projectName,
+      projectPath: normalizedProjectPath,
       remoteHead: remoteHead,
       files: files,
       importedFileCount: importedFileCount,
@@ -155,6 +161,26 @@ class WorkspaceGitPullResult {
   }
 
   static int _depth(String path) => '/'.allMatches(path).length;
+
+  static String? _validateProjectPath(String? value) {
+    if (value == null) return null;
+    var source = value.trim();
+    if (source.isEmpty) return null;
+    while (source.endsWith('/')) {
+      source = source.substring(0, source.length - 1);
+    }
+    if (source.isEmpty ||
+        source.startsWith('/') ||
+        source.contains('\\') ||
+        source.contains('//')) {
+      throw const FormatException('Git pull response contains an unsafe project path.');
+    }
+    final segments = source.split('/');
+    if (segments.any((part) => part.isEmpty || part == '.' || part == '..')) {
+      throw const FormatException('Git pull response contains an unsafe project path.');
+    }
+    return source;
+  }
 
   static void _validatePortablePath(String path) {
     if (path.isEmpty || path.startsWith('/') || path.contains('\\')) {

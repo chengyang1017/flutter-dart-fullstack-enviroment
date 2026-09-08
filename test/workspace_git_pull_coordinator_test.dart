@@ -45,8 +45,9 @@ void main() {
     );
   });
 
-  test('clean pull replaces Workspace and persists last synced head', () async {
+  test('clean pull replaces Workspace and persists detected root and synced head', () async {
     git.pullResult = _result(
+      projectPath: 'apps/mobile',
       files: const <String, String>{
         'pubspec.yaml': 'name: remote_app\n',
         'lib/main.dart': 'void main() => print("remote");\n',
@@ -57,6 +58,7 @@ void main() {
     final result = await coordinator.pullCurrent(secretName: 'GITHUB_TOKEN');
 
     expect(result.remoteHead, 'abcdef1234567890');
+    expect(result.projectPath, 'apps/mobile');
     expect(git.lastWorkspaceId, WorkspaceProjectLibrary.defaultProjectId);
     expect(git.lastSecretName, 'GITHUB_TOKEN');
     expect(
@@ -67,6 +69,14 @@ void main() {
     expect(
       projects.activeProject.gitRemote?.lastSyncedHead,
       'abcdef1234567890',
+    );
+    expect(
+      projects.activeProject.gitRemote?.projectPath,
+      'apps/mobile',
+    );
+    expect(
+      catalog.projects.single.gitRemote?.projectPath,
+      'apps/mobile',
     );
     final saved = snapshots.load(projects.activeProject.storageKey);
     expect(saved?.activePath, 'lib/main.dart');
@@ -112,6 +122,7 @@ void main() {
       branch: 'main',
       provider: 'github',
       projectName: 'remote_app',
+      projectPath: 'apps/mobile',
       remoteHead: 'abcdef1234567890',
       files: const <String, String>{
         'pubspec.yaml': 'name: remote_app\n',
@@ -129,16 +140,21 @@ void main() {
       workspace.entryAt('lib/main.dart')?.content,
       'void main() {}\n',
     );
+    expect(projects.activeProject.gitRemote?.projectPath, isNull);
     expect(projects.activeProject.gitRemote?.lastSyncedHead, isNull);
   });
 }
 
-WorkspaceGitPullResult _result({required Map<String, String> files}) {
+WorkspaceGitPullResult _result({
+  required Map<String, String> files,
+  String? projectPath,
+}) {
   return WorkspaceGitPullResult(
     repositoryUrl: 'https://github.com/team/app.git',
     branch: 'main',
     provider: 'github',
     projectName: 'remote_app',
+    projectPath: projectPath,
     remoteHead: 'abcdef1234567890',
     files: files,
     importedFileCount: files.length,

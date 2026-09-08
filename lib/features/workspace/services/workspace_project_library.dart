@@ -235,6 +235,28 @@ class WorkspaceProjectLibrary {
     await catalogStore.saveProjects(projects);
   }
 
+  Future<void> markGitPullSynced(
+    String id, {
+    required String remoteHead,
+    String? projectPath,
+  }) async {
+    final index = _projectIndex(id);
+    final remote = _projects[index].gitRemote;
+    if (remote == null) {
+      throw StateError('Workspace has no Git remote binding.');
+    }
+
+    _projects[index] = _projects[index].copyWith(
+      gitRemote: remote.copyWith(
+        projectPath: projectPath,
+        clearProjectPath: projectPath == null,
+        lastSyncedHead: remoteHead,
+      ),
+      updatedAt: DateTime.now().toUtc(),
+    );
+    await catalogStore.saveProjects(projects);
+  }
+
   Future<void> unbindGitRemote(String id) async {
     final index = _projectIndex(id);
     if (_projects[index].gitRemote == null) return;

@@ -16,6 +16,7 @@ void main() {
           'branch': 'main',
           'provider': 'github',
           'projectName': 'pulled_app',
+          'projectPath': 'apps/mobile',
           'remoteHead': 'abcdef123456',
           'files': <String, String>{
             'pubspec.yaml': 'name: pulled_app\n',
@@ -45,6 +46,7 @@ void main() {
     expect(requestBody, <String, dynamic>{'secretName': 'GITHUB_TOKEN'});
     expect(captured.body, isNot(contains('github_pat_')));
     expect(result.remoteHead, 'abcdef123456');
+    expect(result.projectPath, 'apps/mobile');
     expect(result.ignoredFileCount, 12);
 
     final snapshot = result.toSnapshot(
@@ -75,6 +77,7 @@ void main() {
           'branch': 'main',
           'provider': 'github',
           'projectName': 'bad_app',
+          'projectPath': 'apps/mobile',
           'remoteHead': 'abcdef123456',
           'files': <String, String>{
             'pubspec.yaml': 'name: bad_app\n',
@@ -82,6 +85,38 @@ void main() {
             '../outside.txt': 'nope',
           },
           'importedFileCount': 3,
+          'ignoredFileCount': 0,
+        }),
+        200,
+      );
+    });
+    final service = HttpWorkspaceGitRemoteService(
+      baseUri: Uri.parse('https://workspace.example/api'),
+      accessToken: 'workspace-token',
+      client: client,
+    );
+
+    await expectLater(
+      service.pullRemote(workspaceId: 'workspace-a'),
+      throwsFormatException,
+    );
+  });
+
+  test('Git pull response rejects an unsafe detected project path', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode(<String, dynamic>{
+          'repositoryUrl': 'https://github.com/team/private-app.git',
+          'branch': 'main',
+          'provider': 'github',
+          'projectName': 'bad_app',
+          'projectPath': '../mobile',
+          'remoteHead': 'abcdef123456',
+          'files': <String, String>{
+            'pubspec.yaml': 'name: bad_app\n',
+            'lib/main.dart': 'void main() {}\n',
+          },
+          'importedFileCount': 2,
           'ignoredFileCount': 0,
         }),
         200,

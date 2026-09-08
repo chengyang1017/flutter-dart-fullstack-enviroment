@@ -11,6 +11,7 @@ class WorkspaceGitPullResult {
     required this.branch,
     required this.provider,
     required this.projectName,
+    required this.projectPath,
     required this.remoteHead,
     required this.files,
     required this.importedFileCount,
@@ -21,6 +22,7 @@ class WorkspaceGitPullResult {
   final String branch;
   final String provider;
   final String projectName;
+  final String? projectPath;
   final String remoteHead;
 
   /// UTF-8 text is returned as-is. Binary files use the same NUL-prefixed
@@ -35,6 +37,7 @@ class WorkspaceGitPullResult {
         'branch': branch,
         'provider': provider,
         'projectName': projectName,
+        'projectPath': projectPath,
         'remoteHead': remoteHead,
         'files': files,
         'importedFileCount': importedFileCount,
@@ -295,6 +298,7 @@ class WorkspaceGitPullService {
         branch: branch,
         provider: provider,
         projectName: imported.projectName,
+        projectPath: imported.projectPath,
         remoteHead: remoteHead,
         files: imported.files,
         importedFileCount: imported.files.length,
@@ -413,6 +417,7 @@ class WorkspaceGitPullService {
 
     return _PortableFlutterProject(
       projectName: _projectName(pubspecs[root]!, root),
+      projectPath: root.isEmpty ? null : root,
       files: Map<String, String>.unmodifiable(files),
       ignoredFileCount: ignoredFileCount,
     );
@@ -567,11 +572,13 @@ class WorkspaceGitPullService {
 class _PortableFlutterProject {
   const _PortableFlutterProject({
     required this.projectName,
+    required this.projectPath,
     required this.files,
     required this.ignoredFileCount,
   });
 
   final String projectName;
+  final String? projectPath;
   final Map<String, String> files;
   final int ignoredFileCount;
 }

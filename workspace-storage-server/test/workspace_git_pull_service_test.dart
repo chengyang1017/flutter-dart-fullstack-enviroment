@@ -71,6 +71,8 @@ void main() {
     expect(executor.username, 'x-access-token');
     expect(executor.secret, 'github_pat_runtime_only');
     expect(result.projectName, 'pulled_app');
+    expect(result.projectPath, 'apps/mobile');
+    expect(result.toJson()['projectPath'], 'apps/mobile');
     expect(result.remoteHead, '0123456789abcdef');
     expect(result.files['lib/main.dart'], 'void main() {}\n');
     expect(result.files['README.md'], '# Pulled\n');
@@ -99,6 +101,7 @@ void main() {
       workspaceId: 'workspace-a',
     );
 
+    expect(result.projectPath, isNull);
     final payload = result.files['assets/logo.png'];
     expect(payload, isNotNull);
     expect(payload, startsWith(WorkspaceGitPullService.binaryFilePrefix));
