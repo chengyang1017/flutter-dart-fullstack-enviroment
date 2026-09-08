@@ -26,10 +26,14 @@ class CodeEditorPanel extends StatefulWidget {
 }
 
 class _CodeEditorPanelState extends State<CodeEditorPanel> {
-  static const _codeFontFamily = 'Consolas';
+  // Keep the editor on the same kind of monospace stack used by Monaco/VS Code.
+  // Cascadia has a wider, more IDE-like cell than the previous Consolas-first
+  // setup, so a single blank space no longer looks unnaturally compressed.
+  static const _codeFontFamily = 'Cascadia Code';
   static const _codeFontFallback = <String>[
+    'JetBrains Mono',
     'Cascadia Mono',
-    'Cascadia Code',
+    'Consolas',
     'Courier New',
     'monospace',
     'Microsoft YaHei',
@@ -37,7 +41,11 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   static const _relationshipAnalyzer = SingleFileCodeRelationshipAnalyzer();
   static const _analysisDelay = Duration(milliseconds: 160);
   static const _verticalPadding = 14.0;
-  static const _normalCodeLeftPadding = 18.0;
+  static const _normalCodeLeftPadding = 12.0;
+  static const _desktopCodeFontSize = 16.0;
+  static const _compactCodeFontSize = 15.0;
+  static const _codeLineHeight = 24.0;
+  static const _lineNumberFontSize = 14.0;
   static const _wireOverlayWidth = 166.0;
   static const _wireScrollbarInset = 16.0;
 
@@ -269,9 +277,12 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.sizeOf(context).width < 700;
 
-    final codeFontSize = isCompact ? 16.0 : 17.0;
-    final lineNumberFontSize = isCompact ? 13.5 : 14.0;
-    final lineHeight = codeFontSize * 1.45;
+    final codeFontSize =
+        isCompact ? _compactCodeFontSize : _desktopCodeFontSize;
+    const lineNumberFontSize = _lineNumberFontSize;
+    const lineHeight = _codeLineHeight;
+    final fontHeight = lineHeight / codeFontSize;
+    final lineNumberFontHeight = lineHeight / lineNumberFontSize;
     final textPainter = TextPainter(
       text: TextSpan(
         text: 'M',
@@ -295,11 +306,11 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
     final lineNumberPainter = TextPainter(
       text: TextSpan(
         text: List<String>.filled(lineNumberDigits, '0').join(),
-        style: TextStyle(
+        style: const TextStyle(
           fontFamily: _codeFontFamily,
           fontFamilyFallback: _codeFontFallback,
           fontSize: lineNumberFontSize,
-          height: 1.45,
+          height: lineNumberFontHeight,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -339,7 +350,7 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
         fontFamily: _codeFontFamily,
         fontFamilyFallback: _codeFontFallback,
         fontSize: codeFontSize,
-        fontHeight: 1.45,
+        fontHeight: fontHeight,
         textColor: const Color(0xffd6deeb),
         backgroundColor: const Color(0xff111318),
         cursorColor: const Color(0xff82aaff),
@@ -365,19 +376,19 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
         return DefaultCodeLineNumber(
           controller: editingController,
           notifier: notifier,
-          textStyle: TextStyle(
+          textStyle: const TextStyle(
             fontFamily: _codeFontFamily,
             fontFamilyFallback: _codeFontFallback,
             fontSize: lineNumberFontSize,
-            height: 1.45,
-            color: const Color(0xff5c6370),
+            height: lineNumberFontHeight,
+            color: Color(0xff5c6370),
           ),
-          focusedTextStyle: TextStyle(
+          focusedTextStyle: const TextStyle(
             fontFamily: _codeFontFamily,
             fontFamilyFallback: _codeFontFallback,
             fontSize: lineNumberFontSize,
-            height: 1.45,
-            color: const Color(0xffabb2bf),
+            height: lineNumberFontHeight,
+            color: Color(0xffabb2bf),
           ),
         );
       },
