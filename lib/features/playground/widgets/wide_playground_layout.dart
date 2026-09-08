@@ -23,16 +23,14 @@ class WidePlaygroundLayout extends StatefulWidget {
   final Widget toolbar;
 
   @override
-  State<WidePlaygroundLayout> createState() =>
-      _WidePlaygroundLayoutState();
+  State<WidePlaygroundLayout> createState() => _WidePlaygroundLayoutState();
 }
 
-class _WidePlaygroundLayoutState
-    extends State<WidePlaygroundLayout> {
+class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
   bool _showExplorer = true;
   bool _showPreview = true;
   bool _showConsole = true;
-  bool _showCodeFlow = false;
+  bool _wireModeEnabled = false;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +41,6 @@ class _WidePlaygroundLayoutState
       child: Column(
         children: [
           widget.toolbar,
-
           Expanded(
             child: Row(
               children: [
@@ -51,133 +48,99 @@ class _WidePlaygroundLayoutState
                   SizedBox(
                     width: 230,
                     child: WorkspaceFileExplorer(
-                      workspace:
-                          widget.controller.workspace,
-                      onOpenFile: widget
-                          .controller
-                          .selectWorkspaceFile,
+                      workspace: widget.controller.workspace,
+                      onOpenFile: widget.controller.selectWorkspaceFile,
                     ),
                   ),
-
-                if (_showExplorer)
-                  const VerticalDivider(
-                    width: 1,
-                  ),
-
+                if (_showExplorer) const VerticalDivider(width: 1),
                 Expanded(
                   child: _EditorArea(
-                    controller:
-                        widget.controller,
+                    controller: widget.controller,
                     runner: widget.runner,
-                    showConsole:
-                        _showConsole,
+                    showConsole: _showConsole,
+                    wireModeEnabled: _wireModeEnabled,
                     onToggleConsole: () {
-                      setState(() {
-                        _showConsole =
-                            !_showConsole;
-                      });
+                      setState(() => _showConsole = !_showConsole);
                     },
                     onToggleExplorer: () {
-                      setState(() {
-                        _showExplorer =
-                            !_showExplorer;
-                      });
+                      setState(() => _showExplorer = !_showExplorer);
                     },
                     onTogglePreview: () {
-                      setState(() {
-                        _showPreview =
-                            !_showPreview;
-                      });
+                      setState(() => _showPreview = !_showPreview);
                     },
-                    onShowCodeFlow: () {
-                      setState(() {
-                        _showCodeFlow = !_showCodeFlow;
-                      });
+                    onToggleWireMode: () {
+                      setState(() => _wireModeEnabled = !_wireModeEnabled);
                     },
-                    explorerVisible:
-                        _showExplorer,
-                    previewVisible:
-                        _showPreview,
+                    explorerVisible: _showExplorer,
+                    previewVisible: _showPreview,
                   ),
                 ),
-
-                if (_showCodeFlow) ...[
-  const VerticalDivider(
-    width: 1,
-  ),
-  SizedBox(
-    width: 310,
-    child: Column(
-      children: [
-        SizedBox(
-          height: 38,
-          child: Padding(
-            padding: const EdgeInsets.only(
-              left: 12,
-              right: 4,
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.account_tree_outlined,
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    '调用链',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                if (_wireModeEnabled) ...[
+                  const VerticalDivider(width: 1),
+                  SizedBox(
+                    width: 360,
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: 42,
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 12, right: 4),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.account_tree_outlined,
+                                  size: 16,
+                                  color: scheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '电线模式',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        '持续显示 · 自动跟随代码',
+                                        style: TextStyle(fontSize: 10),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: '关闭电线模式',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () {
+                                    setState(() => _wireModeEnabled = false);
+                                  },
+                                  icon: const Icon(Icons.close, size: 18),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: CodeFlowPanel(controller: widget.controller),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: '关闭调用链',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    setState(() {
-                      _showCodeFlow = false;
-                    });
-                  },
-                  icon: const Icon(
-                    Icons.close,
-                    size: 18,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: CodeFlowPanel(
-            controller: widget.controller,
-          ),
-        ),
-      ],
-    ),
-  ),
-],
-
-                if (_showPreview)
-                  const VerticalDivider(
-                    width: 1,
-                  ),
-
+                ],
+                if (_showPreview) const VerticalDivider(width: 1),
                 if (_showPreview)
                   SizedBox(
                     width: 330,
                     child: _PreviewArea(
-                      controller:
-                          widget.controller,
-                      runner:
-                          widget.runner,
+                      controller: widget.controller,
+                      runner: widget.runner,
                       onClose: () {
-                        setState(() {
-                          _showPreview =
-                              false;
-                        });
+                        setState(() => _showPreview = false);
                       },
                     ),
                   ),
@@ -195,25 +158,25 @@ class _EditorArea extends StatelessWidget {
     required this.controller,
     required this.runner,
     required this.showConsole,
+    required this.wireModeEnabled,
     required this.onToggleConsole,
     required this.onToggleExplorer,
     required this.onTogglePreview,
-    required this.onShowCodeFlow,
+    required this.onToggleWireMode,
     required this.explorerVisible,
     required this.previewVisible,
   });
 
   final PlaygroundController controller;
   final FlutterRunnerController runner;
-
   final bool showConsole;
+  final bool wireModeEnabled;
   final bool explorerVisible;
   final bool previewVisible;
-
   final VoidCallback onToggleConsole;
   final VoidCallback onToggleExplorer;
   final VoidCallback onTogglePreview;
-  final VoidCallback onShowCodeFlow;
+  final VoidCallback onToggleWireMode;
 
   @override
   Widget build(BuildContext context) {
@@ -221,127 +184,77 @@ class _EditorArea extends StatelessWidget {
       children: [
         _EditorCommandBar(
           controller: controller,
-          explorerVisible:
-              explorerVisible,
-          previewVisible:
-              previewVisible,
-          onToggleExplorer:
-              onToggleExplorer,
-          onTogglePreview:
-              onTogglePreview,
-          onShowCodeFlow:
-              onShowCodeFlow,
+          explorerVisible: explorerVisible,
+          previewVisible: previewVisible,
+          wireModeEnabled: wireModeEnabled,
+          onToggleExplorer: onToggleExplorer,
+          onTogglePreview: onTogglePreview,
+          onToggleWireMode: onToggleWireMode,
         ),
-
         WorkspaceEditorTabs(
-          workspace:
-              controller.workspace,
-          onSelect:
-              controller
-                  .selectWorkspaceFile,
-          onClose:
-              controller
-                  .closeWorkspaceFile,
+          workspace: controller.workspace,
+          onSelect: controller.selectWorkspaceFile,
+          onClose: controller.closeWorkspaceFile,
         ),
-
-        Expanded(
-          child: CodeEditorPanel(
-            controller: controller,
-          ),
-        ),
-
-        ErrorPanel(
-          controller: controller,
-          maxHeight: 110,
-        ),
-
-        _ConsoleBar(
-          expanded: showConsole,
-          onPressed:
-              onToggleConsole,
-        ),
-
+        Expanded(child: CodeEditorPanel(controller: controller)),
+        ErrorPanel(controller: controller, maxHeight: 110),
+        _ConsoleBar(expanded: showConsole, onPressed: onToggleConsole),
         AnimatedContainer(
-          duration:
-              const Duration(
-            milliseconds: 180,
-          ),
-          height:
-              showConsole ? 135 : 0,
-          child: showConsole
-              ? RunnerConsolePanel(
-                  runner: runner,
-                )
-              : null,
+          duration: const Duration(milliseconds: 180),
+          height: showConsole ? 135 : 0,
+          child: showConsole ? RunnerConsolePanel(runner: runner) : null,
         ),
       ],
     );
   }
 }
 
-class _EditorCommandBar
-    extends StatelessWidget {
+class _EditorCommandBar extends StatelessWidget {
   const _EditorCommandBar({
     required this.controller,
     required this.explorerVisible,
     required this.previewVisible,
+    required this.wireModeEnabled,
     required this.onToggleExplorer,
     required this.onTogglePreview,
-    required this.onShowCodeFlow,
+    required this.onToggleWireMode,
   });
 
   final PlaygroundController controller;
-
   final bool explorerVisible;
   final bool previewVisible;
-
+  final bool wireModeEnabled;
   final VoidCallback onToggleExplorer;
   final VoidCallback onTogglePreview;
-  final VoidCallback onShowCodeFlow;
+  final VoidCallback onToggleWireMode;
 
   @override
   Widget build(BuildContext context) {
-    final scheme =
-        Theme.of(context).colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
     return Container(
       height: 34,
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 6,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       color: scheme.surface,
       child: Row(
         children: [
           IconButton(
-            tooltip: explorerVisible
-                ? '收起文件树'
-                : '展开文件树',
-            visualDensity:
-                VisualDensity.compact,
-            onPressed:
-                onToggleExplorer,
+            tooltip: explorerVisible ? '收起文件树' : '展开文件树',
+            visualDensity: VisualDensity.compact,
+            onPressed: onToggleExplorer,
             icon: Icon(
-              explorerVisible
-                  ? Icons.chevron_left
-                  : Icons.chevron_right,
+              explorerVisible ? Icons.chevron_left : Icons.chevron_right,
               size: 18,
             ),
           ),
-
           const SizedBox(width: 3),
-
           Expanded(
             child: Text(
               controller.activeFilePath,
-              overflow:
-                  TextOverflow.ellipsis,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-
           if (controller.workspace.isDirty)
             Container(
               width: 7,
@@ -351,33 +264,33 @@ class _EditorCommandBar
                 shape: BoxShape.circle,
               ),
             ),
-
           const SizedBox(width: 8),
-
           IconButton(
-            tooltip: '调用链',
-            visualDensity:
-                VisualDensity.compact,
-            onPressed:
-                onShowCodeFlow,
-            icon: const Icon(
-              Icons.account_tree_outlined,
+            key: const ValueKey('wire-mode-toggle'),
+            tooltip: wireModeEnabled ? '关闭电线模式' : '打开电线模式',
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              backgroundColor: wireModeEnabled
+                  ? scheme.primaryContainer
+                  : Colors.transparent,
+              foregroundColor: wireModeEnabled
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant,
+            ),
+            onPressed: onToggleWireMode,
+            icon: Icon(
+              wireModeEnabled
+                  ? Icons.account_tree
+                  : Icons.account_tree_outlined,
               size: 18,
             ),
           ),
-
           IconButton(
-            tooltip: previewVisible
-                ? '收起设备预览'
-                : '展开设备预览',
-            visualDensity:
-                VisualDensity.compact,
-            onPressed:
-                onTogglePreview,
+            tooltip: previewVisible ? '收起设备预览' : '展开设备预览',
+            visualDensity: VisualDensity.compact,
+            onPressed: onTogglePreview,
             icon: Icon(
-              previewVisible
-                  ? Icons.chevron_right
-                  : Icons.chevron_left,
+              previewVisible ? Icons.chevron_right : Icons.chevron_left,
               size: 18,
             ),
           ),
@@ -387,8 +300,7 @@ class _EditorCommandBar
   }
 }
 
-class _ConsoleBar
-    extends StatelessWidget {
+class _ConsoleBar extends StatelessWidget {
   const _ConsoleBar({
     required this.expanded,
     required this.onPressed,
@@ -399,47 +311,32 @@ class _ConsoleBar
 
   @override
   Widget build(BuildContext context) {
-    final scheme =
-        Theme.of(context).colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
     return Material(
-      color:
-          scheme.surfaceContainerLow,
+      color: scheme.surfaceContainerLow,
       child: InkWell(
         onTap: onPressed,
         child: SizedBox(
           height: 30,
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(
-              horizontal: 12,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                const Icon(
-                  Icons.terminal_outlined,
-                  size: 15,
-                ),
-
+                const Icon(Icons.terminal_outlined, size: 15),
                 const SizedBox(width: 7),
-
                 const Text(
                   'Console',
                   style: TextStyle(
                     fontSize: 11,
-                    fontWeight:
-                        FontWeight.w600,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-
                 const Spacer(),
-
                 Icon(
                   expanded
-                      ? Icons
-                          .keyboard_arrow_down
-                      : Icons
-                          .keyboard_arrow_up,
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_up,
                   size: 18,
                 ),
               ],
@@ -451,8 +348,7 @@ class _ConsoleBar
   }
 }
 
-class _PreviewArea
-    extends StatelessWidget {
+class _PreviewArea extends StatelessWidget {
   const _PreviewArea({
     required this.controller,
     required this.runner,
@@ -465,74 +361,49 @@ class _PreviewArea
 
   @override
   Widget build(BuildContext context) {
-    final scheme =
-        Theme.of(context).colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
     return ColoredBox(
-      color:
-          scheme.surfaceContainerLowest,
+      color: scheme.surfaceContainerLowest,
       child: Column(
         children: [
           SizedBox(
             height: 38,
             child: Padding(
-              padding:
-                  const EdgeInsets.only(
-                left: 12,
-                right: 4,
-              ),
+              padding: const EdgeInsets.only(left: 12, right: 4),
               child: Row(
                 children: [
                   Icon(
-                    Icons
-                        .phone_android_outlined,
+                    Icons.phone_android_outlined,
                     size: 16,
-                    color: scheme
-                        .onSurfaceVariant,
+                    color: scheme.onSurfaceVariant,
                   ),
-
                   const SizedBox(width: 7),
-
                   const Text(
                     'Device Preview',
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight:
-                          FontWeight.w600,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-
                   const Spacer(),
-
                   IconButton(
                     tooltip: '收起',
-                    visualDensity:
-                        VisualDensity.compact,
+                    visualDensity: VisualDensity.compact,
                     onPressed: onClose,
-                    icon: const Icon(
-                      Icons
-                          .chevron_right,
-                      size: 19,
-                    ),
+                    icon: const Icon(Icons.chevron_right, size: 19),
                   ),
                 ],
               ),
             ),
           ),
-
           Divider(
             height: 1,
-            color: scheme
-                .outlineVariant
-                .withValues(
-              alpha: .45,
-            ),
+            color: scheme.outlineVariant.withValues(alpha: .45),
           ),
-
           Expanded(
             child: RunnerPreviewPanel(
-              playground:
-                  controller,
+              playground: controller,
               runner: runner,
             ),
           ),

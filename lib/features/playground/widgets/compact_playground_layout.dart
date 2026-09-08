@@ -44,7 +44,7 @@ class CompactPlaygroundLayout extends StatelessWidget {
                   playground: controller,
                   runner: runner,
                 ),
-                _FilesAndFlow(controller: controller),
+                _FilesAndWireMode(controller: controller),
                 RunnerConsolePanel(runner: runner),
               ],
             ),
@@ -76,8 +76,8 @@ class _EditorWithErrors extends StatelessWidget {
       );
 }
 
-class _FilesAndFlow extends StatelessWidget {
-  const _FilesAndFlow({required this.controller});
+class _FilesAndWireMode extends StatelessWidget {
+  const _FilesAndWireMode({required this.controller});
 
   final PlaygroundController controller;
 
@@ -91,7 +91,7 @@ class _FilesAndFlow extends StatelessWidget {
             child: TabBar(
               tabs: [
                 Tab(text: '文件', icon: Icon(Icons.folder_outlined)),
-                Tab(text: '调用链', icon: Icon(Icons.account_tree_outlined)),
+                Tab(text: '电线模式', icon: Icon(Icons.account_tree_outlined)),
               ],
             ),
           ),
