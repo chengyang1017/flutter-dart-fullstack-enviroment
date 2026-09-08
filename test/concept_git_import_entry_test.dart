@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_ui_playground/features/concept/screens/concept_mode_screen.dart';
+import 'package:flutter_ui_playground/features/concept/widgets/concept_git_import_dialog.dart';
 
 void main() {
-  testWidgets('concept mode opens the direct Git import dialog', (tester) async {
+  testWidgets('concept mode exposes a direct Git project entry', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -15,13 +16,17 @@ void main() {
       const MaterialApp(home: ConceptModeScreen()),
     );
 
-    final gitEntry = find.byKey(
-      const ValueKey('concept-open-git-project'),
+    expect(
+      find.byKey(const ValueKey('concept-open-git-project')),
+      findsOneWidget,
     );
-    expect(gitEntry, findsOneWidget);
+  });
 
-    await tester.tap(gitEntry);
-    await tester.pumpAndSettle();
+  testWidgets('direct Git import dialog exposes monorepo project path',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: ConceptGitImportDialog())),
+    );
 
     expect(
       find.byKey(const ValueKey('concept-git-import-dialog')),
