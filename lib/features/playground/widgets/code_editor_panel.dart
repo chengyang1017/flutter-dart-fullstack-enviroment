@@ -38,7 +38,8 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   static const _analysisDelay = Duration(milliseconds: 160);
   static const _verticalPadding = 14.0;
   static const _normalCodeLeftPadding = 18.0;
-  static const _wireModeGutterWidth = 128.0;
+  static const _wireOverlayWidth = 166.0;
+  static const _wireScrollbarInset = 16.0;
 
   Timer? _analysisDebounce;
   List<CodeRelationship> _relationships = const <CodeRelationship>[];
@@ -294,6 +295,9 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
         verticalScroller.hasClients ? verticalScroller.offset : 0.0;
     final horizontalOffset =
         horizontalScroller.hasClients ? horizontalScroller.offset : 0.0;
+    final codeRightPadding = widget.wireModeEnabled
+        ? _wireOverlayWidth + _wireScrollbarInset + 8
+        : 18.0;
 
     final editor = CodeEditor(
       controller: widget.controller.textController,
@@ -302,10 +306,10 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
       autocompleteSymbols: true,
       chunkAnalyzer: NonCodeChunkAnalyzer(),
       autofocus: false,
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         codeLeftPadding,
         _verticalPadding,
-        18,
+        codeRightPadding,
         _verticalPadding,
       ),
       onChanged: (_) {
@@ -367,16 +371,16 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
       borderRadius: BorderRadius.circular(8),
       child: ColoredBox(
         color: const Color(0xff111318),
-        child: Row(
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(child: editor),
-            if (widget.wireModeEnabled) ...[
-              Container(
-                width: 1,
-                color: const Color(0xff2c313c),
-              ),
-              SizedBox(
-                width: _wireModeGutterWidth,
+            editor,
+            if (widget.wireModeEnabled)
+              Positioned(
+                top: 0,
+                bottom: 0,
+                right: _wireScrollbarInset,
+                width: _wireOverlayWidth,
                 child: CodeRelationshipOverlay(
                   relationships: _relationships,
                   activeRelationshipIndexes: _activeRelationshipIndexes(),
@@ -395,7 +399,6 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
                   onJumpTo: _jumpTo,
                 ),
               ),
-            ],
           ],
         ),
       ),
