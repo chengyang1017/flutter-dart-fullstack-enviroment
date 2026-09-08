@@ -312,6 +312,17 @@ class WorkspaceStorageHttpServer {
           'actualRemoteHead': error.actualRemoteHead,
         },
       );
+    } on WorkspaceGitProjectSelectionRequired catch (error) {
+      await _sendJson(
+        request.response,
+        HttpStatus.conflict,
+        <String, Object?>{
+          'code': 'git_flutter_project_selection_required',
+          'candidates': [
+            for (final candidate in error.candidates) candidate.toJson(),
+          ],
+        },
+      );
     } on WorkspaceDocumentNotFound catch (error) {
       await _sendError(
         request.response,

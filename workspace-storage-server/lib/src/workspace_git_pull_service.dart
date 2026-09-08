@@ -5,6 +5,41 @@ import 'workspace_git_remote_checker.dart';
 import 'workspace_secret_store.dart';
 import 'workspace_store.dart';
 
+class WorkspaceGitFlutterProjectCandidate {
+  const WorkspaceGitFlutterProjectCandidate({
+    required this.projectName,
+    required this.projectPath,
+  });
+
+  final String projectName;
+  final String? projectPath;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'projectName': projectName,
+        'projectPath': projectPath,
+      };
+}
+
+class WorkspaceGitProjectSelectionRequired implements Exception {
+  WorkspaceGitProjectSelectionRequired(
+    Iterable<WorkspaceGitFlutterProjectCandidate> candidates,
+  ) : candidates = List<WorkspaceGitFlutterProjectCandidate>.unmodifiable(
+          candidates,
+        ) {
+    if (this.candidates.length < 2) {
+      throw ArgumentError(
+        'Git project selection requires at least two candidates.',
+      );
+    }
+  }
+
+  final List<WorkspaceGitFlutterProjectCandidate> candidates;
+
+  @override
+  String toString() =>
+      'WorkspaceGitProjectSelectionRequired(${candidates.map((item) => item.projectPath ?? '(repository root)').join(', ')})';
+}
+
 class WorkspaceGitPullResult {
   const WorkspaceGitPullResult({
     required this.repositoryUrl,
@@ -366,9 +401,16 @@ class WorkspaceGitPullService {
       }
       if (candidates.length > 1) {
         candidates.sort();
-        throw FormatException(
-          'Git repository contains multiple runnable Flutter projects: '
-          '${candidates.join(', ')}. Bind a Flutter project path first.',
+        throw WorkspaceGitProjectSelectionRequired(
+          candidates.map(
+            (candidateRoot) => WorkspaceGitFlutterProjectCandidate(
+              projectName: _projectName(
+                pubspecs[candidateRoot]!,
+                candidateRoot,
+              ),
+              projectPath: candidateRoot.isEmpty ? null : candidateRoot,
+            ),
+          ),
         );
       }
       root = candidates.single;

@@ -127,6 +127,25 @@ class HttpWorkspaceGitRemoteService implements WorkspaceGitRemoteService {
     if (response.statusCode == 409) {
       final code = body['code'];
       final workspaceId = body['workspaceId'];
+      if (code == 'git_flutter_project_selection_required') {
+        final rawCandidates = body['candidates'];
+        if (rawCandidates is Iterable) {
+          final candidates = rawCandidates.map((item) {
+            if (item is! Map) {
+              throw const FormatException(
+                'Invalid Git Flutter project candidate response.',
+              );
+            }
+            return WorkspaceGitFlutterProjectCandidate.fromJson(item);
+          }).toList(growable: false);
+          if (candidates.length >= 2) {
+            throw WorkspaceGitProjectSelectionRequired(candidates);
+          }
+        }
+        throw const FormatException(
+          'Invalid Git Flutter project selection response.',
+        );
+      }
       if (code == 'git_remote_conflict') {
         final expected = body['expectedRemoteHead'];
         final actual = body['actualRemoteHead'];

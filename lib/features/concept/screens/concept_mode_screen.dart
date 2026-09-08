@@ -24,6 +24,7 @@ import '../services/concept_git_import_service.dart';
 import '../services/concept_project_projection_service.dart';
 import '../widgets/concept_existing_project_dialog.dart';
 import '../widgets/concept_git_import_dialog.dart';
+import '../widgets/concept_git_remote_project_picker_dialog.dart';
 import '../widgets/concept_lib_explorer.dart';
 import '../widgets/concept_project_picker_dialog.dart';
 
@@ -249,8 +250,16 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
         persistence: persistence,
         seedSnapshot: controller.workspace.createSnapshot(),
         request: request,
+        selectProject: (candidates) {
+          if (!mounted) return Future.value(null);
+          return showConceptGitRemoteProjectPickerDialog(
+            context,
+            repositoryUrl: request.repositoryUrl,
+            candidates: candidates,
+          );
+        },
       );
-      if (!mounted) return;
+      if (result == null || !mounted) return;
 
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(

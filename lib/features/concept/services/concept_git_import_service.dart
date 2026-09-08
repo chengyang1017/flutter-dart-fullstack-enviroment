@@ -1,14 +1,22 @@
 import 'package:http/http.dart' as http;
 
+import '../../workspace/models/workspace_git_pull.dart';
 import '../../workspace/models/workspace_git_remote.dart';
+import '../../workspace/models/workspace_identity.dart';
 import '../../workspace/models/workspace_project.dart';
 import '../../workspace/models/workspace_snapshot.dart';
 import '../../workspace/services/http_workspace_git_remote_service.dart';
+import '../../workspace/services/http_workspace_remote_persistence.dart';
 import '../../workspace/services/keyed_workspace_snapshot_store.dart';
 import '../../workspace/services/workspace_git_connection_runtime.dart';
 import '../../workspace/services/workspace_persistence.dart';
 import '../../workspace/services/workspace_project_library.dart';
 import '../models/concept_project_context.dart';
+
+typedef ConceptGitProjectSelector =
+    Future<WorkspaceGitFlutterProjectCandidate?> Function(
+  List<WorkspaceGitFlutterProjectCandidate> candidates,
+);
 
 class ConceptGitImportRequest {
   const ConceptGitImportRequest({
@@ -47,10 +55,11 @@ class ConceptGitImportResult {
 class ConceptGitImportService {
   const ConceptGitImportService();
 
-  Future<ConceptGitImportResult> import({
+  Future<ConceptGitImportResult?> import({
     required WorkspacePersistence persistence,
     required WorkspaceSnapshot seedSnapshot,
     required ConceptGitImportRequest request,
+    ConceptGitProjectSelector? selectProject,
   }) async {
     final runtime = WorkspaceGitConnectionRuntime.tryFromEnvironment();
     if (runtime == null) {
@@ -67,23 +76,23 @@ class ConceptGitImportService {
     }
 
     final library = WorkspaceProjectLibrary.fromPersistence(persistence);
-    final remote = WorkspaceGitRemote(
+    final initialRemote = WorkspaceGitRemote(
       repositoryUrl: request.repositoryUrl,
       branch: request.branch,
       projectPath: request.projectPath,
     );
-    final placeholderName = _repositoryName(remote.repositoryUrl);
+    final placeholderName = _repositoryName(initialRemote.repositoryUrl);
     WorkspaceProject? created;
-    final gitClient = http.Client();
+    final client = http.Client();
 
     try {
       created = await library.createImportedFlutter(
         name: placeholderName,
         snapshot: seedSnapshot,
       );
-      await library.bindGitRemote(created.id, remote);
+      await library.bindGitRemote(created.id, initialRemote);
 
-      final boundProject = library.projectById(created.id)!;
+      var boundProject = library.projectById(created.id)!;
       await runtime.coordinator.check(
         project: boundProject,
         snapshot: seedSnapshot,
@@ -95,64 +104,162 @@ class ConceptGitImportService {
       final git = HttpWorkspaceGitRemoteService(
         baseUri: baseUri,
         accessToken: WorkspaceGitConnectionRuntime.accessToken,
-        client: gitClient,
-      );
-      final pulled = await git.pullRemote(
-        workspaceId: created.id,
-        secretName: _clean(request.secretName),
-        username: _clean(request.username),
-      );
-      final snapshot = pulled.toSnapshot();
-
-      await library.snapshotStore.save(created.storageKey, snapshot);
-      await library.renameProject(created.id, pulled.projectName);
-      await library.markGitPullSynced(
-        created.id,
-        remoteHead: pulled.remoteHead,
-        projectPath: pulled.projectPath,
+        client: client,
       );
 
-      final savedProject = library.projectById(created.id)!;
+      WorkspaceGitPullResult pulled;
+      try {
+        pulled = await git.pullRemote(
+          workspaceId: created.id,
+          secretName: _clean(request.secretName),
+          username: _clean(request.username),
+        );
+      } on WorkspaceGitProjectSelectionRequired catch (selection) {
+        if (selectProject == null) rethrow;
 
-      // Stage the resolved projectPath back to Workspace Storage immediately.
-      // This matters when an initially unique monorepo later gains another
-      // Flutter app: future pulls still target the originally selected app.
-      await runtime.coordinator.check(
-        project: savedProject,
-        snapshot: snapshot,
-        secretName: _clean(request.secretName),
-        username: _clean(request.username),
-      );
+        final selected = await selectProject(selection.candidates);
+        if (selected == null) {
+          await _cleanupProject(
+            library: library,
+            projectId: created.id,
+            baseUri: baseUri,
+            client: client,
+          );
+          created = null;
+          return null;
+        }
+        if (selected.projectPath == null) {
+          throw StateError(
+            'Repository-root Flutter selection is not supported when the same '
+            'repository also contains nested runnable Flutter apps.',
+          );
+        }
 
-      final projectRoot = savedProject.gitRemote?.projectPath ?? '';
-      final projection = ConceptProjectProjection(
-        context: ConceptProjectContext(
-          repositoryName: _repositoryDisplayName(pulled.repositoryUrl),
-          projectName: pulled.projectName,
-          projectRoot: projectRoot,
-        ),
-        snapshot: snapshot,
-      );
-      final store = KeyedWorkspaceSnapshotStore(
-        delegate: persistence.snapshotStore,
-        storageKey: savedProject.storageKey,
-      );
+        final selectedRemote = WorkspaceGitRemote(
+          repositoryUrl: initialRemote.repositoryUrl,
+          remoteName: initialRemote.remoteName,
+          branch: initialRemote.branch,
+          projectPath: selected.projectPath,
+          provider: initialRemote.provider,
+        );
+        await library.bindGitRemote(created.id, selectedRemote);
+        boundProject = library.projectById(created.id)!;
 
-      return ConceptGitImportResult(
-        project: savedProject,
-        projection: projection,
-        workspaceStore: store,
-        importedFileCount: pulled.importedFileCount,
-        ignoredFileCount: pulled.ignoredFileCount,
+        await runtime.coordinator.check(
+          project: boundProject,
+          snapshot: seedSnapshot,
+          secretName: _clean(request.secretName),
+          username: _clean(request.username),
+        );
+
+        pulled = await git.pullRemote(
+          workspaceId: created.id,
+          secretName: _clean(request.secretName),
+          username: _clean(request.username),
+        );
+      }
+
+      return _finalizeImport(
+        persistence: persistence,
+        library: library,
+        runtime: runtime,
+        created: created!,
+        pulled: pulled,
+        request: request,
       );
     } catch (_) {
-      if (created != null && library.projectById(created.id) != null) {
-        await library.deleteProject(created.id);
+      final project = created;
+      if (project != null && library.projectById(project.id) != null) {
+        await _cleanupProject(
+          library: library,
+          projectId: project.id,
+          baseUri: baseUri,
+          client: client,
+        );
       }
       rethrow;
     } finally {
-      gitClient.close();
+      client.close();
       runtime.close();
+    }
+  }
+
+  Future<ConceptGitImportResult> _finalizeImport({
+    required WorkspacePersistence persistence,
+    required WorkspaceProjectLibrary library,
+    required WorkspaceGitConnectionRuntime runtime,
+    required WorkspaceProject created,
+    required WorkspaceGitPullResult pulled,
+    required ConceptGitImportRequest request,
+  }) async {
+    final snapshot = pulled.toSnapshot();
+    await library.snapshotStore.save(created.storageKey, snapshot);
+    await library.renameProject(created.id, pulled.projectName);
+    await library.markGitPullSynced(
+      created.id,
+      remoteHead: pulled.remoteHead,
+      projectPath: pulled.projectPath,
+    );
+
+    final savedProject = library.projectById(created.id)!;
+    await runtime.coordinator.check(
+      project: savedProject,
+      snapshot: snapshot,
+      secretName: _clean(request.secretName),
+      username: _clean(request.username),
+    );
+
+    final projectRoot = savedProject.gitRemote?.projectPath ?? '';
+    final projection = ConceptProjectProjection(
+      context: ConceptProjectContext(
+        repositoryName: _repositoryDisplayName(pulled.repositoryUrl),
+        projectName: pulled.projectName,
+        projectRoot: projectRoot,
+      ),
+      snapshot: snapshot,
+    );
+    final store = KeyedWorkspaceSnapshotStore(
+      delegate: persistence.snapshotStore,
+      storageKey: savedProject.storageKey,
+    );
+
+    return ConceptGitImportResult(
+      project: savedProject,
+      projection: projection,
+      workspaceStore: store,
+      importedFileCount: pulled.importedFileCount,
+      ignoredFileCount: pulled.ignoredFileCount,
+    );
+  }
+
+  Future<void> _cleanupProject({
+    required WorkspaceProjectLibrary library,
+    required String projectId,
+    required Uri baseUri,
+    required http.Client client,
+  }) async {
+    try {
+      final remote = HttpWorkspaceRemotePersistence(
+        identity: WorkspaceIdentity(
+          userId: WorkspaceGitConnectionRuntime.userId,
+        ),
+        baseUri: baseUri,
+        accessToken: WorkspaceGitConnectionRuntime.accessToken,
+        client: client,
+      );
+      final document = await remote.loadWorkspace(projectId);
+      if (document != null) {
+        await remote.deleteWorkspace(
+          workspaceId: projectId,
+          expectedRevision: document.revision,
+        );
+      }
+    } catch (_) {}
+
+    if (library.projectById(projectId) != null) {
+      try {
+        await library.deleteProject(projectId);
+      } catch (_) {}
     }
   }
 

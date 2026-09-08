@@ -80,6 +80,39 @@ void main() {
     expect(result.files, isNot(contains('tools/readme.txt')));
   });
 
+  test('pull returns named candidates instead of guessing in a multi-app repo',
+      () async {
+    executor.populate = (root) async {
+      await _write(
+        root,
+        'apps/customer/pubspec.yaml',
+        'name: customer_app\ndependencies:\n  flutter:\n    sdk: flutter\n',
+      );
+      await _write(root, 'apps/customer/lib/main.dart', 'void main() {}\n');
+      await _write(
+        root,
+        'apps/driver/pubspec.yaml',
+        'name: driver_app\ndependencies:\n  flutter:\n    sdk: flutter\n',
+      );
+      await _write(root, 'apps/driver/lib/main.dart', 'void main() {}\n');
+      await _write(root, 'apps/api/package.json', '{}\n');
+    };
+
+    try {
+      await pullService.pull(
+        userId: 'alice',
+        workspaceId: 'workspace-a',
+      );
+      fail('Expected WorkspaceGitProjectSelectionRequired.');
+    } on WorkspaceGitProjectSelectionRequired catch (error) {
+      expect(error.candidates, hasLength(2));
+      expect(error.candidates.first.projectName, 'customer_app');
+      expect(error.candidates.first.projectPath, 'apps/customer');
+      expect(error.candidates.last.projectName, 'driver_app');
+      expect(error.candidates.last.projectPath, 'apps/driver');
+    }
+  });
+
   test('pull preserves binary portable assets with the binary envelope', () async {
     final logoBytes = <int>[137, 80, 78, 71, 0, 1, 2, 3, 255];
     executor.populate = (root) async {

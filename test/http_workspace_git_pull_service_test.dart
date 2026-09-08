@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_ui_playground/features/workspace/models/workspace_git_pull.dart';
 import 'package:flutter_ui_playground/features/workspace/services/http_workspace_git_remote_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -67,6 +68,44 @@ void main() {
       'class App {}\n',
     );
     expect(snapshot.entries.length, snapshot.baseEntries.length);
+  });
+
+  test('Git pull exposes multiple Flutter apps as a typed selection request',
+      () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode(<String, dynamic>{
+          'code': 'git_flutter_project_selection_required',
+          'candidates': <Map<String, Object?>>[
+            <String, Object?>{
+              'projectName': 'customer_app',
+              'projectPath': 'apps/customer',
+            },
+            <String, Object?>{
+              'projectName': 'driver_app',
+              'projectPath': 'apps/driver',
+            },
+          ],
+        }),
+        409,
+      );
+    });
+    final service = HttpWorkspaceGitRemoteService(
+      baseUri: Uri.parse('https://workspace.example/api'),
+      accessToken: 'workspace-token',
+      client: client,
+    );
+
+    try {
+      await service.pullRemote(workspaceId: 'workspace-a');
+      fail('Expected WorkspaceGitProjectSelectionRequired.');
+    } on WorkspaceGitProjectSelectionRequired catch (error) {
+      expect(error.candidates, hasLength(2));
+      expect(error.candidates.first.projectName, 'customer_app');
+      expect(error.candidates.first.projectPath, 'apps/customer');
+      expect(error.candidates.last.projectName, 'driver_app');
+      expect(error.candidates.last.projectPath, 'apps/driver');
+    }
   });
 
   test('Git pull response rejects unsafe file paths', () async {

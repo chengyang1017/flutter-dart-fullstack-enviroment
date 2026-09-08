@@ -21,7 +21,6 @@ class ConceptGitImportDialog extends StatefulWidget {
 class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
   final repositoryController = TextEditingController();
   final branchController = TextEditingController(text: 'main');
-  final projectPathController = TextEditingController();
   final secretNameController = TextEditingController();
   final secretValueController = TextEditingController();
   final usernameController = TextEditingController();
@@ -33,7 +32,6 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
   void dispose() {
     repositoryController.dispose();
     branchController.dispose();
-    projectPathController.dispose();
     secretNameController.dispose();
     secretValueController.dispose();
     usernameController.dispose();
@@ -43,7 +41,6 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
   void _submit() {
     final repository = repositoryController.text.trim();
     final branch = branchController.text.trim();
-    final projectPath = projectPathController.text.trim();
     final secretName = secretNameController.text.trim();
     final secretValue = secretValueController.text;
     final username = usernameController.text.trim();
@@ -65,7 +62,6 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
       ConceptGitImportRequest(
         repositoryUrl: repository,
         branch: branch,
-        projectPath: projectPath.isEmpty ? null : projectPath,
         secretName: secretName.isEmpty ? null : secretName,
         secretValue: secretValue.isEmpty ? null : secretValue,
         username: username.isEmpty ? null : username,
@@ -88,7 +84,7 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                '可以直接输入 monorepo。系统会扫描可运行 Flutter App；如果只有一个，会自动选择它。',
+                '直接输入仓库即可。系统会自动扫描可运行 Flutter App：只有一个时直接打开；检测到多个时再让你选择，不需要手写 monorepo 子项目路径。',
               ),
               const SizedBox(height: 14),
               TextField(
@@ -105,38 +101,16 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const ValueKey('concept-git-branch'),
-                      controller: branchController,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: const InputDecoration(
-                        labelText: 'Branch',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      key: const ValueKey('concept-git-project-path'),
-                      controller: projectPathController,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: const InputDecoration(
-                        labelText: 'Flutter 子项目路径（可选）',
-                        hintText: 'apps/mobile-flutter',
-                        helperText: '留空时自动检测唯一 Flutter App',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                ],
+              TextField(
+                key: const ValueKey('concept-git-branch'),
+                controller: branchController,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(
+                  labelText: 'Branch',
+                  helperText: '默认 main；Flutter 子项目由系统自动检测',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 18),
               Text(
@@ -206,7 +180,7 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
           key: const ValueKey('concept-git-import-submit'),
           onPressed: _submit,
           icon: const Icon(Icons.download_rounded),
-          label: const Text('拉取并打开'),
+          label: const Text('扫描并打开'),
         ),
       ],
     );
