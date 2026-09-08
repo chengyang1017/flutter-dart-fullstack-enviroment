@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:flutter/material.dart';
 import 'package:re_editor/re_editor.dart';
 
@@ -34,9 +37,14 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   static const _relationshipAnalyzer = SingleFileCodeRelationshipAnalyzer();
   static const _analysisDelay = Duration(milliseconds: 160);
   static const _verticalPadding = 14.0;
+  static const _normalCodeLeftPadding = 18.0;
+  static const _wireModeCodeLeftPadding = 58.0;
 
   Timer? _analysisDebounce;
   List<CodeRelationship> _relationships = const <CodeRelationship>[];
+  List<_CallableRange> _callableRanges = const <_CallableRange>[];
+  _CallableRange? _activeCallable;
+  String _lastAnalyzedSource = '';
   int? _highlightedRelationship;
 
   @override
@@ -57,6 +65,9 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
       _detach(oldWidget.controller);
       _analysisDebounce?.cancel();
       _relationships = const <CodeRelationship>[];
+      _callableRanges = const <_CallableRange>[];
+      _activeCallable = null;
+      _lastAnalyzedSource = '';
       _highlightedRelationship = null;
       _attach(widget.controller);
     }
@@ -66,6 +77,7 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
       });
     } else if (oldWidget.wireModeEnabled && !widget.wireModeEnabled) {
       _analysisDebounce?.cancel();
+      _activeCallable = null;
       _highlightedRelationship = null;
     }
   }
@@ -78,8 +90,8 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   }
 
   void _attach(PlaygroundController controller) {
-    controller.textController.addListener(_scheduleRelationshipAnalysis);
-    controller.workspace.addListener(_scheduleRelationshipAnalysis);
+    controller.textController.addListener(_handleEditorControllerChanged);
+    controller.workspace.addListener(_handleWorkspaceChanged);
     controller.editorScrollController.verticalScroller.addListener(
       _handleViewportChanged,
     );
@@ -89,14 +101,29 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   }
 
   void _detach(PlaygroundController controller) {
-    controller.textController.removeListener(_scheduleRelationshipAnalysis);
-    controller.workspace.removeListener(_scheduleRelationshipAnalysis);
+    controller.textController.removeListener(_handleEditorControllerChanged);
+    controller.workspace.removeListener(_handleWorkspaceChanged);
     controller.editorScrollController.verticalScroller.removeListener(
       _handleViewportChanged,
     );
     controller.editorScrollController.horizontalScroller.removeListener(
       _handleViewportChanged,
     );
+  }
+
+  void _handleEditorControllerChanged() {
+    if (!mounted || !widget.wireModeEnabled) return;
+    _updateActiveCallable();
+
+    final source = widget.controller.textController.text;
+    if (source == _lastAnalyzedSource) return;
+    _scheduleRelationshipAnalysis();
+  }
+
+  void _handleWorkspaceChanged() {
+    if (!mounted || !widget.wireModeEnabled) return;
+    _lastAnalyzedSource = '';
+    _scheduleRelationshipAnalysis();
   }
 
   void _scheduleRelationshipAnalysis() {
@@ -113,22 +140,110 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   void _analyzeRelationships() {
     if (!mounted || !widget.wireModeEnabled) return;
     final path = widget.controller.activeFilePath;
+    final source = widget.controller.textController.text;
+
     if (!path.endsWith('.dart')) {
       setState(() {
         _relationships = const <CodeRelationship>[];
+        _callableRanges = const <_CallableRange>[];
+        _activeCallable = null;
+        _lastAnalyzedSource = source;
         _highlightedRelationship = null;
       });
       return;
     }
 
-    final result = _relationshipAnalyzer.analyze(source: widget.controller.code);
+    final result = _relationshipAnalyzer.analyze(source: source);
+    final callableRanges = _collectCallableRanges(source);
+    final activeCallable = _findActiveCallable(source, callableRanges);
+
     setState(() {
       _relationships = result.relationships;
+      _callableRanges = callableRanges;
+      _activeCallable = activeCallable;
+      _lastAnalyzedSource = source;
       if (_highlightedRelationship != null &&
           _highlightedRelationship! >= _relationships.length) {
         _highlightedRelationship = null;
       }
     });
+  }
+
+  List<_CallableRange> _collectCallableRanges(String source) {
+    if (source.trim().isEmpty) return const <_CallableRange>[];
+    final unit = parseString(
+      content: source,
+      throwIfDiagnostics: false,
+    ).unit;
+    final visitor = _CallableRangeVisitor();
+    unit.accept(visitor);
+    visitor.ranges.sort((a, b) => a.length.compareTo(b.length));
+    return List<_CallableRange>.unmodifiable(visitor.ranges);
+  }
+
+  void _updateActiveCallable() {
+    final source = widget.controller.textController.text;
+    final next = _findActiveCallable(source, _callableRanges);
+    final current = _activeCallable;
+    if (current?.start == next?.start && current?.end == next?.end) return;
+    setState(() {
+      _activeCallable = next;
+      _highlightedRelationship = null;
+    });
+  }
+
+  _CallableRange? _findActiveCallable(
+    String source,
+    List<_CallableRange> ranges,
+  ) {
+    if (ranges.isEmpty || source.isEmpty) return null;
+    final cursorOffset = _selectionOffset(source);
+    for (final range in ranges) {
+      if (cursorOffset >= range.start && cursorOffset <= range.end) {
+        return range;
+      }
+    }
+    return null;
+  }
+
+  int _selectionOffset(String source) {
+    final lines = source.split('\n');
+    if (lines.isEmpty) return 0;
+    final selection = widget.controller.textController.selection;
+    final lineIndex = selection.extentIndex.clamp(0, lines.length - 1).toInt();
+    final columnIndex = selection.extentOffset
+        .clamp(0, lines[lineIndex].length)
+        .toInt();
+
+    var offset = 0;
+    for (var i = 0; i < lineIndex; i++) {
+      offset += lines[i].length + 1;
+    }
+    return (offset + columnIndex).clamp(0, source.length).toInt();
+  }
+
+  Set<int> _activeRelationshipIndexes() {
+    final callable = _activeCallable;
+    if (callable == null) return const <int>{};
+
+    final result = <int>{};
+    for (var index = 0; index < _relationships.length; index++) {
+      final relationship = _relationships[index];
+      final sourceInside = relationship.source.offset >= callable.start &&
+          relationship.source.offset <= callable.end;
+      final targetInside = relationship.target.offset >= callable.start &&
+          relationship.target.offset <= callable.end;
+      if (sourceInside || targetInside) result.add(index);
+    }
+    return result;
+  }
+
+  int _focusLine() {
+    final lineCount = widget.controller.textController.text.split('\n').length;
+    if (lineCount <= 0) return 1;
+    return (widget.controller.textController.selection.extentIndex + 1)
+        .clamp(1, lineCount)
+        .toInt();
   }
 
   void _jumpTo(CodeRelationshipAnchor anchor) {
@@ -153,9 +268,6 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.sizeOf(context).width < 700;
 
-    // Keep editor metrics close to a desktop IDE. Most importantly, all Latin
-    // characters and whitespace should resolve to a monospace font before we
-    // fall back to a CJK font, otherwise spaces can look much narrower.
     final codeFontSize = isCompact ? 16.0 : 17.0;
     final lineNumberFontSize = isCompact ? 13.5 : 14.0;
     final lineHeight = codeFontSize * 1.45;
@@ -173,7 +285,10 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
     final charWidth = textPainter.width;
     final lineDigits = widget.controller.code.split('\n').length.toString().length;
     final gutterWidth = 48.0 + ((lineDigits - 3).clamp(0, 4) * 8.0);
-    final codeOriginX = gutterWidth + 1 + 18;
+    final codeLeftPadding = widget.wireModeEnabled
+        ? _wireModeCodeLeftPadding
+        : _normalCodeLeftPadding;
+    final codeOriginX = gutterWidth + 1 + codeLeftPadding;
     final verticalScroller = widget.controller.editorScrollController.verticalScroller;
     final horizontalScroller =
         widget.controller.editorScrollController.horizontalScroller;
@@ -189,9 +304,11 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
       autocompleteSymbols: true,
       chunkAnalyzer: NonCodeChunkAnalyzer(),
       autofocus: false,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: _verticalPadding,
+      padding: EdgeInsets.fromLTRB(
+        codeLeftPadding,
+        _verticalPadding,
+        18,
+        _verticalPadding,
       ),
       onChanged: (_) {
         widget.controller.updateCode();
@@ -259,6 +376,8 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
             if (widget.wireModeEnabled)
               CodeRelationshipOverlay(
                 relationships: _relationships,
+                activeRelationshipIndexes: _activeRelationshipIndexes(),
+                focusLine: _focusLine(),
                 codeOriginX: codeOriginX,
                 charWidth: charWidth,
                 lineHeight: lineHeight,
@@ -276,5 +395,48 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
         ),
       ),
     );
+  }
+}
+
+class _CallableRange {
+  const _CallableRange({
+    required this.start,
+    required this.end,
+  });
+
+  final int start;
+  final int end;
+
+  int get length => end - start;
+}
+
+class _CallableRangeVisitor extends RecursiveAstVisitor<void> {
+  final List<_CallableRange> ranges = <_CallableRange>[];
+
+  void _add(AstNode node) {
+    ranges.add(
+      _CallableRange(
+        start: node.offset,
+        end: node.end,
+      ),
+    );
+  }
+
+  @override
+  void visitFunctionDeclaration(FunctionDeclaration node) {
+    _add(node);
+    super.visitFunctionDeclaration(node);
+  }
+
+  @override
+  void visitMethodDeclaration(MethodDeclaration node) {
+    _add(node);
+    super.visitMethodDeclaration(node);
+  }
+
+  @override
+  void visitConstructorDeclaration(ConstructorDeclaration node) {
+    _add(node);
+    super.visitConstructorDeclaration(node);
   }
 }
