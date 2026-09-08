@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../concept/screens/concept_mode_screen.dart';
 import '../../lessons/screens/lesson_list_screen.dart';
-import '../../playground/screens/playground_screen.dart';
+import '../../project_mode/screens/project_mode_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -53,11 +53,11 @@ class HomeScreen extends StatelessWidget {
                       key: const ValueKey('home-project-mode-entry'),
                       icon: Icons.code,
                       title: '项目模式',
-                      description: '完整 Flutter Workspace：项目结构、运行、导入、平台文件和真实工程操作。',
+                      description: '先选择、创建或导入项目，再进入完整 Flutter Workspace。',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
-                          builder: (_) => const PlaygroundScreen(),
+                          builder: (_) => const ProjectModeScreen(),
                         ),
                       ),
                     ),
