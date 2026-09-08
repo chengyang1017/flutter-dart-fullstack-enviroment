@@ -55,4 +55,23 @@ class HiveWorkspacePersistence implements WorkspacePersistence {
   static void useRuntimePersistence(WorkspacePersistence persistence) {
     _runtimePersistence = persistence;
   }
+
+  static void clearRuntimePersistence() {
+    _runtimePersistence = null;
+  }
+
+  /// Removes the browser cache when switching authenticated accounts.
+  ///
+  /// Remote storage remains authoritative, so clearing these boxes never
+  /// deletes cloud projects. It prevents one account from seeing another
+  /// account's stale local project metadata or snapshots on the same browser.
+  static Future<void> clearLocalCache() async {
+    clearRuntimePersistence();
+    if (Hive.isBoxOpen(snapshotBoxName)) {
+      await Hive.box<dynamic>(snapshotBoxName).clear();
+    }
+    if (Hive.isBoxOpen(libraryBoxName)) {
+      await Hive.box<dynamic>(libraryBoxName).clear();
+    }
+  }
 }

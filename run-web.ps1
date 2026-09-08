@@ -21,15 +21,13 @@ $WorkspaceStorageApiUrl = if ($env:WORKSPACE_STORAGE_API_URL) {
 } else {
     ''
 }
+
+# Optional development auto-login token. Leave empty to use the real
+# register/login screen and a browser-persisted account session.
 $WorkspaceAccessToken = if ($env:WORKSPACE_ACCESS_TOKEN) {
     $env:WORKSPACE_ACCESS_TOKEN
 } else {
     ''
-}
-
-if ($WorkspaceStorageApiUrl -and -not $WorkspaceAccessToken) {
-    Write-Error 'WORKSPACE_STORAGE_API_URL is set but WORKSPACE_ACCESS_TOKEN is missing.'
-    exit 1
 }
 
 $listener = Get-NetTCPConnection -LocalPort $WebPort -State Listen -ErrorAction SilentlyContinue
@@ -41,9 +39,14 @@ if ($listener) {
 Write-Host "Flutter Web fixed origin: http://${WebHost}:$WebPort"
 Write-Host "Runner API: $RunnerApiUrl"
 if ($WorkspaceStorageApiUrl) {
-    Write-Host "Workspace cloud: $WorkspaceStorageApiUrl (account identity is resolved from /me; cloud is authoritative; browser Hive is cache)"
+    Write-Host "Workspace cloud: $WorkspaceStorageApiUrl (cloud is authoritative; browser Hive is per-account cache)"
+    if ($WorkspaceAccessToken) {
+        Write-Host 'Workspace auth: development bearer auto-login enabled'
+    } else {
+        Write-Host 'Workspace auth: interactive register/login enabled'
+    }
 } else {
-    Write-Host 'Workspace cloud: disabled (set WORKSPACE_STORAGE_API_URL and WORKSPACE_ACCESS_TOKEN to enable)'
+    Write-Host 'Workspace cloud: disabled (set WORKSPACE_STORAGE_API_URL to enable cloud accounts)'
 }
 
 flutter run -d chrome `

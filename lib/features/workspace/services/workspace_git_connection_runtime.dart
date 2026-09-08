@@ -12,12 +12,11 @@ class WorkspaceGitConnectionRuntime {
     required this.coordinator,
   }) : _client = client;
 
-  static const apiUrl = String.fromEnvironment('WORKSPACE_STORAGE_API_URL');
-  static const accessToken = String.fromEnvironment('WORKSPACE_ACCESS_TOKEN');
+  static String get apiUrl => WorkspaceCloudRuntime.apiUrl;
+  static String get accessToken => WorkspaceCloudRuntime.accessToken ?? '';
 
   /// Stable owner id resolved by the storage server's authenticated `/me`
-  /// endpoint. Kept as a getter for existing Concept-mode cleanup code; it is
-  /// no longer supplied by WORKSPACE_USER_ID.
+  /// endpoint. It is never supplied by a client-side owner parameter.
   static String get userId =>
       WorkspaceCloudRuntime.identity?.userId ?? 'authenticated-workspace-user';
 
@@ -25,7 +24,8 @@ class WorkspaceGitConnectionRuntime {
   final WorkspaceGitConnectionCoordinator coordinator;
 
   static WorkspaceGitConnectionRuntime? tryFromEnvironment() {
-    if (apiUrl.trim().isEmpty || accessToken.trim().isEmpty) return null;
+    final token = accessToken.trim();
+    if (apiUrl.trim().isEmpty || token.isEmpty) return null;
 
     final identity = WorkspaceCloudRuntime.identity;
     if (identity == null) return null;
@@ -41,17 +41,17 @@ class WorkspaceGitConnectionRuntime {
     final remote = HttpWorkspaceRemotePersistence(
       identity: identity,
       baseUri: baseUri,
-      accessToken: accessToken,
+      accessToken: token,
       client: client,
     );
     final secrets = HttpWorkspaceSecretService(
       baseUri: baseUri,
-      accessToken: accessToken,
+      accessToken: token,
       client: client,
     );
     final git = HttpWorkspaceGitRemoteService(
       baseUri: baseUri,
-      accessToken: accessToken,
+      accessToken: token,
       client: client,
     );
 

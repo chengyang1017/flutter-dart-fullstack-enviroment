@@ -5,10 +5,43 @@ import '../../lessons/screens/lesson_list_screen.dart';
 import '../../project_mode/screens/project_mode_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    this.username,
+    this.onLogout,
+  });
+
+  final String? username;
+  final Future<void> Function()? onLogout;
 
   @override
   Widget build(BuildContext context) => Scaffold(
+        appBar: username == null && onLogout == null
+            ? null
+            : AppBar(
+                title: username == null
+                    ? null
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.account_circle_outlined, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            username!,
+                            key: const ValueKey('home-account-username'),
+                          ),
+                        ],
+                      ),
+                actions: [
+                  if (onLogout != null)
+                    IconButton(
+                      key: const ValueKey('home-account-logout'),
+                      tooltip: '退出登录',
+                      onPressed: () async => onLogout!(),
+                      icon: const Icon(Icons.logout_rounded),
+                    ),
+                ],
+              ),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(

@@ -1,16 +1,68 @@
 import 'package:flutter/material.dart';
-import '../features/home/screens/home_screen.dart';
 
-class PlaygroundApp extends StatelessWidget {
+import '../features/auth/screens/workspace_auth_screen.dart';
+import '../features/home/screens/home_screen.dart';
+import '../features/workspace/services/workspace_auth_runtime.dart';
+
+class PlaygroundApp extends StatefulWidget {
   const PlaygroundApp({super.key});
+
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'Flutter UI Playground',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-        ),
-        home: const HomeScreen(),
-      );
+  State<PlaygroundApp> createState() => _PlaygroundAppState();
+}
+
+class _PlaygroundAppState extends State<PlaygroundApp> {
+  Future<void> _login({
+    required String email,
+    required String password,
+  }) async {
+    await WorkspaceAuthRuntime.login(
+      email: email,
+      password: password,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _register({
+    required String username,
+    required String email,
+    required String password,
+  }) async {
+    await WorkspaceAuthRuntime.register(
+      username: username,
+      email: email,
+      password: password,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _logout() async {
+    await WorkspaceAuthRuntime.logout();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cloudConfigured = WorkspaceAuthRuntime.cloudConfigured;
+    final identity = WorkspaceAuthRuntime.identity;
+
+    return MaterialApp(
+      title: 'Flutter UI Playground',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: cloudConfigured && identity == null
+          ? WorkspaceAuthScreen(
+              initialError: WorkspaceAuthRuntime.startupError?.toString(),
+              onLogin: _login,
+              onRegister: _register,
+            )
+          : HomeScreen(
+              username: identity?.accountNamespace,
+              onLogout: identity == null ? null : _logout,
+            ),
+    );
+  }
 }

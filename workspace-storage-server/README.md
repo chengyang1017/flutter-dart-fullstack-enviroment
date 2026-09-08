@@ -13,7 +13,7 @@ Production-style accounts use:
 
 Passwords are stored as PBKDF2-HMAC-SHA256 hashes with per-account salts. Raw session tokens are never persisted; only SHA-256 token hashes are written to the storage volume.
 
-`WORKSPACE_AUTH_TOKENS` remains optional for development/bootstrap identities. Real registered accounts do not depend on it.
+`WORKSPACE_AUTH_TOKENS` remains optional for development/bootstrap identities. Real registered accounts do not depend on it. Interactive Flutter clients only need the Workspace Storage API URL; they obtain their bearer session from register/login.
 
 ## Environment
 
