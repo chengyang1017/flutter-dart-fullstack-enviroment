@@ -83,7 +83,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
             ],
             Positioned(
               top: 6,
-              left: math.max(4, codeOriginX - 45),
+              left: math.max(4.0, codeOriginX - 45),
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
