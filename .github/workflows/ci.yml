@@ -36,6 +36,23 @@ jobs:
       - name: Analyze runner server
         run: dart analyze
 
+  workspace-storage-server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workspace-storage-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - name: Dart version
+        run: dart --version
+      - name: Install storage dependencies
+        run: dart pub get
+      - name: Analyze workspace storage server
+        run: dart analyze
+      - name: Run workspace storage tests
+        run: dart test
+
   serverpod-mini-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10
