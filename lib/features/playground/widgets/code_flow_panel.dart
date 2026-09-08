@@ -183,6 +183,29 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
                 },
               ),
             ),
+            const SizedBox(height: 7),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.cable_outlined,
+                    size: 14,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      '电线只连接 Workspace 中解析到的函数调用关系。',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
           const Divider(height: 16),
           Expanded(
@@ -214,7 +237,14 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
     final root =
         _direction == _FlowDirection.outgoing ? graph.root : graph.callersRoot;
     final rows = <_FlowRow>[];
-    _flatten(root, 0, rows);
+    _flatten(
+      root,
+      0,
+      rows,
+      parent: null,
+      ancestorContinuations: const <bool>[],
+      isLastSibling: true,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -249,19 +279,56 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
     );
   }
 
-  void _flatten(CodeFlowNode node, int depth, List<_FlowRow> rows) {
-    rows.add(_FlowRow(node: node, depth: depth));
-    for (final child in node.children) {
-      _flatten(child, depth + 1, rows);
+  void _flatten(
+    CodeFlowNode node,
+    int depth,
+    List<_FlowRow> rows, {
+    required CodeFlowNode? parent,
+    required List<bool> ancestorContinuations,
+    required bool isLastSibling,
+  }) {
+    rows.add(
+      _FlowRow(
+        node: node,
+        parent: parent,
+        depth: depth,
+        ancestorContinuations: ancestorContinuations,
+        isLastSibling: isLastSibling,
+      ),
+    );
+
+    for (var index = 0; index < node.children.length; index++) {
+      final child = node.children[index];
+      final childAncestorContinuations = depth == 0
+          ? const <bool>[]
+          : <bool>[...ancestorContinuations, !isLastSibling];
+
+      _flatten(
+        child,
+        depth + 1,
+        rows,
+        parent: node,
+        ancestorContinuations: childAncestorContinuations,
+        isLastSibling: index == node.children.length - 1,
+      );
     }
   }
 }
 
 class _FlowRow {
-  const _FlowRow({required this.node, required this.depth});
+  const _FlowRow({
+    required this.node,
+    required this.parent,
+    required this.depth,
+    required this.ancestorContinuations,
+    required this.isLastSibling,
+  });
 
   final CodeFlowNode node;
+  final CodeFlowNode? parent;
   final int depth;
+  final List<bool> ancestorContinuations;
+  final bool isLastSibling;
 }
 
 class _FlowNodeRow extends StatelessWidget {
@@ -278,56 +345,103 @@ class _FlowNodeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final node = row.node;
+    final parent = row.parent;
     final theme = Theme.of(context);
+    final relation = parent == null
+        ? null
+        : direction == _FlowDirection.outgoing
+            ? '${parent.displayName} → ${node.displayName}'
+            : '${node.displayName} → ${parent.displayName}';
+
     return Padding(
-      padding: EdgeInsets.only(left: row.depth * 16.0, bottom: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
+      padding: const EdgeInsets.only(bottom: 4),
+      child: CustomPaint(
+        painter: _FlowWirePainter(
+          depth: row.depth,
+          ancestorContinuations: row.ancestorContinuations,
+          isLastSibling: row.isLastSibling,
+          color: theme.colorScheme.primary,
+        ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Icon(
-                  _nodeIcon(node),
-                  size: 17,
-                  color: node.isCycle
-                      ? theme.colorScheme.tertiary
-                      : theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      node.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight:
-                            row.depth == 0 ? FontWeight.w700 : FontWeight.w600,
-                      ),
+          padding: EdgeInsets.only(
+            left: row.depth == 0
+                ? 0
+                : row.depth * _FlowWirePainter.indent + 6,
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Icon(
+                      _nodeIcon(node),
+                      size: 17,
+                      color: node.isCycle
+                          ? theme.colorScheme.tertiary
+                          : theme.colorScheme.primary,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${node.location.filePath}:${node.location.line}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          node.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: row.depth == 0
+                                ? FontWeight.w700
+                                : FontWeight.w600,
+                          ),
+                        ),
+                        if (relation != null) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.cable,
+                                size: 12,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  relation,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 2),
+                        Text(
+                          '${node.location.filePath}:${node.location.line}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.open_in_new, size: 14),
+                ],
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.open_in_new, size: 14),
-            ],
+            ),
           ),
         ),
       ),
@@ -340,6 +454,76 @@ class _FlowNodeRow extends StatelessWidget {
     return direction == _FlowDirection.outgoing
         ? Icons.subdirectory_arrow_right
         : Icons.subdirectory_arrow_left;
+  }
+}
+
+class _FlowWirePainter extends CustomPainter {
+  const _FlowWirePainter({
+    required this.depth,
+    required this.ancestorContinuations,
+    required this.isLastSibling,
+    required this.color,
+  });
+
+  static const double indent = 22;
+  static const double _baseX = 8;
+
+  final int depth;
+  final List<bool> ancestorContinuations;
+  final bool isLastSibling;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (depth <= 0 || size.height <= 0) return;
+
+    final cablePaint = Paint()
+      ..color = color.withAlpha(165)
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final glowPaint = Paint()
+      ..color = color.withAlpha(28)
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    void drawCable(Offset from, Offset to) {
+      canvas.drawLine(from, to, glowPaint);
+      canvas.drawLine(from, to, cablePaint);
+    }
+
+    for (var index = 0; index < ancestorContinuations.length; index++) {
+      if (!ancestorContinuations[index]) continue;
+      final x = _baseX + index * indent;
+      drawCable(Offset(x, 0), Offset(x, size.height));
+    }
+
+    final ownX = _baseX + (depth - 1) * indent;
+    final centerY = size.height / 2;
+    final endX = ownX + 14;
+
+    drawCable(Offset(ownX, 0), Offset(ownX, centerY));
+    if (!isLastSibling) {
+      drawCable(Offset(ownX, centerY), Offset(ownX, size.height));
+    }
+    drawCable(Offset(ownX, centerY), Offset(endX, centerY));
+
+    canvas.drawCircle(
+      Offset(endX, centerY),
+      3.1,
+      Paint()
+        ..color = color.withAlpha(220)
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlowWirePainter oldDelegate) {
+    return depth != oldDelegate.depth ||
+        isLastSibling != oldDelegate.isLastSibling ||
+        color != oldDelegate.color ||
+        ancestorContinuations != oldDelegate.ancestorContinuations;
   }
 }
 
