@@ -16,10 +16,20 @@ import '../../runner/widgets/runner_preview_panel.dart';
 import '../../workspace/services/hive_workspace_persistence.dart';
 import '../../workspace/services/keyed_workspace_snapshot_store.dart';
 import '../../workspace/widgets/workspace_editor_tabs.dart';
+import '../models/concept_project_context.dart';
 import '../widgets/concept_lib_explorer.dart';
 
 class ConceptModeScreen extends StatefulWidget {
-  const ConceptModeScreen({super.key});
+  const ConceptModeScreen({
+    super.key,
+    this.projection,
+  });
+
+  /// When supplied, Concept Mode opens a selected Flutter subproject projected
+  /// from a larger repository. The projected Workspace itself still has a
+  /// normal Flutter root (`lib/`, `assets/`, `pubspec.yaml`), so visual tools do
+  /// not need to understand monorepo prefixes.
+  final ConceptProjectProjection? projection;
 
   @override
   State<ConceptModeScreen> createState() => _ConceptModeScreenState();
@@ -38,7 +48,7 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     super.initState();
 
     final persistence = HiveWorkspacePersistence.tryFromOpenBoxes();
-    final conceptStore = persistence == null
+    final conceptStore = widget.projection != null || persistence == null
         ? null
         : KeyedWorkspaceSnapshotStore(
             delegate: persistence.snapshotStore,
@@ -48,6 +58,11 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     controller = PlaygroundController(
       workspaceStore: conceptStore,
     )..addListener(_refresh);
+
+    final projection = widget.projection;
+    if (projection != null) {
+      controller.workspace.restoreSnapshot(projection.snapshot);
+    }
 
     runner = FlutterRunnerController(
       workspace: controller.workspace,
@@ -137,6 +152,8 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sourceLabel = widget.projection?.context.sourceLabel;
+
     return Scaffold(
       key: const ValueKey('concept-mode-screen'),
       appBar: AppBar(
@@ -146,16 +163,21 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.arrow_back_rounded),
         ),
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               '概念模式',
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             Text(
-              'Concept Mode · lib/ only',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+              sourceLabel == null
+                  ? 'Concept Mode · lib/ only'
+                  : '$sourceLabel · lib/ only',
+              key: sourceLabel == null
+                  ? null
+                  : const ValueKey('concept-source-project'),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
             ),
           ],
         ),
