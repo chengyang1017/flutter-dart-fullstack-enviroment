@@ -26,11 +26,6 @@ $WorkspaceAccessToken = if ($env:WORKSPACE_ACCESS_TOKEN) {
 } else {
     ''
 }
-$WorkspaceUserId = if ($env:WORKSPACE_USER_ID) {
-    $env:WORKSPACE_USER_ID
-} else {
-    'workspace-user'
-}
 
 if ($WorkspaceStorageApiUrl -and -not $WorkspaceAccessToken) {
     Write-Error 'WORKSPACE_STORAGE_API_URL is set but WORKSPACE_ACCESS_TOKEN is missing.'
@@ -46,7 +41,7 @@ if ($listener) {
 Write-Host "Flutter Web fixed origin: http://${WebHost}:$WebPort"
 Write-Host "Runner API: $RunnerApiUrl"
 if ($WorkspaceStorageApiUrl) {
-    Write-Host "Workspace cloud: $WorkspaceStorageApiUrl (cloud is authoritative; browser Hive is cache)"
+    Write-Host "Workspace cloud: $WorkspaceStorageApiUrl (account identity is resolved from /me; cloud is authoritative; browser Hive is cache)"
 } else {
     Write-Host 'Workspace cloud: disabled (set WORKSPACE_STORAGE_API_URL and WORKSPACE_ACCESS_TOKEN to enable)'
 }
@@ -57,5 +52,4 @@ flutter run -d chrome `
     "--dart-define=RUNNER_API_URL=$RunnerApiUrl" `
     "--dart-define=RUNNER_API_TOKEN=$RunnerApiToken" `
     "--dart-define=WORKSPACE_STORAGE_API_URL=$WorkspaceStorageApiUrl" `
-    "--dart-define=WORKSPACE_ACCESS_TOKEN=$WorkspaceAccessToken" `
-    "--dart-define=WORKSPACE_USER_ID=$WorkspaceUserId"
+    "--dart-define=WORKSPACE_ACCESS_TOKEN=$WorkspaceAccessToken"

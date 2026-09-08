@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/workspace_project.dart';
+import '../services/workspace_cloud_runtime.dart';
 
 enum _CompactProjectAction {
   rename,
@@ -111,7 +112,7 @@ class WorkspaceProjectBar extends StatelessWidget {
                     ),
                     IconButton(
                       key: const ValueKey('workspace-project-delete'),
-                      tooltip: '删除当前本地练习',
+                      tooltip: '删除当前项目',
                       visualDensity: VisualDensity.compact,
                       onPressed: projects.length > 1 ? onDelete : null,
                       icon: const Icon(Icons.delete_outline, size: 18),
@@ -122,6 +123,7 @@ class WorkspaceProjectBar extends StatelessWidget {
                     Flexible(
                       child: Text(
                         _statusText(activeProject),
+                        key: const ValueKey('workspace-project-namespace'),
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
@@ -137,19 +139,24 @@ class WorkspaceProjectBar extends StatelessWidget {
   }
 
   String _statusText(WorkspaceProject project) {
+    final identity = WorkspaceCloudRuntime.identity;
+    final namespace = identity == null
+        ? project.slug
+        : '${identity.accountNamespace} / ${project.slug}';
+    final storage = identity == null ? '浏览器本地保存' : '云端保存';
+
     if (project.kind == WorkspaceProjectKind.generatedFlutter) {
       final platforms = project.flutterPlatforms.map(_platformLabel).join(' · ');
-      return platforms.isEmpty
-          ? 'Flutter 项目 · 浏览器本地保存'
-          : 'Flutter · $platforms';
+      final projectType = platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
+      return '$namespace · $projectType · $storage';
     }
     if (project.kind == WorkspaceProjectKind.importedFlutter) {
-      return '已导入 Flutter Workspace · 浏览器本地保存';
+      return '$namespace · 导入的 Flutter 项目 · $storage';
     }
     if (project.lifecycle == WorkspaceLifecycle.temporary) {
-      return '临时练习 · 浏览器自动保存';
+      return '$namespace · 临时练习 · $storage';
     }
-    return '已保留 Workspace · 浏览器本地保存';
+    return '$namespace · Workspace · $storage';
   }
 
   String _platformLabel(String platform) {

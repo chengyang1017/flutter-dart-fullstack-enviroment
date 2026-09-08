@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_ui_playground/features/project_mode/screens/project_mode_screen.dart';
+import 'package:flutter_ui_playground/features/workspace/models/workspace_identity.dart';
 import 'package:flutter_ui_playground/features/workspace/models/workspace_project.dart';
 import 'package:flutter_ui_playground/features/workspace/models/workspace_snapshot.dart';
 import 'package:flutter_ui_playground/features/workspace/services/workspace_project_catalog_store.dart';
@@ -25,7 +26,7 @@ void main() {
     expect(find.text('Flutter Practice'), findsNothing);
   });
 
-  testWidgets('project mode lists real Flutter projects instead of opening one',
+  testWidgets('project mode lists real Flutter projects under account namespace',
       (tester) async {
     final now = DateTime.utc(2026, 9, 8);
     final catalog = _MemoryCatalogStore(
@@ -41,6 +42,7 @@ void main() {
         WorkspaceProject(
           id: 'glyphora-mobile',
           name: 'Glyphora Mobile',
+          slug: 'glyphora-mobile',
           storageKey: 'workspace:glyphora-mobile',
           kind: WorkspaceProjectKind.generatedFlutter,
           createdAt: now,
@@ -56,7 +58,15 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: ProjectModeScreen(projectLibrary: library)),
+      MaterialApp(
+        home: ProjectModeScreen(
+          projectLibrary: library,
+          identity: const WorkspaceIdentity(
+            userId: 'usr-123',
+            username: 'chengyang1017',
+          ),
+        ),
+      ),
     );
 
     expect(
@@ -67,7 +77,12 @@ void main() {
       find.byKey(const ValueKey('project-mode-project-glyphora-mobile')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('project-mode-account-namespace')),
+      findsOneWidget,
+    );
     expect(find.text('Glyphora Mobile'), findsOneWidget);
+    expect(find.text('chengyang1017 / glyphora-mobile'), findsOneWidget);
     expect(find.text('Flutter Practice'), findsNothing);
   });
 }

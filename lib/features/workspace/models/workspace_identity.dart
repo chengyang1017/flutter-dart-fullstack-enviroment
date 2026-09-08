@@ -1,5 +1,8 @@
 class WorkspaceIdentity {
-  const WorkspaceIdentity({required this.userId});
+  const WorkspaceIdentity({
+    required this.userId,
+    this.username,
+  });
 
   /// Stable account id resolved from the authenticated server session.
   ///
@@ -8,6 +11,17 @@ class WorkspaceIdentity {
   /// choose an arbitrary owner id for remote operations.
   final String userId;
 
+  /// Human-readable account namespace resolved by the server, for example
+  /// `chengyang1017`. It is intentionally separate from [userId] so changing a
+  /// username never changes Workspace ownership.
+  final String? username;
+
+  String get accountNamespace {
+    final value = username?.trim();
+    return value == null || value.isEmpty ? userId : value;
+  }
+
   @override
-  String toString() => 'WorkspaceIdentity(userId: $userId)';
+  String toString() =>
+      'WorkspaceIdentity(userId: $userId, username: $username)';
 }

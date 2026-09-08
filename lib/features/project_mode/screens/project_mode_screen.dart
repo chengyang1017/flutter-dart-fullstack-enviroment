@@ -5,20 +5,27 @@ import '../../playground/screens/playground_screen.dart';
 import '../../project_creation/services/flutter_project_scaffold_service.dart';
 import '../../project_creation/widgets/create_flutter_project_dialog.dart';
 import '../../project_import/services/flutter_project_zip_import_service.dart';
+import '../../workspace/models/workspace_identity.dart';
 import '../../workspace/models/workspace_project.dart';
 import '../../workspace/services/hive_workspace_persistence.dart';
+import '../../workspace/services/workspace_cloud_runtime.dart';
 import '../../workspace/services/workspace_project_library.dart';
 
 class ProjectModeScreen extends StatefulWidget {
   const ProjectModeScreen({
     super.key,
     this.projectLibrary,
+    this.identity,
   });
 
   /// Test/embedding seam. Normal app navigation resolves the browser project
   /// library from Hive so Project Mode opens as a project launcher instead of
   /// immediately exposing the legacy default Workspace template.
   final WorkspaceProjectLibrary? projectLibrary;
+
+  /// Test/embedding seam for the authenticated account. Normal app navigation
+  /// reads the server-resolved identity from [WorkspaceCloudRuntime].
+  final WorkspaceIdentity? identity;
 
   @override
   State<ProjectModeScreen> createState() => _ProjectModeScreenState();
@@ -28,6 +35,9 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
   static const _runnerApiUrl = String.fromEnvironment('RUNNER_API_URL');
 
   WorkspaceProjectLibrary? _library;
+
+  WorkspaceIdentity? get _identity =>
+      widget.identity ?? WorkspaceCloudRuntime.identity;
 
   @override
   void initState() {
@@ -153,6 +163,7 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
   Widget build(BuildContext context) {
     final library = _library;
     final projects = _visibleProjects;
+    final accountUsername = _identity?.username;
 
     return Scaffold(
       key: const ValueKey('project-mode-screen'),
@@ -171,6 +182,7 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _ProjectModeHeader(
+                          accountUsername: accountUsername,
                           onCreate: _createProject,
                           onImport: supportsWorkspaceImportPicker
                               ? _importProject
@@ -213,6 +225,7 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
                                         'project-mode-project-${project.id}',
                                       ),
                                       project: project,
+                                      accountUsername: accountUsername,
                                       onTap: () => _openProject(project),
                                     );
                                   },
@@ -230,10 +243,12 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
 
 class _ProjectModeHeader extends StatelessWidget {
   const _ProjectModeHeader({
+    required this.accountUsername,
     required this.onCreate,
     required this.onImport,
   });
 
+  final String? accountUsername;
   final VoidCallback onCreate;
   final VoidCallback? onImport;
 
@@ -259,6 +274,14 @@ class _ProjectModeHeader extends StatelessWidget {
               const Text(
                 '项目模式不会再自动打开默认模板。创建新 Flutter 项目，或从下面的项目列表继续。',
               ),
+              if (accountUsername != null) ...[
+                const SizedBox(height: 10),
+                Chip(
+                  key: const ValueKey('project-mode-account-namespace'),
+                  avatar: const Icon(Icons.account_circle_outlined, size: 18),
+                  label: Text(accountUsername!),
+                ),
+              ],
             ],
           ),
         ),
@@ -353,16 +376,21 @@ class _ProjectCard extends StatelessWidget {
   const _ProjectCard({
     super.key,
     required this.project,
+    required this.accountUsername,
     required this.onTap,
   });
 
   final WorkspaceProject project;
+  final String? accountUsername;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final subtitle = _subtitle(project);
+    final namespace = accountUsername == null
+        ? project.slug
+        : '$accountUsername / ${project.slug}';
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -396,6 +424,19 @@ class _ProjectCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      namespace,
+                      key: ValueKey(
+                        'project-mode-project-namespace-${project.id}',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w600,
                           ),
                     ),
                     const SizedBox(height: 4),
