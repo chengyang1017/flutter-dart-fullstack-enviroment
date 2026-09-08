@@ -28,6 +28,26 @@ abstract class WorkspaceAuthenticator {
   }
 }
 
+class CompositeWorkspaceAuthenticator extends WorkspaceAuthenticator {
+  const CompositeWorkspaceAuthenticator(this.delegates);
+
+  final List<WorkspaceAuthenticator> delegates;
+
+  @override
+  Future<String?> authenticate(HttpRequest request) async {
+    return (await authenticatePrincipal(request))?.userId;
+  }
+
+  @override
+  Future<WorkspacePrincipal?> authenticatePrincipal(HttpRequest request) async {
+    for (final delegate in delegates) {
+      final principal = await delegate.authenticatePrincipal(request);
+      if (principal != null) return principal;
+    }
+    return null;
+  }
+}
+
 class StaticBearerWorkspaceAuthenticator extends WorkspaceAuthenticator {
   const StaticBearerWorkspaceAuthenticator(this.tokenToUserId)
       : tokenToPrincipal = const <String, WorkspacePrincipal>{};
@@ -116,12 +136,17 @@ class StaticBearerWorkspaceAuthenticator extends WorkspaceAuthenticator {
 
   @override
   Future<WorkspacePrincipal?> authenticatePrincipal(HttpRequest request) async {
-    final header = request.headers.value(HttpHeaders.authorizationHeader);
-    if (header == null || !header.startsWith('Bearer ')) return null;
-    final token = header.substring('Bearer '.length).trim();
-    if (token.isEmpty) return null;
+    final token = workspaceBearerToken(request);
+    if (token == null) return null;
     return principalForToken(token);
   }
+}
+
+String? workspaceBearerToken(HttpRequest request) {
+  final header = request.headers.value(HttpHeaders.authorizationHeader);
+  if (header == null || !header.startsWith('Bearer ')) return null;
+  final token = header.substring('Bearer '.length).trim();
+  return token.isEmpty ? null : token;
 }
 
 final RegExp _usernamePattern = RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,38})$');
