@@ -376,11 +376,7 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
           children: [
             editor,
             if (widget.wireModeEnabled)
-              Positioned(
-                top: 0,
-                bottom: 0,
-                right: _wireScrollbarInset,
-                width: _wireOverlayWidth,
+              Positioned.fill(
                 child: CodeRelationshipOverlay(
                   relationships: _relationships,
                   activeRelationshipIndexes: _activeRelationshipIndexes(),
