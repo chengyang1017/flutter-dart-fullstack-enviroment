@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/auth/screens/workspace_auth_screen.dart';
+import '../features/auth/widgets/claim_existing_account_dialog.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/workspace/services/workspace_auth_runtime.dart';
 
@@ -41,6 +42,29 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _showClaimExistingAccount() async {
+    final identity = WorkspaceAuthRuntime.identity;
+    if (identity == null || !WorkspaceAuthRuntime.canClaimExistingAccount) {
+      return;
+    }
+
+    final claimed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ClaimExistingAccountDialog(
+        username: identity.accountNamespace,
+        onClaim: ({required String email, required String password}) =>
+            WorkspaceAuthRuntime.claimExistingAccount(
+          email: email,
+          password: password,
+        ),
+      ),
+    );
+    if (claimed == true && mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cloudConfigured = WorkspaceAuthRuntime.cloudConfigured;
@@ -61,6 +85,9 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
             )
           : HomeScreen(
               username: identity?.accountNamespace,
+              onClaimAccount: WorkspaceAuthRuntime.canClaimExistingAccount
+                  ? _showClaimExistingAccount
+                  : null,
               onLogout: identity == null ? null : _logout,
             ),
     );

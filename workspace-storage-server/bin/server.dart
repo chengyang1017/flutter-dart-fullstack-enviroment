@@ -53,12 +53,11 @@ Future<void> main() async {
 
   final authenticators = <WorkspaceAuthenticator>[accounts];
   final authTokens = environment['WORKSPACE_AUTH_TOKENS'];
+  StaticBearerWorkspaceAuthenticator? legacyAuthenticator;
   if (authTokens != null && authTokens.trim().isNotEmpty) {
     try {
-      authenticators.insert(
-        0,
-        StaticBearerWorkspaceAuthenticator.fromJson(authTokens),
-      );
+      legacyAuthenticator = StaticBearerWorkspaceAuthenticator.fromJson(authTokens);
+      authenticators.insert(0, legacyAuthenticator);
     } on FormatException catch (error) {
       stderr.writeln(error.message);
       exitCode = 64;
@@ -83,6 +82,7 @@ Future<void> main() async {
   final handler = WorkspaceAuthHttpHandler(
     accounts: accounts,
     workspaceHandler: workspaceHandler,
+    legacyAuthenticator: legacyAuthenticator,
     allowedOrigin: allowedOrigin,
   );
 
@@ -97,6 +97,7 @@ Future<void> main() async {
   stdout.writeln('Workspace secret vault: AES-GCM-256 enabled');
   if (authTokens != null && authTokens.trim().isNotEmpty) {
     stdout.writeln('Static development bearer identities: enabled');
+    stdout.writeln('Legacy account claiming: enabled');
   }
 
   final subscriptions = <StreamSubscription<ProcessSignal>>[];

@@ -5,16 +5,19 @@ import 'workspace_account_store.dart';
 import 'workspace_authenticator.dart';
 import 'workspace_storage_http_server.dart';
 
-/// Adds register/login/logout routes in front of the existing Workspace API.
+/// Adds register/login/logout and one-time legacy-account claiming routes in
+/// front of the existing Workspace API.
 class WorkspaceAuthHttpHandler {
   WorkspaceAuthHttpHandler({
     required this.accounts,
     required this.workspaceHandler,
+    this.legacyAuthenticator,
     this.allowedOrigin = '*',
   });
 
   final FileWorkspaceAccountStore accounts;
   final WorkspaceStorageHttpServer workspaceHandler;
+  final StaticBearerWorkspaceAuthenticator? legacyAuthenticator;
   final String allowedOrigin;
 
   Future<void> handle(HttpRequest request) async {
@@ -36,6 +39,36 @@ class WorkspaceAuthHttpHandler {
         final body = await _readJsonObject(request);
         final session = await accounts.register(
           username: _requiredString(body, 'username'),
+          email: _requiredString(body, 'email'),
+          password: _requiredString(body, 'password', trim: false),
+        );
+        await _sendJson(
+          request.response,
+          HttpStatus.created,
+          session.toJson(),
+        );
+        return;
+      }
+
+      if (segments.length == 2 &&
+          segments[1] == 'claim-existing' &&
+          request.method == 'POST') {
+        final token = workspaceBearerToken(request);
+        final principal = token == null
+            ? null
+            : legacyAuthenticator?.principalForToken(token);
+        if (principal == null) {
+          await _sendError(
+            request.response,
+            HttpStatus.unauthorized,
+            'Legacy development authentication required.',
+          );
+          return;
+        }
+
+        final body = await _readJsonObject(request);
+        final session = await accounts.claimExistingIdentity(
+          principal: principal,
           email: _requiredString(body, 'email'),
           password: _requiredString(body, 'password', trim: false),
         );

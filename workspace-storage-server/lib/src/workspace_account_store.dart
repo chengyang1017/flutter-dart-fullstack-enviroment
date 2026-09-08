@@ -138,6 +138,69 @@ class FileWorkspaceAccountStore extends WorkspaceAuthenticator {
     });
   }
 
+  /// Converts a pre-existing static development identity into a normal
+  /// email/password account without changing its stable user id or username.
+  /// Existing Workspace ownership therefore remains untouched.
+  Future<WorkspaceAuthenticatedSession> claimExistingIdentity({
+    required WorkspacePrincipal principal,
+    required String email,
+    required String password,
+  }) {
+    return _serialized(() async {
+      final cleanUserId = principal.userId.trim();
+      if (cleanUserId.isEmpty) {
+        throw const FormatException('Existing Workspace user id is required.');
+      }
+      final cleanUsername = _normalizeUsername(principal.username);
+      final cleanEmail = _normalizeEmail(email);
+      _validatePassword(password);
+
+      final data = await _readData();
+      final users = _users(data);
+      if (users.any((user) => user['userId'] == cleanUserId)) {
+        throw const WorkspaceAccountConflict(
+          'account_already_claimed',
+          'This Workspace account already has login credentials.',
+        );
+      }
+      if (users.any((user) => user['username'] == cleanUsername)) {
+        throw const WorkspaceAccountConflict(
+          'username_taken',
+          'Username is already in use.',
+        );
+      }
+      if (users.any((user) => user['email'] == cleanEmail)) {
+        throw const WorkspaceAccountConflict(
+          'email_taken',
+          'Email is already registered.',
+        );
+      }
+
+      final salt = _randomBytes(16);
+      final passwordHash = await _derivePassword(password, salt);
+      final now = _clock().toUtc();
+      final user = <String, dynamic>{
+        'userId': cleanUserId,
+        'username': cleanUsername,
+        'email': cleanEmail,
+        'passwordSalt': base64UrlEncode(salt),
+        'passwordHash': base64UrlEncode(passwordHash),
+        'passwordIterations': passwordIterations,
+        'createdAt': now.toIso8601String(),
+        'claimedAt': now.toIso8601String(),
+      };
+      users.add(user);
+
+      final issued = await _issueSession(
+        data: data,
+        user: user,
+        now: now,
+      );
+      await _writeData(data);
+      return issued;
+    });
+  }
+
   Future<WorkspaceAuthenticatedSession> login({
     required String email,
     required String password,

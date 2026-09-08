@@ -56,6 +56,21 @@ class HttpWorkspaceAuthService {
     );
   }
 
+  Future<WorkspaceAuthSession> claimExisting({
+    required String accessToken,
+    required String email,
+    required String password,
+  }) {
+    return _authenticate(
+      path: const <String>['auth', 'claim-existing'],
+      accessToken: accessToken,
+      body: <String, Object?>{
+        'email': email,
+        'password': password,
+      },
+    );
+  }
+
   Future<WorkspaceAuthSession> login({
     required String email,
     required String password,
@@ -85,13 +100,19 @@ class HttpWorkspaceAuthService {
   Future<WorkspaceAuthSession> _authenticate({
     required List<String> path,
     required Map<String, Object?> body,
+    String? accessToken,
   }) async {
+    final headers = <String, String>{
+      'accept': 'application/json',
+      'content-type': 'application/json',
+    };
+    if (accessToken != null && accessToken.trim().isNotEmpty) {
+      headers['authorization'] = 'Bearer ${accessToken.trim()}';
+    }
+
     final response = await _client.post(
       _uri(path),
-      headers: const <String, String>{
-        'accept': 'application/json',
-        'content-type': 'application/json',
-      },
+      headers: headers,
       body: jsonEncode(body),
     );
     final decoded = _decodeObject(response);
@@ -99,9 +120,11 @@ class HttpWorkspaceAuthService {
       throw _error(response, decoded);
     }
 
-    final accessToken = decoded['accessToken'];
+    final issuedAccessToken = decoded['accessToken'];
     final rawUser = decoded['user'];
-    if (accessToken is! String || accessToken.trim().isEmpty || rawUser is! Map) {
+    if (issuedAccessToken is! String ||
+        issuedAccessToken.trim().isEmpty ||
+        rawUser is! Map) {
       throw const FormatException(
         'Workspace auth response requires accessToken and user.',
       );
@@ -127,7 +150,7 @@ class HttpWorkspaceAuthService {
         username: username.trim(),
       ),
       email: email.trim(),
-      accessToken: accessToken.trim(),
+      accessToken: issuedAccessToken.trim(),
     );
   }
 

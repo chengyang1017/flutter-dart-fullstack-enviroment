@@ -27,6 +27,14 @@ class WorkspaceAuthRuntime {
   static String? get accessToken => WorkspaceCloudRuntime.accessToken;
   static Object? get startupError => _startupError;
 
+  /// True only when the active session came from the compile-time development
+  /// token and has not yet been converted into a normal persisted account
+  /// session.
+  static bool get canClaimExistingAccount =>
+      isAuthenticated &&
+      WorkspaceAuthSessionStore.accessToken == null &&
+      _developmentAccessToken.trim().isNotEmpty;
+
   static Future<bool> bootstrap() async {
     _startupError = null;
     if (!cloudConfigured) {
@@ -76,6 +84,32 @@ class WorkspaceAuthRuntime {
     try {
       final session = await service.service.register(
         username: username,
+        email: email,
+        password: password,
+      );
+      return _activate(
+        session.accessToken,
+        resolvedIdentity: session.identity,
+        persistToken: true,
+      );
+    } finally {
+      service.client.close();
+    }
+  }
+
+  static Future<WorkspaceIdentity> claimExistingAccount({
+    required String email,
+    required String password,
+  }) async {
+    final token = WorkspaceCloudRuntime.accessToken;
+    if (!canClaimExistingAccount || token == null || token.trim().isEmpty) {
+      throw StateError('当前会话不是可绑定的开发账号。');
+    }
+
+    final service = _authService();
+    try {
+      final session = await service.service.claimExisting(
+        accessToken: token,
         email: email,
         password: password,
       );

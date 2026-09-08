@@ -8,15 +8,17 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     this.username,
+    this.onClaimAccount,
     this.onLogout,
   });
 
   final String? username;
+  final VoidCallback? onClaimAccount;
   final Future<void> Function()? onLogout;
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: username == null && onLogout == null
+        appBar: username == null && onLogout == null && onClaimAccount == null
             ? null
             : AppBar(
                 title: username == null
@@ -33,6 +35,13 @@ class HomeScreen extends StatelessWidget {
                         ],
                       ),
                 actions: [
+                  if (onClaimAccount != null)
+                    IconButton(
+                      key: const ValueKey('home-account-claim'),
+                      tooltip: '绑定正式登录账号',
+                      onPressed: onClaimAccount,
+                      icon: const Icon(Icons.verified_user_outlined),
+                    ),
                   if (onLogout != null)
                     IconButton(
                       key: const ValueKey('home-account-logout'),
