@@ -191,7 +191,7 @@ class WorkspaceAuthRuntime {
     final baseUri = _baseUri();
     final client = http.Client();
     try {
-      return HttpWorkspaceAccountService(
+      return await HttpWorkspaceAccountService(
         baseUri: baseUri,
         accessToken: token,
         client: client,
