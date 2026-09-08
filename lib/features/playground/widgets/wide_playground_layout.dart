@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../runner/controllers/flutter_runner_controller.dart';
@@ -5,6 +7,7 @@ import '../../runner/widgets/runner_console_panel.dart';
 import '../../runner/widgets/runner_preview_panel.dart';
 import '../../workspace/widgets/workspace_editor_tabs.dart';
 import '../../workspace/widgets/workspace_file_explorer.dart';
+import '../controllers/concept_label_controller.dart';
 import '../controllers/playground_controller.dart';
 import 'code_editor_panel.dart';
 import 'code_flow_panel.dart';
@@ -33,6 +36,209 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
   bool _showConsole = true;
   bool _wireModeEnabled = false;
   bool _labelModeEnabled = false;
+  late final ConceptLabelController _labels;
+
+  @override
+  void initState() {
+    super.initState();
+    _labels = ConceptLabelController();
+    unawaited(_labels.load());
+  }
+
+  @override
+  void dispose() {
+    _labels.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openAddLabelDialog() async {
+    if (_labelModeEnabled) {
+      setState(() => _labelModeEnabled = false);
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    if (!mounted) return;
+
+    final editor = widget.controller.textController;
+    final lines = editor.text.split('\n');
+    if (lines.isEmpty) return;
+
+    final lineIndex = editor.selection.extentIndex.clamp(0, lines.length - 1).toInt();
+    final sourceLine = lines[lineIndex];
+    final selected = editor.selectedText;
+    final selectedSingleLine = selected.trim().isNotEmpty && !selected.contains('\n');
+
+    final sourceController = TextEditingController(
+      text: selectedSingleLine ? selected : sourceLine.trim(),
+    );
+    final labelController = TextEditingController();
+    var reusable = selectedSingleLine;
+    String? errorText;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('添加标签'),
+              content: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      reusable ? 'Flutter / Dart 通用标签' : '当前文件第 ${lineIndex + 1} 行',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: sourceController,
+                      readOnly: !reusable,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        labelText: reusable ? '要覆盖的源码' : '当前源码',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: labelController,
+                      autofocus: true,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        labelText: '你自己输入的标签',
+                        hintText: reusable ? '例如：等' : '例如：读取商品并刷新页面',
+                        errorText: errorText,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('在 Flutter / Dart 中通用复用'),
+                      subtitle: const Text('关闭后只覆盖当前文件的这一行'),
+                      value: reusable,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          reusable = value;
+                          errorText = null;
+                          sourceController.text = value
+                              ? (selectedSingleLine ? selected : sourceLine.trim())
+                              : sourceLine;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final source = sourceController.text.trim();
+                    final label = labelController.text.trim();
+                    if (source.isEmpty || label.isEmpty) {
+                      setDialogState(() => errorText = '源码和标签都不能为空');
+                      return;
+                    }
+                    if (reusable && source.contains('\n')) {
+                      setDialogState(() => errorText = '通用标签第一版只支持单行源码');
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(true);
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      if (reusable) {
+        await _labels.addReusableRule(
+          path: widget.controller.activeFilePath,
+          source: sourceController.text,
+          label: labelController.text,
+        );
+      } else {
+        await _labels.setLineLabel(
+          path: widget.controller.activeFilePath,
+          lineNumber: lineIndex + 1,
+          sourceLine: sourceLine,
+          label: labelController.text,
+        );
+      }
+    }
+
+    sourceController.dispose();
+    labelController.dispose();
+  }
+
+  Future<void> _openManageLabelsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AnimatedBuilder(
+          animation: _labels,
+          builder: (context, _) {
+            final language = ConceptLabelController.languageForPath(
+              widget.controller.activeFilePath,
+            );
+            final rules = _labels.rules
+                .where((rule) => rule.language == language)
+                .toList(growable: false);
+
+            return AlertDialog(
+              title: Text('我的标签 · $language'),
+              content: SizedBox(
+                width: 560,
+                height: 360,
+                child: rules.isEmpty
+                    ? const Center(
+                        child: Text('还没有标签。先在源码里选择内容，再点“添加标签”。'),
+                      )
+                    : ListView.separated(
+                        itemCount: rules.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final rule = rules[index];
+                          return ListTile(
+                            dense: true,
+                            title: Text('${rule.source}  →  ${rule.label}'),
+                            subtitle: Text(
+                              rule.isReusable
+                                  ? '通用复用'
+                                  : '${rule.filePath ?? ''} · 第 ${rule.lineNumber ?? '-'} 行',
+                            ),
+                            trailing: IconButton(
+                              tooltip: '删除标签',
+                              onPressed: () => _labels.removeRule(rule.id),
+                              icon: const Icon(Icons.delete_outline, size: 19),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('关闭'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +264,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                 Expanded(
                   child: _EditorArea(
                     controller: widget.controller,
+                    labels: _labels,
                     runner: widget.runner,
                     showConsole: _showConsole,
                     wireModeEnabled: _wireModeEnabled,
@@ -77,6 +284,8 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                     onToggleLabelMode: () {
                       setState(() => _labelModeEnabled = !_labelModeEnabled);
                     },
+                    onAddLabel: _openAddLabelDialog,
+                    onManageLabels: _openManageLabelsDialog,
                     explorerVisible: _showExplorer,
                     previewVisible: _showPreview,
                   ),
@@ -163,6 +372,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
 class _EditorArea extends StatelessWidget {
   const _EditorArea({
     required this.controller,
+    required this.labels,
     required this.runner,
     required this.showConsole,
     required this.wireModeEnabled,
@@ -172,11 +382,14 @@ class _EditorArea extends StatelessWidget {
     required this.onTogglePreview,
     required this.onToggleWireMode,
     required this.onToggleLabelMode,
+    required this.onAddLabel,
+    required this.onManageLabels,
     required this.explorerVisible,
     required this.previewVisible,
   });
 
   final PlaygroundController controller;
+  final ConceptLabelController labels;
   final FlutterRunnerController runner;
   final bool showConsole;
   final bool wireModeEnabled;
@@ -188,6 +401,8 @@ class _EditorArea extends StatelessWidget {
   final VoidCallback onTogglePreview;
   final VoidCallback onToggleWireMode;
   final VoidCallback onToggleLabelMode;
+  final VoidCallback onAddLabel;
+  final VoidCallback onManageLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -203,6 +418,8 @@ class _EditorArea extends StatelessWidget {
           onTogglePreview: onTogglePreview,
           onToggleWireMode: onToggleWireMode,
           onToggleLabelMode: onToggleLabelMode,
+          onAddLabel: onAddLabel,
+          onManageLabels: onManageLabels,
         ),
         WorkspaceEditorTabs(
           workspace: controller.workspace,
@@ -212,6 +429,7 @@ class _EditorArea extends StatelessWidget {
         Expanded(
           child: ConceptLabelEditorLayer(
             controller: controller,
+            labels: labels,
             enabled: labelModeEnabled,
             child: CodeEditorPanel(
               controller: controller,
@@ -242,6 +460,8 @@ class _EditorCommandBar extends StatelessWidget {
     required this.onTogglePreview,
     required this.onToggleWireMode,
     required this.onToggleLabelMode,
+    required this.onAddLabel,
+    required this.onManageLabels,
   });
 
   final PlaygroundController controller;
@@ -253,6 +473,8 @@ class _EditorCommandBar extends StatelessWidget {
   final VoidCallback onTogglePreview;
   final VoidCallback onToggleWireMode;
   final VoidCallback onToggleLabelMode;
+  final VoidCallback onAddLabel;
+  final VoidCallback onManageLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -291,6 +513,20 @@ class _EditorCommandBar extends StatelessWidget {
               ),
             ),
           const SizedBox(width: 8),
+          IconButton(
+            key: const ValueKey('add-concept-label'),
+            tooltip: '给选中代码 / 当前行添加自己的标签',
+            visualDensity: VisualDensity.compact,
+            onPressed: onAddLabel,
+            icon: const Icon(Icons.new_label_outlined, size: 18),
+          ),
+          IconButton(
+            key: const ValueKey('manage-concept-labels'),
+            tooltip: '管理我的标签',
+            visualDensity: VisualDensity.compact,
+            onPressed: onManageLabels,
+            icon: const Icon(Icons.label_important_outline, size: 18),
+          ),
           if (labelModeEnabled)
             Padding(
               padding: const EdgeInsets.only(right: 4),
@@ -305,7 +541,7 @@ class _EditorCommandBar extends StatelessWidget {
             ),
           IconButton(
             key: const ValueKey('label-mode-toggle'),
-            tooltip: labelModeEnabled ? '切回原代码视角' : '打开标签视角（Dart / Flutter）',
+            tooltip: labelModeEnabled ? '切回原代码视角' : '显示我自己创建的标签',
             visualDensity: VisualDensity.compact,
             style: IconButton.styleFrom(
               backgroundColor: labelModeEnabled
