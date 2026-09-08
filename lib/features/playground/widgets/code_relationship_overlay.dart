@@ -8,6 +8,8 @@ class CodeRelationshipOverlay extends StatelessWidget {
   const CodeRelationshipOverlay({
     super.key,
     required this.relationships,
+    required this.activeRelationshipIndexes,
+    required this.focusLine,
     required this.codeOriginX,
     required this.charWidth,
     required this.lineHeight,
@@ -19,7 +21,12 @@ class CodeRelationshipOverlay extends StatelessWidget {
     required this.onJumpTo,
   });
 
+  static const _maxFocusedWires = 8;
+  static const _maxFallbackWires = 6;
+
   final List<CodeRelationship> relationships;
+  final Set<int> activeRelationshipIndexes;
+  final int focusLine;
   final double codeOriginX;
   final double charWidth;
   final double lineHeight;
@@ -35,12 +42,17 @@ class CodeRelationshipOverlay extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
+        final selected = _selectRelationships(size);
         final layouts = <_WireLayout>[];
-        for (var i = 0; i < relationships.length; i++) {
+
+        for (var laneIndex = 0; laneIndex < selected.length; laneIndex++) {
+          final item = selected[laneIndex];
           layouts.add(
             _layoutFor(
-              relationship: relationships[i],
-              index: i,
+              relationship: item.relationship,
+              relationshipIndex: item.index,
+              laneIndex: laneIndex,
+              active: item.active,
               size: size,
             ),
           );
@@ -83,11 +95,11 @@ class CodeRelationshipOverlay extends StatelessWidget {
             ],
             Positioned(
               top: 6,
-              left: math.max(4.0, codeOriginX - 45),
+              left: math.max(4.0, codeOriginX - 49),
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: const Color(0xff111318).withValues(alpha: .9),
+                    color: const Color(0xff111318).withValues(alpha: .92),
                     border: Border.all(
                       color: const Color(0xff334155).withValues(alpha: .8),
                     ),
@@ -99,7 +111,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
                       vertical: 3,
                     ),
                     child: Text(
-                      '⚡ ${relationships.length}',
+                      '⚡ ${layouts.length} / ${relationships.length}',
                       key: const ValueKey('code-relationship-count'),
                       style: const TextStyle(
                         color: Color(0xffaab4c3),
@@ -117,9 +129,89 @@ class CodeRelationshipOverlay extends StatelessWidget {
     );
   }
 
+  List<_IndexedRelationship> _selectRelationships(Size size) {
+    final focused = <_IndexedRelationship>[];
+    final fallback = <_IndexedRelationship>[];
+
+    for (var index = 0; index < relationships.length; index++) {
+      final relationship = relationships[index];
+      final sourceY = _yFor(relationship.source);
+      final targetY = _yFor(relationship.target);
+      final sourceVisible = _isVerticallyVisible(sourceY, size);
+      final targetVisible = _isVerticallyVisible(targetY, size);
+      final crossesViewport = !_bothOutsideSameSide(sourceY, targetY, size);
+      final active = activeRelationshipIndexes.contains(index);
+
+      final item = _IndexedRelationship(
+        index: index,
+        relationship: relationship,
+        active: active,
+      );
+
+      // When the caret is inside a callable, the wire view becomes a focused
+      // view of that callable. Long unrelated wires do not form a wall behind
+      // the code. Active wires may still cross the viewport with both real
+      // endpoints off-screen, preserving the sense of a continuous circuit.
+      if (active && crossesViewport) {
+        focused.add(item);
+      } else if (activeRelationshipIndexes.isEmpty &&
+          (sourceVisible || targetVisible)) {
+        fallback.add(item);
+      }
+    }
+
+    final selected = focused.isNotEmpty ? focused : fallback;
+    selected.sort(_compareRelationshipPriority);
+    final maxCount = focused.isNotEmpty ? _maxFocusedWires : _maxFallbackWires;
+    if (selected.length > maxCount) {
+      return selected.take(maxCount).toList(growable: false);
+    }
+    return selected;
+  }
+
+  int _compareRelationshipPriority(
+    _IndexedRelationship a,
+    _IndexedRelationship b,
+  ) {
+    final kindOrder = _kindPriority(a.relationship.kind).compareTo(
+      _kindPriority(b.relationship.kind),
+    );
+    if (kindOrder != 0) return kindOrder;
+
+    final aDistance = _distanceToFocus(a.relationship);
+    final bDistance = _distanceToFocus(b.relationship);
+    final distanceOrder = aDistance.compareTo(bDistance);
+    if (distanceOrder != 0) return distanceOrder;
+
+    return a.index.compareTo(b.index);
+  }
+
+  int _kindPriority(CodeRelationshipKind kind) => switch (kind) {
+        CodeRelationshipKind.call ||
+        CodeRelationshipKind.recursion ||
+        CodeRelationshipKind.callback ||
+        CodeRelationshipKind.constructor => 0,
+        CodeRelationshipKind.getterRead ||
+        CodeRelationshipKind.setterWrite ||
+        CodeRelationshipKind.overrideImplementation => 1,
+        CodeRelationshipKind.parameterFlow ||
+        CodeRelationshipKind.returnFlow => 2,
+        CodeRelationshipKind.variableRead ||
+        CodeRelationshipKind.variableWrite => 3,
+      };
+
+  int _distanceToFocus(CodeRelationship relationship) {
+    return math.min(
+      (relationship.source.line - focusLine).abs(),
+      (relationship.target.line - focusLine).abs(),
+    );
+  }
+
   _WireLayout _layoutFor({
     required CodeRelationship relationship,
-    required int index,
+    required int relationshipIndex,
+    required int laneIndex,
+    required bool active,
     required Size size,
   }) {
     final rawSourceY = _yFor(relationship.source);
@@ -127,15 +219,15 @@ class CodeRelationshipOverlay extends StatelessWidget {
     final sourceVisible = _isVerticallyVisible(rawSourceY, size);
     final targetVisible = _isVerticallyVisible(rawTargetY, size);
 
-    // The editor already leaves padding between the line-number divider and
-    // the first code character. Treat that padding as a dedicated wire gutter
-    // so relationship wires never have to cross source text.
-    final laneSpacing = math.max(3.5, charWidth * .42);
+    // Wire mode reserves a real gutter between the line-number divider and
+    // source code. Every displayed relationship gets its own lane instead of
+    // being forced into four shared tracks.
+    final laneSpacing = math.max(4.8, charWidth * .52);
     final laneX = math.max(
       4.0,
-      codeOriginX - 6 - ((index % 4) * laneSpacing),
+      codeOriginX - 8 - (laneIndex * laneSpacing),
     );
-    final codeEdgeX = math.max(laneX, codeOriginX - 1);
+    final codeEdgeX = math.max(laneX, codeOriginX - 3);
 
     final source = Offset(
       laneX,
@@ -148,10 +240,11 @@ class CodeRelationshipOverlay extends StatelessWidget {
 
     return _WireLayout(
       relationship: relationship,
-      index: index,
+      index: relationshipIndex,
       source: source,
       target: target,
       codeEdgeX: codeEdgeX,
+      active: active,
       sourceVisible: sourceVisible,
       targetVisible: targetVisible,
       bothOutsideSameSide: _bothOutsideSameSide(
@@ -169,14 +262,25 @@ class CodeRelationshipOverlay extends StatelessWidget {
         verticalScrollOffset;
   }
 
-  bool _isVerticallyVisible(double y, Size size) =>
-      y >= 0 && y <= size.height;
+  bool _isVerticallyVisible(double y, Size size) => y >= 0 && y <= size.height;
 
   bool _bothOutsideSameSide(double a, double b, Size size) {
     if (a < 0 && b < 0) return true;
     if (a > size.height && b > size.height) return true;
     return false;
   }
+}
+
+class _IndexedRelationship {
+  const _IndexedRelationship({
+    required this.index,
+    required this.relationship,
+    required this.active,
+  });
+
+  final int index;
+  final CodeRelationship relationship;
+  final bool active;
 }
 
 class _EndpointHitTarget extends StatelessWidget {
@@ -226,6 +330,7 @@ class _WireLayout {
     required this.source,
     required this.target,
     required this.codeEdgeX,
+    required this.active,
     required this.sourceVisible,
     required this.targetVisible,
     required this.bothOutsideSameSide,
@@ -236,6 +341,7 @@ class _WireLayout {
   final Offset source;
   final Offset target;
   final double codeEdgeX;
+  final bool active;
   final bool sourceVisible;
   final bool targetVisible;
   final bool bothOutsideSameSide;
@@ -263,30 +369,37 @@ class _RelationshipWirePainter extends CustomPainter {
             ? .98
             : hasHighlight
                 ? .2
-                : .72,
+                : layout.active
+                    ? .78
+                    : .34,
       );
       final glowColor = baseColor.withValues(
         alpha: highlighted
-            ? .28
-            : hasHighlight
-                ? .035
-                : .12,
+            ? .25
+            : layout.active
+                ? .09
+                : .0,
       );
 
       final path = _pathFor(layout);
 
-      // Soft outer stroke gives the wire a restrained neon/electrical glow.
-      final glowPaint = Paint()
-        ..color = glowColor
-        ..strokeWidth = highlighted ? 11 : 8
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.square
-        ..strokeJoin = StrokeJoin.miter;
-      canvas.drawPath(path, glowPaint);
+      if (glowColor.a > 0) {
+        final glowPaint = Paint()
+          ..color = glowColor
+          ..strokeWidth = highlighted ? 9 : 6.5
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.square
+          ..strokeJoin = StrokeJoin.miter;
+        canvas.drawPath(path, glowPaint);
+      }
 
       final wirePaint = Paint()
         ..color = coreColor
-        ..strokeWidth = highlighted ? 4.0 : 2.7
+        ..strokeWidth = highlighted
+            ? 3.8
+            : layout.active
+                ? 2.6
+                : 1.4
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.square
         ..strokeJoin = StrokeJoin.miter;
@@ -300,8 +413,8 @@ class _RelationshipWirePainter extends CustomPainter {
         _drawSourceMarker(canvas, layout, markerPaint, highlighted);
       }
 
-      // Never invent an arrow head at the viewport boundary. The target arrow
-      // appears only when the real target line itself is currently visible.
+      // The arrow head belongs to the real target line. Off-screen targets do
+      // not get a fake arrow at the top or bottom of the viewport.
       if (layout.targetVisible) {
         _drawVerticalArrow(canvas, layout, markerPaint, highlighted);
       }
@@ -320,7 +433,7 @@ class _RelationshipWirePainter extends CustomPainter {
     Paint paint,
     bool highlighted,
   ) {
-    final size = highlighted ? 5.5 : 4.5;
+    final size = highlighted ? 5.5 : 4.2;
     canvas.drawRect(
       Rect.fromCenter(
         center: layout.source,
@@ -330,11 +443,9 @@ class _RelationshipWirePainter extends CustomPainter {
       paint,
     );
 
-    // A short tick points from the wire gutter toward the source line while
-    // stopping before the first code character, so it never covers source.
     final tickPaint = Paint()
       ..color = paint.color
-      ..strokeWidth = highlighted ? 3.2 : 2.3
+      ..strokeWidth = highlighted ? 3.0 : 2.2
       ..strokeCap = StrokeCap.square;
     canvas.drawLine(
       layout.source,
@@ -353,8 +464,8 @@ class _RelationshipWirePainter extends CustomPainter {
     final targetLine = layout.relationship.target.line;
     final sourceLine = layout.relationship.source.line;
     final pointsDown = targetLine >= sourceLine;
-    final length = highlighted ? 10.0 : 8.0;
-    final halfWidth = highlighted ? 5.5 : 4.5;
+    final length = highlighted ? 9.5 : 7.5;
+    final halfWidth = highlighted ? 5.0 : 4.0;
 
     final arrow = Path();
     if (pointsDown) {
