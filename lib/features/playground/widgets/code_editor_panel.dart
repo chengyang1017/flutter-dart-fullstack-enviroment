@@ -306,7 +306,7 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
     final lineNumberPainter = TextPainter(
       text: TextSpan(
         text: List<String>.filled(lineNumberDigits, '0').join(),
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: _codeFontFamily,
           fontFamilyFallback: _codeFontFallback,
           fontSize: lineNumberFontSize,
@@ -376,19 +376,19 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
         return DefaultCodeLineNumber(
           controller: editingController,
           notifier: notifier,
-          textStyle: const TextStyle(
+          textStyle: TextStyle(
             fontFamily: _codeFontFamily,
             fontFamilyFallback: _codeFontFallback,
             fontSize: lineNumberFontSize,
             height: lineNumberFontHeight,
-            color: Color(0xff5c6370),
+            color: const Color(0xff5c6370),
           ),
-          focusedTextStyle: const TextStyle(
+          focusedTextStyle: TextStyle(
             fontFamily: _codeFontFamily,
             fontFamilyFallback: _codeFontFallback,
             fontSize: lineNumberFontSize,
             height: lineNumberFontHeight,
-            color: Color(0xffabb2bf),
+            color: const Color(0xffabb2bf),
           ),
         );
       },
