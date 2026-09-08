@@ -21,8 +21,10 @@ class CodeRelationshipOverlay extends StatelessWidget {
     required this.onJumpTo,
   });
 
-  static const _maxFocusedWires = 8;
-  static const _maxFallbackWires = 6;
+  static const _maxFocusedWires = 6;
+  static const _maxFallbackWires = 4;
+  static const _laneStartX = 16.0;
+  static const _laneSpacing = 18.0;
 
   final List<CodeRelationship> relationships;
   final Set<int> activeRelationshipIndexes;
@@ -95,7 +97,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
             ],
             Positioned(
               top: 6,
-              left: math.max(4.0, codeOriginX - 49),
+              right: 6,
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -148,10 +150,6 @@ class CodeRelationshipOverlay extends StatelessWidget {
         active: active,
       );
 
-      // When the caret is inside a callable, the wire view becomes a focused
-      // view of that callable. Long unrelated wires do not form a wall behind
-      // the code. Active wires may still cross the viewport with both real
-      // endpoints off-screen, preserving the sense of a continuous circuit.
       if (active && crossesViewport) {
         focused.add(item);
       } else if (activeRelationshipIndexes.isEmpty &&
@@ -219,15 +217,11 @@ class CodeRelationshipOverlay extends StatelessWidget {
     final sourceVisible = _isVerticallyVisible(rawSourceY, size);
     final targetVisible = _isVerticallyVisible(rawTargetY, size);
 
-    // Wire mode reserves a real gutter between the line-number divider and
-    // source code. Every displayed relationship gets its own lane instead of
-    // being forced into four shared tracks.
-    final laneSpacing = math.max(4.8, charWidth * .52);
-    final laneX = math.max(
-      4.0,
-      codeOriginX - 8 - (laneIndex * laneSpacing),
-    );
-    final codeEdgeX = math.max(laneX, codeOriginX - 3);
+    // This overlay now lives in a dedicated trailing gutter to the right of
+    // the editor. Spread each focused relationship across a roomy independent
+    // lane instead of packing several bright wires beside the line numbers.
+    final requestedX = _laneStartX + (laneIndex * _laneSpacing);
+    final laneX = requestedX.clamp(10.0, size.width - 10.0).toDouble();
 
     final source = Offset(
       laneX,
@@ -243,7 +237,6 @@ class CodeRelationshipOverlay extends StatelessWidget {
       index: relationshipIndex,
       source: source,
       target: target,
-      codeEdgeX: codeEdgeX,
       active: active,
       sourceVisible: sourceVisible,
       targetVisible: targetVisible,
@@ -329,7 +322,6 @@ class _WireLayout {
     required this.index,
     required this.source,
     required this.target,
-    required this.codeEdgeX,
     required this.active,
     required this.sourceVisible,
     required this.targetVisible,
@@ -340,7 +332,6 @@ class _WireLayout {
   final int index;
   final Offset source;
   final Offset target;
-  final double codeEdgeX;
   final bool active;
   final bool sourceVisible;
   final bool targetVisible;
@@ -441,16 +432,6 @@ class _RelationshipWirePainter extends CustomPainter {
         height: size,
       ),
       paint,
-    );
-
-    final tickPaint = Paint()
-      ..color = paint.color
-      ..strokeWidth = highlighted ? 3.0 : 2.2
-      ..strokeCap = StrokeCap.square;
-    canvas.drawLine(
-      layout.source,
-      Offset(layout.codeEdgeX, layout.source.dy),
-      tickPaint,
     );
   }
 
