@@ -284,10 +284,30 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
       textDirection: TextDirection.ltr,
     )..layout();
     final charWidth = textPainter.width;
-    final lineDigits = widget.controller.code.split('\n').length.toString().length;
-    final gutterWidth = 48.0 + ((lineDigits - 3).clamp(0, 4) * 8.0);
+
+    // Match re_editor's DefaultCodeLineNumber layout exactly: its width is
+    // the measured width of a zero-filled string with at least three digits.
+    // Do not estimate this gutter with fixed pixels, otherwise every wire
+    // anchor drifts horizontally away from the real token.
+    final lineCount = widget.controller.textController.text.split('\n').length;
+    final rawLineDigits = lineCount.toString().length;
+    final lineNumberDigits = rawLineDigits < 3 ? 3 : rawLineDigits;
+    final lineNumberPainter = TextPainter(
+      text: TextSpan(
+        text: List<String>.filled(lineNumberDigits, '0').join(),
+        style: TextStyle(
+          fontFamily: _codeFontFamily,
+          fontFamilyFallback: _codeFontFallback,
+          fontSize: lineNumberFontSize,
+          height: 1.45,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final lineNumberWidth = lineNumberPainter.width;
+
     const codeLeftPadding = _normalCodeLeftPadding;
-    final codeOriginX = gutterWidth + 1 + codeLeftPadding;
+    final codeOriginX = lineNumberWidth + 1 + codeLeftPadding;
     final verticalScroller = widget.controller.editorScrollController.verticalScroller;
     final horizontalScroller =
         widget.controller.editorScrollController.horizontalScroller;
