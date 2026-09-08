@@ -121,7 +121,8 @@ class HttpWorkspaceSecretService implements WorkspaceSecretService {
     if (response.body.trim().isEmpty) return <String, dynamic>{};
     final decoded = jsonDecode(response.body);
     if (decoded is! Map) {
-      throw const FormatException('Workspace secret response must be an object.');
+      throw const FormatException(
+          'Workspace secret response must be an object.');
     }
     return Map<String, dynamic>.from(decoded);
   }

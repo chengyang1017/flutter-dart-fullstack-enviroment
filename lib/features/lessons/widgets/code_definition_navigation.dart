@@ -83,9 +83,7 @@ class _CodeDefinitionCtrlClickRegionState
   void _updateModifierState() {
     final keyboard = HardwareKeyboard.instance;
 
-    _modifierPressed =
-        keyboard.isControlPressed ||
-        keyboard.isMetaPressed;
+    _modifierPressed = keyboard.isControlPressed || keyboard.isMetaPressed;
   }
 
   void _handlePointerDown(
@@ -93,11 +91,9 @@ class _CodeDefinitionCtrlClickRegionState
   ) {
     _updateModifierState();
 
-    final isPrimaryButton =
-        (event.buttons & kPrimaryMouseButton) != 0;
+    final isPrimaryButton = (event.buttons & kPrimaryMouseButton) != 0;
 
-    _ctrlPrimaryPointerDown =
-        isPrimaryButton && _modifierPressed;
+    _ctrlPrimaryPointerDown = isPrimaryButton && _modifierPressed;
   }
 
   void _handlePointerCancel(
@@ -109,8 +105,7 @@ class _CodeDefinitionCtrlClickRegionState
   void _handlePointerUp(
     PointerUpEvent event,
   ) {
-    final shouldOpen =
-        _ctrlPrimaryPointerDown;
+    final shouldOpen = _ctrlPrimaryPointerDown;
 
     _ctrlPrimaryPointerDown = false;
 
@@ -121,8 +116,7 @@ class _CodeDefinitionCtrlClickRegionState
     _openAfterEditorUpdatesCursor();
   }
 
-  Future<void>
-      _openAfterEditorUpdatesCursor() async {
+  Future<void> _openAfterEditorUpdatesCursor() async {
     // 等 re_editor 完成本次点击造成的光标更新，
     // 再读取光标所在名称。
     await Future<void>.delayed(
@@ -136,10 +130,8 @@ class _CodeDefinitionCtrlClickRegionState
     await _openDefinitionOrReferences();
   }
 
-  Future<void>
-      _openDefinitionOrReferences() async {
-    final symbol =
-        widget.lessonController.symbolAtEditor(
+  Future<void> _openDefinitionOrReferences() async {
+    final symbol = widget.lessonController.symbolAtEditor(
       widget.editorController,
     );
 
@@ -155,11 +147,9 @@ class _CodeDefinitionCtrlClickRegionState
     });
 
     try {
-      final definition =
-          await widget.lessonController.findDefinition(
+      final definition = await widget.lessonController.findDefinition(
         symbol,
-        preferStandardAnswer:
-            widget.sourceIsStandardAnswer,
+        preferStandardAnswer: widget.sourceIsStandardAnswer,
       );
 
       if (!mounted) {
@@ -198,9 +188,7 @@ class _CodeDefinitionCtrlClickRegionState
   Future<void> _showUsageReferences(
     String symbol,
   ) async {
-    final allReferences =
-        await widget.lessonController
-            .findReferences(symbol);
+    final allReferences = await widget.lessonController.findReferences(symbol);
 
     if (!mounted) {
       return;
@@ -208,8 +196,7 @@ class _CodeDefinitionCtrlClickRegionState
 
     final usageReferences = allReferences
         .where(
-          (reference) =>
-              !reference.isDefinition,
+          (reference) => !reference.isDefinition,
         )
         .toList();
 
@@ -220,8 +207,7 @@ class _CodeDefinitionCtrlClickRegionState
       return;
     }
 
-    final selected =
-        await showDialog<CodeReference>(
+    final selected = await showDialog<CodeReference>(
       context: context,
       builder: (dialogContext) {
         return _ClassUsageReferencesDialog(
@@ -244,37 +230,25 @@ class _CodeDefinitionCtrlClickRegionState
     CodeReference definition,
     String symbol,
   ) {
-    if (definition.isStandardAnswer !=
-            widget.sourceIsStandardAnswer ||
-        definition.stepIndex !=
-            widget.sourceStepIndex ||
-        definition.fileName !=
-            widget.sourceFileName) {
+    if (definition.isStandardAnswer != widget.sourceIsStandardAnswer ||
+        definition.stepIndex != widget.sourceStepIndex ||
+        definition.fileName != widget.sourceFileName) {
       return false;
     }
 
-    final selection =
-        widget.editorController.selection;
+    final selection = widget.editorController.selection;
 
-    final currentLine =
-        selection.extentIndex + 1;
+    final currentLine = selection.extentIndex + 1;
 
-    final currentColumn =
-        selection.extentOffset + 1;
+    final currentColumn = selection.extentOffset + 1;
 
-    final definitionStart =
-        definition.column;
+    final definitionStart = definition.column;
 
-    final definitionEnd =
-        definition.column +
-            symbol.length;
+    final definitionEnd = definition.column + symbol.length;
 
-    return currentLine ==
-            definition.line &&
-        currentColumn >=
-            definitionStart &&
-        currentColumn <=
-            definitionEnd;
+    return currentLine == definition.line &&
+        currentColumn >= definitionStart &&
+        currentColumn <= definitionEnd;
   }
 
   void _showMessage(String message) {
@@ -291,19 +265,15 @@ class _CodeDefinitionCtrlClickRegionState
   Widget build(BuildContext context) {
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown:
-          _handlePointerDown,
-      onPointerUp:
-          _handlePointerUp,
-      onPointerCancel:
-          _handlePointerCancel,
+      onPointerDown: _handlePointerDown,
+      onPointerUp: _handlePointerUp,
+      onPointerCancel: _handlePointerCancel,
       child: widget.child,
     );
   }
 }
 
-class _ClassUsageReferencesDialog
-    extends StatelessWidget {
+class _ClassUsageReferencesDialog extends StatelessWidget {
   const _ClassUsageReferencesDialog({
     required this.symbol,
     required this.references,
@@ -334,8 +304,7 @@ class _ClassUsageReferencesDialog
         child: CodeReferencesPanel(
           symbol: symbol,
           references: references,
-          onOpenReference:
-              (reference) {
+          onOpenReference: (reference) {
             Navigator.of(context).pop(
               reference,
             );

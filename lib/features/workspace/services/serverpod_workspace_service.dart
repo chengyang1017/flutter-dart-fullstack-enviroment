@@ -201,7 +201,8 @@ class GreetingEndpoint extends Endpoint {
 }
 ''';
 
-  static const _apiClient = '''import 'package:practice_client/practice_client.dart';
+  static const _apiClient =
+      '''import 'package:practice_client/practice_client.dart';
 
 const serverpodUrl = String.fromEnvironment('SERVERPOD_URL');
 

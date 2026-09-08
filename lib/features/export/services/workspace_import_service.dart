@@ -195,17 +195,13 @@ class WorkspaceImportService {
       return originalPath;
     }
 
-    final candidates = relocations
-        .where((change) {
-          final previous = change.previousPath;
-          return previous != null &&
-              (originalPath == previous ||
-                  originalPath.startsWith('$previous/'));
-        })
-        .toList()
+    final candidates = relocations.where((change) {
+      final previous = change.previousPath;
+      return previous != null &&
+          (originalPath == previous || originalPath.startsWith('$previous/'));
+    }).toList()
       ..sort((a, b) =>
-          (b.previousPath?.length ?? 0)
-              .compareTo(a.previousPath?.length ?? 0));
+          (b.previousPath?.length ?? 0).compareTo(a.previousPath?.length ?? 0));
 
     for (final relocation in candidates) {
       final previous = relocation.previousPath!;
@@ -220,7 +216,7 @@ class WorkspaceImportService {
   }
 
   void _validateManifest(ExportManifest manifest) {
-    if (manifest.formatVersion != 1) {
+    if (manifest.formatVersion != 2) {
       throw FormatException(
         'Unsupported workspace package version: ${manifest.formatVersion}',
       );
@@ -244,8 +240,7 @@ class WorkspaceImportService {
     String parent,
     String child,
   ) {
-    if (parent.isNotEmpty &&
-        workspace.entryAt(parent)?.isDirectory != true) {
+    if (parent.isNotEmpty && workspace.entryAt(parent)?.isDirectory != true) {
       throw FormatException(
         'Missing parent directory for $child: $parent',
       );

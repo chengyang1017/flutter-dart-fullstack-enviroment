@@ -120,8 +120,7 @@ class ExportProjectGuideDialog extends StatelessWidget {
       requirements.add(
         const _Requirement(
           title: 'Dart Frog CLI（此项目需要）',
-          description:
-              '用于生成和运行 Dart Frog 后端。练习包保存后端源码，但不会携带 Dart Frog 开发工具。',
+          description: '用于生成和运行 Dart Frog 后端。练习包保存后端源码，但不会携带 Dart Frog 开发工具。',
         ),
       );
     } else if (type == 'flutter-serverpod-mini') {

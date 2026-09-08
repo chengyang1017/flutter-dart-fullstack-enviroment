@@ -15,8 +15,8 @@ class WorkspaceRemoteAuthSession {
   final String accessToken;
 }
 
-typedef WorkspaceRemoteAuthSessionResolver =
-    Future<WorkspaceRemoteAuthSession?> Function();
+typedef WorkspaceRemoteAuthSessionResolver = Future<WorkspaceRemoteAuthSession?>
+    Function();
 
 class HttpWorkspaceRemoteSessionProvider
     implements WorkspaceRemoteSessionProvider {

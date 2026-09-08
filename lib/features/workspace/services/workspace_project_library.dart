@@ -87,6 +87,57 @@ class WorkspaceProjectLibrary {
     return project;
   }
 
+  Future<WorkspaceProject> createGeneratedFlutter({
+    required String name,
+    required WorkspaceSnapshot snapshot,
+    required Set<String> platforms,
+  }) async {
+    final cleanName = _validateName(name);
+    final now = DateTime.now().toUtc();
+    final id = _newProjectId(now);
+
+    final project = WorkspaceProject(
+      id: id,
+      name: cleanName,
+      storageKey: 'workspace:$id',
+      kind: WorkspaceProjectKind.generatedFlutter,
+      lifecycle: WorkspaceLifecycle.saved,
+      createdAt: now,
+      updatedAt: now,
+      flutterPlatforms: Set<String>.of(
+        platforms,
+      ),
+    );
+
+    await snapshotStore.save(
+      project.storageKey,
+      snapshot,
+    );
+
+    final previousActive = _activeProjectId;
+
+    _projects.add(project);
+    _activeProjectId = project.id;
+
+    try {
+      await _persistCatalog();
+    } catch (_) {
+      _projects.removeWhere(
+        (item) => item.id == project.id,
+      );
+
+      _activeProjectId = previousActive;
+
+      await snapshotStore.delete(
+        project.storageKey,
+      );
+
+      rethrow;
+    }
+
+    return project;
+  }
+
   Future<WorkspaceProject> createImportedFlutter({
     required String name,
     required WorkspaceSnapshot snapshot,

@@ -300,7 +300,8 @@ flutter:
       ..clear()
       ..addEntries(
         snapshot.editorStates.entries.where(
-          (entry) => fileIds.contains(entry.key) && availableIds.contains(entry.key),
+          (entry) =>
+              fileIds.contains(entry.key) && availableIds.contains(entry.key),
         ),
       );
 
@@ -347,7 +348,8 @@ flutter:
     }
 
     if (activePath == path && _openFiles.isNotEmpty) {
-      final nextIndex = index < _openFiles.length ? index : _openFiles.length - 1;
+      final nextIndex =
+          index < _openFiles.length ? index : _openFiles.length - 1;
       activePath = _openFiles[nextIndex];
     }
     notifyListeners();

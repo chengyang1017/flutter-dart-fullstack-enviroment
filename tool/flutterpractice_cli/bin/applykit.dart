@@ -27,10 +27,9 @@ Future<int> _run(
       );
 
     case 'apply':
-      stderr.writeln(
-        'ApplyKit apply is not implemented yet.',
+      return _runApply(
+        arguments.skip(1).toList(),
       );
-      return 64;
 
     default:
       stderr.writeln(
@@ -150,6 +149,85 @@ Future<int> _runCreate(
     );
 
     return 1;
+  } catch (error) {
+    stderr.writeln(
+      'ApplyKit failed: $error',
+    );
+
+    return 1;
+  }
+}
+
+Future<int> _runApply(
+  List<String> arguments,
+) async {
+  if (arguments.length != 1) {
+    stderr.writeln(
+      'Usage: applykit apply <file.applykit>',
+    );
+
+    return 64;
+  }
+
+  final packageFile = File(arguments.first);
+
+  if (!await packageFile.exists()) {
+    stderr.writeln(
+      'ApplyKit package does not exist: '
+      '${packageFile.path}',
+    );
+
+    return 66;
+  }
+
+  if (!packageFile.path.toLowerCase().endsWith('.applykit')) {
+    stderr.writeln(
+      'Expected an .applykit package.',
+    );
+
+    return 65;
+  }
+
+  try {
+    final applier = ApplyKitProjectApplier(
+      log: stdout.writeln,
+    );
+
+    await applier.apply(
+      packageFile: packageFile,
+    );
+
+    return 0;
+  } on ApplyKitMergeConflictException catch (error) {
+    stderr.writeln(
+      error.message,
+    );
+
+    stderr.writeln();
+    stderr.writeln(
+      'Resolve the Git conflicts, then run:',
+    );
+    stderr.writeln(
+      '  git add -A',
+    );
+    stderr.writeln(
+      '  git commit',
+    );
+
+    return 2;
+  } on ApplyKitException catch (error) {
+    stderr.writeln(
+      error.message,
+    );
+
+    return 1;
+  } on FormatException catch (error) {
+    stderr.writeln(
+      'Invalid ApplyKit package: '
+      '${error.message}',
+    );
+
+    return 65;
   } catch (error) {
     stderr.writeln(
       'ApplyKit failed: $error',

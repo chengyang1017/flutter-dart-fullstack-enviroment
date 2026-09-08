@@ -30,8 +30,7 @@ Future<void> showStandardAnswerDialog(
   );
 }
 
-class _StandardAnswerDialog
-    extends StatefulWidget {
+class _StandardAnswerDialog extends StatefulWidget {
   const _StandardAnswerDialog({
     required this.controller,
     required this.repository,
@@ -48,8 +47,7 @@ class _StandardAnswerDialog
   }
 }
 
-class _StandardAnswerDialogState
-    extends State<_StandardAnswerDialog> {
+class _StandardAnswerDialogState extends State<_StandardAnswerDialog> {
   late String _stepId;
   late String selectedFile;
   late Future<AuthorAnswer> _answerFuture;
@@ -68,29 +66,24 @@ class _StandardAnswerDialogState
   void _loadCurrentStep({
     CodeReference? target,
   }) {
-    final step = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final step =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
     _stepId = step.id;
 
     final files = _answerFiles(step);
 
-    final targetFile =
-        target != null &&
-                target.isStandardAnswer &&
-                target.stepIndex ==
-                    widget.controller.currentStepIndex &&
-                files.contains(target.fileName)
-            ? target.fileName
-            : null;
+    final targetFile = target != null &&
+            target.isStandardAnswer &&
+            target.stepIndex == widget.controller.currentStepIndex &&
+            files.contains(target.fileName)
+        ? target.fileName
+        : null;
 
     selectedFile =
-        targetFile ??
-        (files.isNotEmpty ? files.first : step.currentFile);
+        targetFile ?? (files.isNotEmpty ? files.first : step.currentFile);
 
-    _navigationTarget =
-        targetFile == null ? null : target;
+    _navigationTarget = targetFile == null ? null : target;
 
     _loadAnswer();
   }
@@ -104,12 +97,10 @@ class _StandardAnswerDialogState
   }
 
   void _loadAnswer() {
-    final step = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final step =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
-    final path =
-        step.standardAnswerAssets[selectedFile];
+    final path = step.standardAnswerAssets[selectedFile];
 
     _answerFuture = path == null
         ? Future<AuthorAnswer>.value(
@@ -143,8 +134,7 @@ class _StandardAnswerDialogState
       return;
     }
 
-    if (reference.stepIndex !=
-        widget.controller.currentStepIndex) {
+    if (reference.stepIndex != widget.controller.currentStepIndex) {
       await widget.controller.goTo(
         reference.stepIndex,
       );
@@ -154,9 +144,8 @@ class _StandardAnswerDialogState
       return;
     }
 
-    final step = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final step =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
     final files = _answerFiles(step);
 
@@ -174,9 +163,8 @@ class _StandardAnswerDialogState
 
   @override
   Widget build(BuildContext context) {
-    final step = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final step =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
     final files = _answerFiles(step);
 
@@ -188,8 +176,7 @@ class _StandardAnswerDialogState
         width: 880,
         height: 660,
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               '当前步骤：${widget.controller.currentStepIndex + 1}'
@@ -198,20 +185,17 @@ class _StandardAnswerDialogState
             const SizedBox(height: 12),
             if (files.isNotEmpty)
               SingleChildScrollView(
-                scrollDirection:
-                    Axis.horizontal,
+                scrollDirection: Axis.horizontal,
                 child: Row(
                   children: files.map(
                     (file) {
                       return Padding(
-                        padding:
-                            const EdgeInsets.only(
+                        padding: const EdgeInsets.only(
                           right: 8,
                         ),
                         child: ChoiceChip(
                           label: Text(file),
-                          selected:
-                              selectedFile == file,
+                          selected: selectedFile == file,
                           onSelected: (_) {
                             _selectFile(file);
                           },
@@ -221,17 +205,14 @@ class _StandardAnswerDialogState
                   ).toList(),
                 ),
               ),
-            if (files.isNotEmpty)
-              const SizedBox(height: 12),
+            if (files.isNotEmpty) const SizedBox(height: 12),
             Expanded(
               child: FutureBuilder<AuthorAnswer>(
                 future: _answerFuture,
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState ==
-                      ConnectionState.waiting) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
-                      child:
-                          CircularProgressIndicator(),
+                      child: CircularProgressIndicator(),
                     );
                   }
 
@@ -240,8 +221,7 @@ class _StandardAnswerDialogState
                       child: Text(
                         '读取标准答案失败：\n'
                         '${snapshot.error}',
-                        textAlign:
-                            TextAlign.center,
+                        textAlign: TextAlign.center,
                       ),
                     );
                   }
@@ -259,24 +239,19 @@ class _StandardAnswerDialogState
                   }
 
                   return ClipRRect(
-                    borderRadius:
-                        BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(12),
                     child: StandardAnswerCodeView(
                       key: ValueKey(
                         '${widget.controller.currentStepIndex}-'
                         '$selectedFile-'
                         '${answer.code.hashCode}',
                       ),
-                      lessonController:
-                          widget.controller,
+                      lessonController: widget.controller,
                       code: answer.code!,
                       fileName: selectedFile,
-                      stepIndex: widget
-                          .controller.currentStepIndex,
-                      navigationTarget:
-                          _navigationTarget,
-                      onOpenDefinition:
-                          _openDefinition,
+                      stepIndex: widget.controller.currentStepIndex,
+                      navigationTarget: _navigationTarget,
+                      onOpenDefinition: _openDefinition,
                     ),
                   );
                 },
@@ -291,13 +266,10 @@ class _StandardAnswerDialogState
           builder: (context, snapshot) {
             final answer = snapshot.data;
 
-            final enabled =
-                answer?.isAvailable == true &&
-                answer?.code != null;
+            final enabled = answer?.isAvailable == true && answer?.code != null;
 
             return Row(
-              mainAxisSize:
-                  MainAxisSize.min,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 TextButton.icon(
                   onPressed: enabled
@@ -312,8 +284,7 @@ class _StandardAnswerDialogState
                   icon: const Icon(
                     Icons.copy_outlined,
                   ),
-                  label:
-                      const Text('复制'),
+                  label: const Text('复制'),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
@@ -348,8 +319,7 @@ class _StandardAnswerDialogState
     BuildContext context,
     String code,
   ) async {
-    final confirmed =
-        await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (confirmContext) {
         return AlertDialog(
@@ -377,8 +347,7 @@ class _StandardAnswerDialogState
                   true,
                 );
               },
-              child:
-                  const Text('确认替换'),
+              child: const Text('确认替换'),
             ),
           ],
         );
@@ -389,8 +358,7 @@ class _StandardAnswerDialogState
       return;
     }
 
-    await widget.controller
-        .replaceFileWithAuthorCode(
+    await widget.controller.replaceFileWithAuthorCode(
       selectedFile,
       code,
     );

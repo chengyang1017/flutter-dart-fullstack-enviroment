@@ -135,7 +135,8 @@ class HttpWorkspaceRemotePersistence implements WorkspaceRemotePersistence {
     if (response.body.trim().isEmpty) return <String, dynamic>{};
     final decoded = jsonDecode(response.body);
     if (decoded is! Map) {
-      throw const FormatException('Remote Workspace response must be an object.');
+      throw const FormatException(
+          'Remote Workspace response must be an object.');
     }
     return Map<String, dynamic>.from(decoded);
   }

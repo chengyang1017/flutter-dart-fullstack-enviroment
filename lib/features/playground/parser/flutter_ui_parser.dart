@@ -70,8 +70,7 @@ class FlutterUiParser {
 
         values.add(_value(c));
 
-        if (!c.match(TokenType.comma) &&
-            !c.check(TokenType.rightBracket)) {
+        if (!c.match(TokenType.comma) && !c.check(TokenType.rightBracket)) {
           c.expect(TokenType.comma, '列表元素之间需要逗号');
         }
       }
@@ -120,8 +119,7 @@ class FlutterUiParser {
         positional.add(_value(c));
       }
 
-      if (!c.match(TokenType.comma) &&
-          !c.check(TokenType.rightParen)) {
+      if (!c.match(TokenType.comma) && !c.check(TokenType.rightParen)) {
         c.expect(TokenType.comma, '参数之间需要逗号');
       }
     }

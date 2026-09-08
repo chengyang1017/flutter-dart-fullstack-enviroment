@@ -25,7 +25,8 @@ class FlutterRunnerController extends ChangeNotifier {
   RunSession? session;
   RunnerStatus status = RunnerStatus.idle;
   RunnerPreviewTarget previewTarget = RunnerPreviewTarget.phone;
-  RunnerPreviewOrientation previewOrientation = RunnerPreviewOrientation.portrait;
+  RunnerPreviewOrientation previewOrientation =
+      RunnerPreviewOrientation.portrait;
   final List<String> logs = [];
   String? lastSyncedSourceRevision;
 
@@ -48,7 +49,8 @@ class FlutterRunnerController extends ChangeNotifier {
   bool get canRun => !isBusy && status != RunnerStatus.running;
   bool get canHotReload => !isBusy && status == RunnerStatus.running;
   bool get canHotRestart => !isBusy && status == RunnerStatus.running;
-  bool get canStop => !isBusy &&
+  bool get canStop =>
+      !isBusy &&
       session != null &&
       status != RunnerStatus.idle &&
       status != RunnerStatus.stopped;
@@ -61,7 +63,8 @@ class FlutterRunnerController extends ChangeNotifier {
   }
 
   void selectPreviewOrientation(RunnerPreviewOrientation orientation) {
-    if (!previewTarget.supportsOrientation || previewOrientation == orientation) {
+    if (!previewTarget.supportsOrientation ||
+        previewOrientation == orientation) {
       return;
     }
     previewOrientation = orientation;
@@ -144,9 +147,8 @@ class FlutterRunnerController extends ChangeNotifier {
     _setStatus(created.status);
 
     await _eventsSubscription?.cancel();
-    _eventsSubscription = client
-        .watchSession(created.id)
-        .listen(_handleEvent, onError: (Object error) {
+    _eventsSubscription = client.watchSession(created.id).listen(_handleEvent,
+        onError: (Object error) {
       _fail('Runner event stream failed', error);
     });
 

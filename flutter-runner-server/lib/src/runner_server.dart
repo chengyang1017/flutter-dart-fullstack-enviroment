@@ -59,19 +59,56 @@ class RunnerServer {
         return;
       }
 
-      if (segments.length == 1 && request.method == 'POST') {
+            if (segments.length == 1 && request.method == 'POST') {
         final body = await _readJsonObject(request);
+
         final files = _readFiles(body['files']);
-        final capabilities = _readFirebaseCapabilities(body['firebaseCapabilities']);
-        final session = await manager.createSession(files);
-        await _restoreBinaryFiles(session, files);
+
+        final capabilities = _readFirebaseCapabilities(
+          body['firebaseCapabilities'],
+        );
+
+        final projectName =
+            _readOptionalProjectName(body['projectName']);
+
+        final platforms =
+            _readOptionalPlatforms(body['platforms']);
+
+        final includeWorkspace =
+            body['includeWorkspace'] == true;
+
+        final session = await manager.createSession(
+          files,
+          projectName: projectName ?? 'flutter_practice',
+          platforms: platforms ?? const <String>['web'],
+        );
+
+        await _restoreBinaryFiles(
+          session,
+          files,
+        );
+
         _sessionOwners[session.id] = userId;
-        session.setFirebaseCapabilities(capabilities ?? const <String>{});
+
+        session.setFirebaseCapabilities(
+          capabilities ?? const <String>{},
+        );
+
+        final responseBody = <String, Object?>{
+          'session': session.toJson(),
+        };
+
+        if (includeWorkspace) {
+          responseBody['workspace'] =
+              await manager.readWorkspaceTree(session);
+        }
+
         await _sendJson(
           request.response,
           HttpStatus.created,
-          {'session': session.toJson()},
+          responseBody,
         );
+
         return;
       }
 
@@ -167,6 +204,42 @@ class RunnerServer {
         error.toString(),
       );
     }
+  }
+
+    String? _readOptionalProjectName(Object? value) {
+    if (value == null) return null;
+
+    if (value is! String) {
+      throw const FormatException(
+        'projectName must be a string.',
+      );
+    }
+
+    return value;
+  }
+
+  List<String>? _readOptionalPlatforms(Object? value) {
+    if (value == null) return null;
+
+    if (value is! Iterable) {
+      throw const FormatException(
+        'platforms must be a JSON array.',
+      );
+    }
+
+    final platforms = <String>[];
+
+    for (final item in value) {
+      if (item is! String) {
+        throw const FormatException(
+          'Every platform must be a string.',
+        );
+      }
+
+      platforms.add(item);
+    }
+
+    return platforms;
   }
 
   RunnerSession _requireOwnedSession(String sessionId, String userId) {

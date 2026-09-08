@@ -3,8 +3,7 @@ import 'package:hive/hive.dart';
 import '../models/workspace_project.dart';
 import 'workspace_project_catalog_store.dart';
 
-class HiveWorkspaceProjectCatalogStore
-    implements WorkspaceProjectCatalogStore {
+class HiveWorkspaceProjectCatalogStore implements WorkspaceProjectCatalogStore {
   HiveWorkspaceProjectCatalogStore(this.box);
 
   static const _projectsKey = 'projects';

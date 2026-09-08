@@ -3,6 +3,7 @@ import 'workspace_git_remote.dart';
 
 enum WorkspaceProjectKind {
   practice,
+  generatedFlutter,
   importedFlutter,
 }
 
@@ -21,6 +22,7 @@ class WorkspaceProject {
     required this.updatedAt,
     this.lifecycle = WorkspaceLifecycle.saved,
     this.firebaseCapabilities = const <FirebaseCapability>{},
+    this.flutterPlatforms = const <String>{},
     this.gitRemote,
   });
 
@@ -31,7 +33,11 @@ class WorkspaceProject {
   final WorkspaceLifecycle lifecycle;
   final DateTime createdAt;
   final DateTime updatedAt;
+
   final Set<FirebaseCapability> firebaseCapabilities;
+
+  final Set<String> flutterPlatforms;
+
   final WorkspaceGitRemote? gitRemote;
 
   WorkspaceProject copyWith({
@@ -39,6 +45,7 @@ class WorkspaceProject {
     WorkspaceLifecycle? lifecycle,
     DateTime? updatedAt,
     Set<FirebaseCapability>? firebaseCapabilities,
+    Set<String>? flutterPlatforms,
     WorkspaceGitRemote? gitRemote,
     bool clearGitRemote = false,
   }) {
@@ -51,6 +58,7 @@ class WorkspaceProject {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       firebaseCapabilities: firebaseCapabilities ?? this.firebaseCapabilities,
+      flutterPlatforms: flutterPlatforms ?? this.flutterPlatforms,
       gitRemote: clearGitRemote ? null : gitRemote ?? this.gitRemote,
     );
   }
@@ -66,42 +74,69 @@ class WorkspaceProject {
         'firebaseCapabilities': FirebaseCapabilityCodec.encode(
           firebaseCapabilities,
         ),
+        'flutterPlatforms': flutterPlatforms.toList()..sort(),
         if (gitRemote != null) 'gitRemote': gitRemote!.toJson(),
       };
 
-  factory WorkspaceProject.fromJson(Map<dynamic, dynamic> json) {
+  factory WorkspaceProject.fromJson(
+    Map<dynamic, dynamic> json,
+  ) {
     final id = json['id'];
     final name = json['name'];
     final storageKey = json['storageKey'];
-    if (id is! String || id.isEmpty ||
-        name is! String || name.isEmpty ||
-        storageKey is! String || storageKey.isEmpty) {
-      throw const FormatException('Invalid workspace project metadata.');
+
+    if (id is! String ||
+        id.isEmpty ||
+        name is! String ||
+        name.isEmpty ||
+        storageKey is! String ||
+        storageKey.isEmpty) {
+      throw const FormatException(
+        'Invalid workspace project metadata.',
+      );
     }
 
     final kindName = json['kind'];
+
     final kind = WorkspaceProjectKind.values.firstWhere(
       (value) => value.name == kindName,
       orElse: () => WorkspaceProjectKind.practice,
     );
 
     final lifecycleName = json['lifecycle'];
+
     final lifecycle = WorkspaceLifecycle.values.firstWhere(
       (value) => value.name == lifecycleName,
       orElse: () => WorkspaceLifecycle.saved,
     );
 
-    WorkspaceGitRemote? readGitRemote(Object? value) {
+    WorkspaceGitRemote? readGitRemote(
+      Object? value,
+    ) {
       if (value == null) return null;
+
       if (value is! Map) {
-        throw const FormatException('Invalid Workspace Git remote metadata.');
+        throw const FormatException(
+          'Invalid Workspace Git remote metadata.',
+        );
       }
-      return WorkspaceGitRemote.fromJson(value);
+
+      return WorkspaceGitRemote.fromJson(
+        value,
+      );
     }
 
-    DateTime readDate(dynamic value) => value is String
-        ? DateTime.tryParse(value)?.toUtc() ?? DateTime.now().toUtc()
-        : DateTime.now().toUtc();
+    DateTime readDate(dynamic value) {
+      return value is String
+          ? DateTime.tryParse(value)?.toUtc() ?? DateTime.now().toUtc()
+          : DateTime.now().toUtc();
+    }
+
+    final rawPlatforms = json['flutterPlatforms'];
+
+    final flutterPlatforms = rawPlatforms is Iterable
+        ? rawPlatforms.whereType<String>().toSet()
+        : <String>{};
 
     return WorkspaceProject(
       id: id,
@@ -114,6 +149,7 @@ class WorkspaceProject {
       firebaseCapabilities: FirebaseCapabilityCodec.decode(
         json['firebaseCapabilities'],
       ),
+      flutterPlatforms: flutterPlatforms,
       gitRemote: readGitRemote(json['gitRemote']),
     );
   }

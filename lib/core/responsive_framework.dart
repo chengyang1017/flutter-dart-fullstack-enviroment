@@ -6,9 +6,9 @@ class ResponsiveBreakpoints {
   ResponsiveBreakpoints._();
 
   /// 屏幕宽度断点
-  static const double mobile = 600;      // 手机: < 600px
-  static const double tablet = 900;      // 平板: 600-900px
-  static const double desktop = 1200;    // 桌面: >= 1200px
+  static const double mobile = 600; // 手机: < 600px
+  static const double tablet = 900; // 平板: 600-900px
+  static const double desktop = 1200; // 桌面: >= 1200px
   static const double wideDesktop = 1800; // 超宽: >= 1800px
 
   /// 获取设备类型
@@ -90,12 +90,10 @@ extension ResponsiveMediaQueryExt on MediaQueryData {
   bool get isDesktop => size.width >= ResponsiveBreakpoints.tablet;
 
   /// 是否是超宽屏
-  bool get isWideDesktop =>
-      size.width >= ResponsiveBreakpoints.wideDesktop;
+  bool get isWideDesktop => size.width >= ResponsiveBreakpoints.wideDesktop;
 
   /// 获取设备类型
-  DeviceType get deviceType =>
-      ResponsiveBreakpoints.getDeviceType(size.width);
+  DeviceType get deviceType => ResponsiveBreakpoints.getDeviceType(size.width);
 
   /// 获取设备类型标签
   String get deviceTypeLabel =>
@@ -166,7 +164,8 @@ class ResponsiveBuilder extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final deviceType = ResponsiveBreakpoints.getDeviceType(constraints.maxWidth);
+        final deviceType =
+            ResponsiveBreakpoints.getDeviceType(constraints.maxWidth);
 
         // 使用简化构建器（如果提供）
         if (phone != null && deviceType == DeviceType.phone) {

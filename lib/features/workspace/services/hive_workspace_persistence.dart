@@ -32,8 +32,7 @@ class HiveWorkspacePersistence implements WorkspacePersistence {
   }
 
   static HiveWorkspacePersistence? tryFromOpenBoxes() {
-    if (!Hive.isBoxOpen(snapshotBoxName) ||
-        !Hive.isBoxOpen(libraryBoxName)) {
+    if (!Hive.isBoxOpen(snapshotBoxName) || !Hive.isBoxOpen(libraryBoxName)) {
       return null;
     }
 

@@ -69,9 +69,8 @@ class LessonController extends ChangeNotifier {
       return selected;
     }
 
-    final normalizedText = editor.text
-        .replaceAll('\r\n', '\n')
-        .replaceAll('\r', '\n');
+    final normalizedText =
+        editor.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 
     final lines = normalizedText.split('\n');
 
@@ -81,15 +80,11 @@ class LessonController extends ChangeNotifier {
 
     final selection = editor.selection;
 
-    final lineIndex = selection.extentIndex
-        .clamp(0, lines.length - 1)
-        .toInt();
+    final lineIndex = selection.extentIndex.clamp(0, lines.length - 1).toInt();
 
     final line = lines[lineIndex];
 
-    final cursorOffset = selection.extentOffset
-        .clamp(0, line.length)
-        .toInt();
+    final cursorOffset = selection.extentOffset.clamp(0, line.length).toInt();
 
     var start = cursorOffset;
     var end = cursorOffset;
@@ -121,9 +116,7 @@ class LessonController extends ChangeNotifier {
     final data = store.load(lesson.id);
 
     currentStepIndex =
-        (data['currentStep'] as int?)
-                ?.clamp(0, lesson.steps.length - 1) ??
-            0;
+        (data['currentStep'] as int?)?.clamp(0, lesson.steps.length - 1) ?? 0;
 
     completedSteps = Set<String>.from(
       data['completedSteps'] as List? ?? const [],
@@ -149,9 +142,7 @@ class LessonController extends ChangeNotifier {
     currentFile = step.currentFile;
 
     final code =
-        fileCodes[currentFile] ??
-        lastCode[step.id] ??
-        step.starterCode;
+        fileCodes[currentFile] ?? lastCode[step.id] ?? step.starterCode;
 
     fileCodes.putIfAbsent(
       currentFile,
@@ -216,8 +207,7 @@ class LessonController extends ChangeNotifier {
 
   Future<bool> runCurrentUi() async {
     if (isRunning ||
-        lesson.steps[currentStepIndex].stepType !=
-            LessonStepType.ui) {
+        lesson.steps[currentStepIndex].stepType != LessonStepType.ui) {
       return false;
     }
 
@@ -280,8 +270,7 @@ class LessonController extends ChangeNotifier {
   }
 
   Future<void> switchFile(String file) async {
-    if (file == currentFile ||
-        !availableFiles.contains(file)) {
+    if (file == currentFile || !availableFiles.contains(file)) {
       return;
     }
 
@@ -309,8 +298,7 @@ class LessonController extends ChangeNotifier {
   }
 
   void _refreshPreview() {
-    if (lesson.steps[currentStepIndex].stepType ==
-        LessonStepType.ui) {
+    if (lesson.steps[currentStepIndex].stepType == LessonStepType.ui) {
       playground.runCode();
     } else {
       playground.root = null;
@@ -363,9 +351,7 @@ class LessonController extends ChangeNotifier {
     final addedStudentFiles = <String>{};
 
     for (final entry in fileCodes.entries) {
-      final stepIndex =
-          _stepIndexContainingFile(entry.key) ??
-          currentStepIndex;
+      final stepIndex = _stepIndexContainingFile(entry.key) ?? currentStepIndex;
 
       documents.add(
         _ReferenceDocument(
@@ -379,9 +365,7 @@ class LessonController extends ChangeNotifier {
       addedStudentFiles.add(entry.key);
     }
 
-    for (var index = 0;
-        index < lesson.steps.length;
-        index++) {
+    for (var index = 0; index < lesson.steps.length; index++) {
       final step = lesson.steps[index];
 
       if (!addedStudentFiles.contains(step.currentFile)) {
@@ -397,8 +381,7 @@ class LessonController extends ChangeNotifier {
         addedStudentFiles.add(step.currentFile);
       }
 
-      for (final answerEntry
-          in step.standardAnswerAssets.entries) {
+      for (final answerEntry in step.standardAnswerAssets.entries) {
         final answerCode = await _loadStandardAnswerCode(
           answerEntry.value,
         );
@@ -425,9 +408,7 @@ class LessonController extends ChangeNotifier {
     );
 
     final definitionPattern = RegExp(
-      r'\b(class|enum|mixin|extension|typedef)\s+' +
-          escapedSymbol +
-          r'\b',
+      r'\b(class|enum|mixin|extension|typedef)\s+' + escapedSymbol + r'\b',
     );
 
     final references = <CodeReference>[];
@@ -438,27 +419,20 @@ class LessonController extends ChangeNotifier {
           .replaceAll('\r', '\n')
           .split('\n');
 
-      for (var lineIndex = 0;
-          lineIndex < lines.length;
-          lineIndex++) {
+      for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
         final originalLine = lines[lineIndex];
 
-        for (final match
-            in symbolPattern.allMatches(originalLine)) {
+        for (final match in symbolPattern.allMatches(originalLine)) {
           references.add(
             CodeReference(
               fileName: document.fileName,
               line: lineIndex + 1,
               column: match.start + 1,
               lineText: originalLine.trim(),
-              isDefinition:
-                  definitionPattern.hasMatch(originalLine),
-              isStandardAnswer:
-                  document.isStandardAnswer,
+              isDefinition: definitionPattern.hasMatch(originalLine),
+              isStandardAnswer: document.isStandardAnswer,
               stepIndex: document.stepIndex,
-              sourceCode: document.isStandardAnswer
-                  ? document.code
-                  : null,
+              sourceCode: document.isStandardAnswer ? document.code : null,
             ),
           );
         }
@@ -474,27 +448,23 @@ class LessonController extends ChangeNotifier {
           return first.isDefinition ? -1 : 1;
         }
 
-        if (first.isStandardAnswer !=
-            second.isStandardAnswer) {
+        if (first.isStandardAnswer != second.isStandardAnswer) {
           return first.isStandardAnswer ? 1 : -1;
         }
 
-        final stepResult =
-            first.stepIndex.compareTo(second.stepIndex);
+        final stepResult = first.stepIndex.compareTo(second.stepIndex);
 
         if (stepResult != 0) {
           return stepResult;
         }
 
-        final fileResult =
-            first.fileName.compareTo(second.fileName);
+        final fileResult = first.fileName.compareTo(second.fileName);
 
         if (fileResult != 0) {
           return fileResult;
         }
 
-        final lineResult =
-            first.line.compareTo(second.line);
+        final lineResult = first.line.compareTo(second.line);
 
         if (lineResult != 0) {
           return lineResult;
@@ -520,8 +490,7 @@ class LessonController extends ChangeNotifier {
     }
 
     for (final definition in definitions) {
-      if (definition.isStandardAnswer ==
-          preferStandardAnswer) {
+      if (definition.isStandardAnswer == preferStandardAnswer) {
         return definition;
       }
     }
@@ -569,27 +538,22 @@ class LessonController extends ChangeNotifier {
       return;
     }
 
-    final lineIndex = (reference.line - 1)
-        .clamp(0, lines.length - 1)
-        .toInt();
+    final lineIndex = (reference.line - 1).clamp(0, lines.length - 1).toInt();
 
-    final offset = (reference.column - 1)
-        .clamp(0, lines[lineIndex].length)
-        .toInt();
+    final offset =
+        (reference.column - 1).clamp(0, lines[lineIndex].length).toInt();
 
     final position = CodeLinePosition(
       index: lineIndex,
       offset: offset,
     );
 
-    playground.textController.selection =
-        CodeLineSelection.collapsed(
+    playground.textController.selection = CodeLineSelection.collapsed(
       index: lineIndex,
       offset: offset,
     );
 
-    playground.textController
-        .makePositionCenterIfInvisible(position);
+    playground.textController.makePositionCenterIfInvisible(position);
 
     await _save();
     notifyListeners();
@@ -605,8 +569,7 @@ class LessonController extends ChangeNotifier {
     try {
       final answer = await answerRepository.load(assetPath);
 
-      final code =
-          answer.isAvailable ? answer.code : null;
+      final code = answer.isAvailable ? answer.code : null;
 
       _standardAnswerCodeCache[assetPath] = code;
 
@@ -618,9 +581,7 @@ class LessonController extends ChangeNotifier {
   }
 
   int? _stepIndexContainingFile(String file) {
-    for (var index = 0;
-        index < lesson.steps.length;
-        index++) {
+    for (var index = 0; index < lesson.steps.length; index++) {
       final step = lesson.steps[index];
 
       if (step.currentFile == file ||
@@ -656,14 +617,11 @@ class LessonController extends ChangeNotifier {
   }
 
   bool _isIdentifierCodeUnit(int codeUnit) {
-    final isUppercase =
-        codeUnit >= 65 && codeUnit <= 90;
+    final isUppercase = codeUnit >= 65 && codeUnit <= 90;
 
-    final isLowercase =
-        codeUnit >= 97 && codeUnit <= 122;
+    final isLowercase = codeUnit >= 97 && codeUnit <= 122;
 
-    final isNumber =
-        codeUnit >= 48 && codeUnit <= 57;
+    final isNumber = codeUnit >= 48 && codeUnit <= 57;
 
     return isUppercase ||
         isLowercase ||

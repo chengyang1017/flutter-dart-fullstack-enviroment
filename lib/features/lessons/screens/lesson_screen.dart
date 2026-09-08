@@ -80,8 +80,7 @@ class _LessonScreenState extends State<LessonScreen> {
       return;
     }
 
-    if (reference.stepIndex !=
-        controller.currentStepIndex) {
+    if (reference.stepIndex != controller.currentStepIndex) {
       await controller.goTo(
         reference.stepIndex,
       );
@@ -149,8 +148,7 @@ class _LessonScreenState extends State<LessonScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardVisible =
-        MediaQuery.viewInsetsOf(context).bottom > 0;
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -174,8 +172,7 @@ class _LessonScreenState extends State<LessonScreen> {
             // }
 
             final isPortrait =
-                MediaQuery.orientationOf(context) ==
-                    Orientation.portrait;
+                MediaQuery.orientationOf(context) == Orientation.portrait;
 
             // 手机：继续使用单面板 Tab 布局。
             if (constraints.maxWidth < 600) {
@@ -183,8 +180,7 @@ class _LessonScreenState extends State<LessonScreen> {
                 length: 4,
                 child: _CompactLesson(
                   controller: controller,
-                  onOpenStandardAnswerReference:
-                      _openStandardAnswerReference,
+                  onOpenStandardAnswerReference: _openStandardAnswerReference,
                 ),
               );
             }
@@ -194,20 +190,13 @@ class _LessonScreenState extends State<LessonScreen> {
             if (isPortrait) {
               return _TabletPortraitLesson(
                 controller: controller,
-                answerRepository:
-                    answerRepository,
-                showAnswer:
-                    _showAnswerPanel,
-                isAnswerExpanded:
-                    _isAnswerExpanded,
-                standardAnswerTarget:
-                    _standardAnswerTarget,
-                onCloseAnswer:
-                    _closeAnswerPanel,
-                onToggleAnswerExpanded:
-                    _toggleAnswerExpanded,
-                onOpenStandardAnswerReference:
-                    _openStandardAnswerReference,
+                answerRepository: answerRepository,
+                showAnswer: _showAnswerPanel,
+                isAnswerExpanded: _isAnswerExpanded,
+                standardAnswerTarget: _standardAnswerTarget,
+                onCloseAnswer: _closeAnswerPanel,
+                onToggleAnswerExpanded: _toggleAnswerExpanded,
+                onOpenStandardAnswerReference: _openStandardAnswerReference,
               );
             }
 
@@ -217,8 +206,7 @@ class _LessonScreenState extends State<LessonScreen> {
                 length: 4,
                 child: _CompactLesson(
                   controller: controller,
-                  onOpenStandardAnswerReference:
-                      _openStandardAnswerReference,
+                  onOpenStandardAnswerReference: _openStandardAnswerReference,
                 ),
               );
             }
@@ -229,24 +217,20 @@ class _LessonScreenState extends State<LessonScreen> {
               answerRepository: answerRepository,
               showAnswer: _showAnswerPanel,
               isAnswerExpanded: _isAnswerExpanded,
-              standardAnswerTarget:
-                  _standardAnswerTarget,
+              standardAnswerTarget: _standardAnswerTarget,
               onCloseAnswer: _closeAnswerPanel,
-              onToggleAnswerExpanded:
-                  _toggleAnswerExpanded,
-              onOpenStandardAnswerReference:
-                  _openStandardAnswerReference,
+              onToggleAnswerExpanded: _toggleAnswerExpanded,
+              onOpenStandardAnswerReference: _openStandardAnswerReference,
             );
           },
         ),
       ),
-      bottomNavigationBar:
-          controller.isComplete || keyboardVisible
-              ? null
-              : LessonActionBar(
-                  controller: controller,
-                  onAnswer: _handleAnswer,
-                ),
+      bottomNavigationBar: controller.isComplete || keyboardVisible
+          ? null
+          : LessonActionBar(
+              controller: controller,
+              onAnswer: _handleAnswer,
+            ),
     );
   }
 }
@@ -272,23 +256,17 @@ class _LessonCompletionView extends StatelessWidget {
             Icon(
               Icons.emoji_events,
               size: 72,
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary,
+              color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 16),
             Text(
               '课程完成：${controller.lesson.title}',
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineMedium,
+              style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 24),
             Card(
-              color: Theme.of(context)
-                  .colorScheme
-                  .primaryContainer,
+              color: Theme.of(context).colorScheme.primaryContainer,
               child: const Padding(
                 padding: EdgeInsets.all(20),
                 child: SelectableText(
@@ -323,8 +301,7 @@ class _LessonCompletionView extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed:
-                        controller.restartLesson,
+                    onPressed: controller.restartLesson,
                     icon: const Icon(
                       Icons.replay,
                     ),
@@ -352,8 +329,7 @@ class _LessonHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding:
-          const EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         16,
         10,
         16,
@@ -371,14 +347,11 @@ class _LessonHeader extends StatelessWidget {
           ),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   controller.lesson.title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
                 Text(
                   '步骤 '
@@ -393,10 +366,8 @@ class _LessonHeader extends StatelessWidget {
           SizedBox(
             width: 96,
             child: LinearProgressIndicator(
-              value: controller
-                      .completedSteps.length /
-                  controller
-                      .lesson.steps.length,
+              value: controller.completedSteps.length /
+                  controller.lesson.steps.length,
             ),
           ),
         ],
@@ -443,12 +414,9 @@ class _CompactLesson extends StatelessWidget {
               ),
               LessonCodePanel(
                 controller: controller,
-                onOpenStandardAnswerReference:
-                    onOpenStandardAnswerReference,
+                onOpenStandardAnswerReference: onOpenStandardAnswerReference,
                 onRun: () async {
-                  final succeeded =
-                      await controller
-                          .runCurrentUi();
+                  final succeeded = await controller.runCurrentUi();
 
                   if (!context.mounted) {
                     return;
@@ -463,11 +431,8 @@ class _CompactLesson extends StatelessWidget {
               ),
               LessonPreviewPanel(
                 currentStep:
-                    controller.lesson.steps[
-                  controller.currentStepIndex
-                ],
-                playgroundController:
-                    controller.playground,
+                    controller.lesson.steps[controller.currentStepIndex],
+                playgroundController: controller.playground,
               ),
               LessonResultPanel(
                 controller: controller,
@@ -479,7 +444,6 @@ class _CompactLesson extends StatelessWidget {
     );
   }
 }
-
 
 // class _KeyboardFocusedLesson
 //     extends StatelessWidget {
@@ -519,9 +483,7 @@ class _CompactLesson extends StatelessWidget {
 //   }
 // }
 
-
-class _TabletPortraitLesson
-    extends StatefulWidget {
+class _TabletPortraitLesson extends StatefulWidget {
   const _TabletPortraitLesson({
     required this.controller,
     required this.answerRepository,
@@ -534,32 +496,27 @@ class _TabletPortraitLesson
   });
 
   final LessonController controller;
-  final AuthorAnswerRepository
-      answerRepository;
+  final AuthorAnswerRepository answerRepository;
 
   final bool showAnswer;
   final bool isAnswerExpanded;
 
-  final CodeReference?
-      standardAnswerTarget;
+  final CodeReference? standardAnswerTarget;
 
   final VoidCallback onCloseAnswer;
-  final VoidCallback
-      onToggleAnswerExpanded;
+  final VoidCallback onToggleAnswerExpanded;
 
   final Future<void> Function(
     CodeReference reference,
   ) onOpenStandardAnswerReference;
 
   @override
-  State<_TabletPortraitLesson>
-      createState() {
+  State<_TabletPortraitLesson> createState() {
     return _TabletPortraitLessonState();
   }
 }
 
-class _TabletPortraitLessonState
-    extends State<_TabletPortraitLesson> {
+class _TabletPortraitLessonState extends State<_TabletPortraitLesson> {
   double _codeFraction = 0.58;
 
   @override
@@ -575,17 +532,12 @@ class _TabletPortraitLessonState
         Expanded(
           child: widget.showAnswer
               ? StandardAnswerPanel(
-                  controller:
-                      widget.controller,
-                  repository:
-                      widget.answerRepository,
-                  navigationTarget:
-                      widget.standardAnswerTarget,
+                  controller: widget.controller,
+                  repository: widget.answerRepository,
+                  navigationTarget: widget.standardAnswerTarget,
                   isExpanded: true,
-                  onToggleExpanded: widget
-                      .onToggleAnswerExpanded,
-                  onClose:
-                      widget.onCloseAnswer,
+                  onToggleExpanded: widget.onToggleAnswerExpanded,
+                  onClose: widget.onCloseAnswer,
                 )
               : _buildNormalLayout(),
         ),
@@ -600,54 +552,40 @@ class _TabletPortraitLessonState
         constraints,
       ) {
         const dividerHeight = 8.0;
-        final totalHeight =
-            constraints.maxHeight;
+        final totalHeight = constraints.maxHeight;
 
-        final availableHeight =
-            totalHeight - dividerHeight;
+        final availableHeight = totalHeight - dividerHeight;
 
         // 使用比例下限，旋转屏幕或弹出键盘时也不会出现
         // clamp 下限大于上限的问题。
-        final minimumCodeHeight =
-            availableHeight * 0.42;
+        final minimumCodeHeight = availableHeight * 0.42;
 
-        final minimumLowerHeight =
-            availableHeight * 0.30;
+        final minimumLowerHeight = availableHeight * 0.30;
 
         final maximumCodeHeight =
-            totalHeight -
-                minimumLowerHeight -
-                dividerHeight;
+            totalHeight - minimumLowerHeight - dividerHeight;
 
-        final requestedCodeHeight =
-            totalHeight * _codeFraction;
+        final requestedCodeHeight = totalHeight * _codeFraction;
 
-        final codeHeight =
-            requestedCodeHeight
-                .clamp(
-                  minimumCodeHeight,
-                  maximumCodeHeight,
-                )
-                .toDouble();
+        final codeHeight = requestedCodeHeight
+            .clamp(
+              minimumCodeHeight,
+              maximumCodeHeight,
+            )
+            .toDouble();
 
-        final lowerHeight =
-            totalHeight -
-                codeHeight -
-                dividerHeight;
+        final lowerHeight = totalHeight - codeHeight - dividerHeight;
 
         return Column(
           children: [
             SizedBox(
               height: codeHeight,
               child: LessonCodePanel(
-                controller:
-                    widget.controller,
+                controller: widget.controller,
                 onOpenStandardAnswerReference:
-                    widget
-                        .onOpenStandardAnswerReference,
+                    widget.onOpenStandardAnswerReference,
                 onRun: () async {
-                  await widget.controller
-                      .runCurrentUi();
+                  await widget.controller.runCurrentUi();
                 },
               ),
             ),
@@ -655,27 +593,21 @@ class _TabletPortraitLessonState
               height: dividerHeight,
               onDrag: (delta) {
                 setState(() {
-                  final nextCodeHeight =
-                      codeHeight + delta;
+                  final nextCodeHeight = codeHeight + delta;
 
-                  _codeFraction =
-                      (nextCodeHeight /
-                              totalHeight)
-                          .clamp(
-                            minimumCodeHeight /
-                                totalHeight,
-                            maximumCodeHeight /
-                                totalHeight,
-                          )
-                          .toDouble();
+                  _codeFraction = (nextCodeHeight / totalHeight)
+                      .clamp(
+                        minimumCodeHeight / totalHeight,
+                        maximumCodeHeight / totalHeight,
+                      )
+                      .toDouble();
                 });
               },
             ),
             SizedBox(
               height: lowerHeight,
               child: _TabletLowerPanel(
-                controller:
-                    widget.controller,
+                controller: widget.controller,
               ),
             ),
           ],
@@ -685,8 +617,7 @@ class _TabletPortraitLessonState
   }
 }
 
-class _TabletLowerPanel
-    extends StatelessWidget {
+class _TabletLowerPanel extends StatelessWidget {
   const _TabletLowerPanel({
     required this.controller,
   });
@@ -706,8 +637,7 @@ class _TabletLowerPanel
                 Tab(
                   height: 48,
                   child: Row(
-                    mainAxisSize:
-                        MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.preview_outlined,
@@ -721,12 +651,10 @@ class _TabletLowerPanel
                 Tab(
                   height: 48,
                   child: Row(
-                    mainAxisSize:
-                        MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons
-                            .assignment_outlined,
+                        Icons.assignment_outlined,
                         size: 19,
                       ),
                       SizedBox(width: 6),
@@ -737,8 +665,7 @@ class _TabletLowerPanel
                 Tab(
                   height: 48,
                   child: Row(
-                    mainAxisSize:
-                        MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.terminal,
@@ -758,12 +685,8 @@ class _TabletLowerPanel
               children: [
                 LessonPreviewPanel(
                   currentStep:
-                      controller.lesson.steps[
-                    controller
-                        .currentStepIndex
-                  ],
-                  playgroundController:
-                      controller.playground,
+                      controller.lesson.steps[controller.currentStepIndex],
+                  playgroundController: controller.playground,
                 ),
                 LessonTaskPanel(
                   controller: controller,
@@ -780,8 +703,7 @@ class _TabletLowerPanel
   }
 }
 
-class _ResizableHorizontalDivider
-    extends StatelessWidget {
+class _ResizableHorizontalDivider extends StatelessWidget {
   const _ResizableHorizontalDivider({
     required this.height,
     required this.onDrag,
@@ -793,8 +715,7 @@ class _ResizableHorizontalDivider
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      cursor:
-          SystemMouseCursors.resizeRow,
+      cursor: SystemMouseCursors.resizeRow,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onVerticalDragUpdate: (details) {
@@ -805,8 +726,7 @@ class _ResizableHorizontalDivider
           child: Center(
             child: Container(
               height: 1,
-              color: Theme.of(context)
-                  .dividerColor,
+              color: Theme.of(context).dividerColor,
             ),
           ),
         ),
@@ -862,20 +782,14 @@ class _WideLessonState extends State<_WideLesson> {
           controller: widget.controller,
         ),
         Expanded(
-          child: widget.showAnswer &&
-                  widget.isAnswerExpanded
+          child: widget.showAnswer && widget.isAnswerExpanded
               ? StandardAnswerPanel(
-                  controller:
-                      widget.controller,
-                  repository:
-                      widget.answerRepository,
-                  navigationTarget:
-                      widget.standardAnswerTarget,
+                  controller: widget.controller,
+                  repository: widget.answerRepository,
+                  navigationTarget: widget.standardAnswerTarget,
                   isExpanded: true,
-                  onToggleExpanded: widget
-                      .onToggleAnswerExpanded,
-                  onClose:
-                      widget.onCloseAnswer,
+                  onToggleExpanded: widget.onToggleAnswerExpanded,
+                  onClose: widget.onCloseAnswer,
                 )
               : _buildNormalLayout(),
         ),
@@ -893,43 +807,31 @@ class _WideLessonState extends State<_WideLesson> {
         const minimumLeftWidth = 500.0;
         const minimumRightWidth = 360.0;
 
-        final totalWidth =
-            constraints.maxWidth;
+        final totalWidth = constraints.maxWidth;
 
-        final maximumLeftWidth =
-            totalWidth -
-                minimumRightWidth -
-                dividerWidth;
+        final maximumLeftWidth = totalWidth - minimumRightWidth - dividerWidth;
 
-        final requestedLeftWidth =
-            totalWidth * _leftFraction;
+        final requestedLeftWidth = totalWidth * _leftFraction;
 
-        final leftWidth =
-            requestedLeftWidth
-                .clamp(
-                  minimumLeftWidth,
-                  maximumLeftWidth,
-                )
-                .toDouble();
+        final leftWidth = requestedLeftWidth
+            .clamp(
+              minimumLeftWidth,
+              maximumLeftWidth,
+            )
+            .toDouble();
 
-        final rightWidth =
-            totalWidth -
-                leftWidth -
-                dividerWidth;
+        final rightWidth = totalWidth - leftWidth - dividerWidth;
 
         return Row(
           children: [
             SizedBox(
               width: leftWidth,
               child: LessonCodePanel(
-                controller:
-                    widget.controller,
+                controller: widget.controller,
                 onOpenStandardAnswerReference:
-                    widget
-                        .onOpenStandardAnswerReference,
+                    widget.onOpenStandardAnswerReference,
                 onRun: () async {
-                  await widget.controller
-                      .runCurrentUi();
+                  await widget.controller.runCurrentUi();
                 },
               ),
             ),
@@ -937,19 +839,14 @@ class _WideLessonState extends State<_WideLesson> {
               width: dividerWidth,
               onDrag: (delta) {
                 setState(() {
-                  final nextLeftWidth =
-                      leftWidth + delta;
+                  final nextLeftWidth = leftWidth + delta;
 
-                  _leftFraction =
-                      (nextLeftWidth /
-                              totalWidth)
-                          .clamp(
-                            minimumLeftWidth /
-                                totalWidth,
-                            maximumLeftWidth /
-                                totalWidth,
-                          )
-                          .toDouble();
+                  _leftFraction = (nextLeftWidth / totalWidth)
+                      .clamp(
+                        minimumLeftWidth / totalWidth,
+                        maximumLeftWidth / totalWidth,
+                      )
+                      .toDouble();
                 });
               },
             ),
@@ -957,23 +854,15 @@ class _WideLessonState extends State<_WideLesson> {
               width: rightWidth,
               child: widget.showAnswer
                   ? StandardAnswerPanel(
-                      controller:
-                          widget.controller,
-                      repository: widget
-                          .answerRepository,
-                      navigationTarget:
-                          widget
-                              .standardAnswerTarget,
+                      controller: widget.controller,
+                      repository: widget.answerRepository,
+                      navigationTarget: widget.standardAnswerTarget,
                       isExpanded: false,
-                      onToggleExpanded:
-                          widget
-                              .onToggleAnswerExpanded,
-                      onClose: widget
-                          .onCloseAnswer,
+                      onToggleExpanded: widget.onToggleAnswerExpanded,
+                      onClose: widget.onCloseAnswer,
                     )
                   : _LessonRightPanel(
-                      controller:
-                          widget.controller,
+                      controller: widget.controller,
                     ),
             ),
           ],
@@ -995,8 +884,7 @@ class _ResizableDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      cursor:
-          SystemMouseCursors.resizeColumn,
+      cursor: SystemMouseCursors.resizeColumn,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onHorizontalDragUpdate: (details) {
@@ -1007,8 +895,7 @@ class _ResizableDivider extends StatelessWidget {
           child: Center(
             child: Container(
               width: 1,
-              color: Theme.of(context)
-                  .dividerColor,
+              color: Theme.of(context).dividerColor,
             ),
           ),
         ),
@@ -1017,8 +904,7 @@ class _ResizableDivider extends StatelessWidget {
   }
 }
 
-class _LessonRightPanel
-    extends StatelessWidget {
+class _LessonRightPanel extends StatelessWidget {
   const _LessonRightPanel({
     required this.controller,
   });
@@ -1038,8 +924,7 @@ class _LessonRightPanel
                 Tab(
                   height: 48,
                   child: Row(
-                    mainAxisSize:
-                        MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.preview_outlined,
@@ -1053,8 +938,7 @@ class _LessonRightPanel
                 Tab(
                   height: 48,
                   child: Row(
-                    mainAxisSize:
-                        MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.assignment_outlined,
@@ -1068,8 +952,7 @@ class _LessonRightPanel
                 Tab(
                   height: 48,
                   child: Row(
-                    mainAxisSize:
-                        MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.terminal,
@@ -1089,12 +972,8 @@ class _LessonRightPanel
               children: [
                 LessonPreviewPanel(
                   currentStep:
-                      controller.lesson.steps[
-                    controller
-                        .currentStepIndex
-                  ],
-                  playgroundController:
-                      controller.playground,
+                      controller.lesson.steps[controller.currentStepIndex],
+                  playgroundController: controller.playground,
                 ),
                 LessonTaskPanel(
                   controller: controller,
@@ -1110,4 +989,3 @@ class _LessonRightPanel
     );
   }
 }
-

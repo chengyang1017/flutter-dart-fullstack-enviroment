@@ -33,8 +33,7 @@ class LessonCodePanel extends StatelessWidget {
       return;
     }
 
-    final callback =
-        onOpenStandardAnswerReference;
+    final callback = onOpenStandardAnswerReference;
 
     if (callback == null) {
       _showMessage(
@@ -55,8 +54,7 @@ class LessonCodePanel extends StatelessWidget {
       builder: (dialogContext) {
         return _FindReferencesDialog(
           controller: controller,
-          initialSymbol:
-              controller.selectedReferenceSymbol,
+          initialSymbol: controller.selectedReferenceSymbol,
         );
       },
     );
@@ -74,8 +72,7 @@ class LessonCodePanel extends StatelessWidget {
   Future<void> _goToDefinition(
     BuildContext context,
   ) async {
-    final symbol =
-        controller.selectedReferenceSymbol;
+    final symbol = controller.selectedReferenceSymbol;
 
     if (symbol.isEmpty) {
       _showMessage(
@@ -85,8 +82,7 @@ class LessonCodePanel extends StatelessWidget {
       return;
     }
 
-    final definition =
-        await controller.findDefinition(symbol);
+    final definition = await controller.findDefinition(symbol);
 
     if (!context.mounted) {
       return;
@@ -121,12 +117,9 @@ class LessonCodePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentStep = controller.lesson.steps[
-      controller.currentStepIndex
-    ];
+    final currentStep = controller.lesson.steps[controller.currentStepIndex];
 
-    final isUiStep =
-        currentStep.stepType == LessonStepType.ui;
+    final isUiStep = currentStep.stepType == LessonStepType.ui;
 
     return CallbackShortcuts(
       bindings: {
@@ -145,24 +138,19 @@ class LessonCodePanel extends StatelessWidget {
       child: Column(
         children: [
           Material(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainer,
+            color: Theme.of(context).colorScheme.surfaceContainer,
             child: SizedBox(
               height: 48,
               child: Row(
                 children: [
                   Expanded(
                     child: ListView.separated(
-                      scrollDirection:
-                          Axis.horizontal,
-                      padding:
-                          const EdgeInsets.symmetric(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 7,
                       ),
-                      itemCount:
-                          controller.availableFiles.length,
+                      itemCount: controller.availableFiles.length,
                       separatorBuilder: (
                         context,
                         index,
@@ -173,13 +161,11 @@ class LessonCodePanel extends StatelessWidget {
                         context,
                         index,
                       ) {
-                        final file =
-                            controller.availableFiles[index];
+                        final file = controller.availableFiles[index];
 
                         return ChoiceChip(
                           label: Text(file),
-                          selected:
-                              controller.currentFile == file,
+                          selected: controller.currentFile == file,
                           onSelected: (_) {
                             controller.switchFile(file);
                           },
@@ -197,8 +183,7 @@ class LessonCodePanel extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip:
-                        '跳到定义（F12 / Ctrl + 点击）',
+                    tooltip: '跳到定义（F12 / Ctrl + 点击）',
                     onPressed: () {
                       _goToDefinition(context);
                     },
@@ -208,28 +193,24 @@ class LessonCodePanel extends StatelessWidget {
                   ),
                   if (isUiStep)
                     Padding(
-                      padding:
-                          const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.only(right: 8),
                       child: FilledButton.icon(
                         key: const ValueKey(
                           'lesson-run-button',
                         ),
-                        onPressed:
-                            controller.isRunning
-                                ? null
-                                : () async {
-                                    if (onRun != null) {
-                                      await onRun!();
-                                    } else {
-                                      await controller
-                                          .runCurrentUi();
-                                    }
-                                  },
+                        onPressed: controller.isRunning
+                            ? null
+                            : () async {
+                                if (onRun != null) {
+                                  await onRun!();
+                                } else {
+                                  await controller.runCurrentUi();
+                                }
+                              },
                         icon: controller.isRunning
                             ? const SizedBox.square(
                                 dimension: 16,
-                                child:
-                                    CircularProgressIndicator(
+                                child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                 ),
                               )
@@ -237,9 +218,7 @@ class LessonCodePanel extends StatelessWidget {
                                 Icons.play_arrow,
                               ),
                         label: Text(
-                          controller.isRunning
-                              ? '渲染中…'
-                              : '运行',
+                          controller.isRunning ? '渲染中…' : '运行',
                         ),
                       ),
                     ),
@@ -250,11 +229,9 @@ class LessonCodePanel extends StatelessWidget {
           Expanded(
             child: CodeDefinitionCtrlClickRegion(
               lessonController: controller,
-              editorController:
-                  controller.playground.textController,
+              editorController: controller.playground.textController,
               sourceFileName: controller.currentFile,
-              sourceStepIndex:
-                  controller.currentStepIndex,
+              sourceStepIndex: controller.currentStepIndex,
               sourceIsStandardAnswer: false,
               onOpenDefinition: (reference) {
                 return _openReference(
@@ -288,8 +265,7 @@ class _FindReferencesDialog extends StatefulWidget {
   }
 }
 
-class _FindReferencesDialogState
-    extends State<_FindReferencesDialog> {
+class _FindReferencesDialogState extends State<_FindReferencesDialog> {
   late final TextEditingController _searchController;
 
   List<CodeReference> _references = const [];
@@ -360,22 +336,19 @@ class _FindReferencesDialogState
             TextField(
               controller: _searchController,
               autofocus: true,
-              textInputAction:
-                  TextInputAction.search,
+              textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 labelText: 'Class、方法或变量名称',
                 hintText: '例如 Product',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: IconButton(
                   tooltip: '搜索',
-                  onPressed:
-                      _isSearching ? null : _search,
+                  onPressed: _isSearching ? null : _search,
                   icon: const Icon(
                     Icons.arrow_forward,
                   ),
                 ),
-                border:
-                    const OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
               onSubmitted: (_) {
                 if (!_isSearching) {
@@ -388,8 +361,7 @@ class _FindReferencesDialogState
               child: _isSearching
                   ? const Center(
                       child: Column(
-                        mainAxisSize:
-                            MainAxisSize.min,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           CircularProgressIndicator(),
                           SizedBox(height: 12),
@@ -413,12 +385,9 @@ class _FindReferencesDialogState
                             )
                           : CodeReferencesPanel(
                               symbol: _symbol,
-                              references:
-                                  _references,
-                              onOpenReference:
-                                  (reference) {
-                                Navigator.of(context)
-                                    .pop(reference);
+                              references: _references,
+                              onOpenReference: (reference) {
+                                Navigator.of(context).pop(reference);
                               },
                             ),
             ),

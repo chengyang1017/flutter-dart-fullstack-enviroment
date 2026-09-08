@@ -68,7 +68,7 @@ class WorkspaceProjectBar extends StatelessWidget {
                   const SizedBox(width: 4),
                   IconButton(
                     key: const ValueKey('workspace-project-create'),
-                    tooltip: '新建练习',
+                    tooltip: '新建 Flutter 项目',
                     visualDensity: VisualDensity.compact,
                     onPressed: onCreate,
                     icon: const Icon(Icons.add, size: 19),
@@ -121,13 +121,40 @@ class WorkspaceProjectBar extends StatelessWidget {
     );
   }
 
-  String _statusText(WorkspaceProject project) {
+  String _statusText(
+    WorkspaceProject project,
+  ) {
+    if (project.kind == WorkspaceProjectKind.generatedFlutter) {
+      final platforms =
+          project.flutterPlatforms.map(_platformLabel).join(' · ');
+
+      return platforms.isEmpty
+          ? 'Flutter 项目 · 浏览器本地保存'
+          : 'Flutter · $platforms';
+    }
+
     if (project.kind == WorkspaceProjectKind.importedFlutter) {
       return '已导入 Flutter Workspace · 浏览器本地保存';
     }
+
     if (project.lifecycle == WorkspaceLifecycle.temporary) {
       return '临时练习 · 浏览器自动保存';
     }
+
     return '已保留 Workspace · 浏览器本地保存';
+  }
+
+  String _platformLabel(
+    String platform,
+  ) {
+    return switch (platform) {
+      'android' => 'Android',
+      'ios' => 'iOS',
+      'web' => 'Web',
+      'windows' => 'Windows',
+      'macos' => 'macOS',
+      'linux' => 'Linux',
+      _ => platform,
+    };
   }
 }

@@ -14,12 +14,15 @@ void main() {
   late HttpClient client;
   late Uri baseUri;
   late SessionManager manager;
+  late _FakeExecutionBackend backend;
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('runner-auth-test-');
+    backend = _FakeExecutionBackend();
+
     manager = SessionManager(
       rootDirectory: temp,
-      executionBackend: _FakeExecutionBackend(),
+      executionBackend: backend,
       previewUrlTemplate: 'http://localhost:{port}',
       backendUrlTemplate: 'http://localhost:{port}',
     );
@@ -80,6 +83,126 @@ void main() {
     );
     expect(bobRead.statusCode, HttpStatus.notFound);
   });
+
+    test('session accepts Flutter project name and selected platforms', () async {
+    final created = await _request(
+      client,
+      baseUri,
+      'POST',
+      'sessions',
+      token: 'alice-token',
+      body: jsonEncode(
+        <String, Object?>{
+          'files': <String, String>{},
+          'projectName': 'my_app',
+          'platforms': <String>[
+            'android',
+            'web',
+            'windows',
+          ],
+        },
+      ),
+    );
+
+    expect(
+      created.statusCode,
+      HttpStatus.created,
+    );
+
+    expect(
+      backend.lastFlutterArguments,
+      <String>[
+        'create',
+        '--no-pub',
+        '--platforms=android,web,windows',
+        '--project-name=my_app',
+        '.',
+      ],
+    );
+  });
+
+    test(
+    'created Flutter project returns generated workspace tree',
+    () async {
+      final created = await _request(
+        client,
+        baseUri,
+        'POST',
+        'sessions',
+        token: 'alice-token',
+        body: jsonEncode(
+          <String, Object?>{
+            'files': <String, String>{},
+            'projectName': 'my_app',
+            'platforms': <String>[
+              'android',
+              'web',
+              'windows',
+            ],
+            'includeWorkspace': true,
+          },
+        ),
+      );
+
+      expect(
+        created.statusCode,
+        HttpStatus.created,
+      );
+
+      final body =
+          jsonDecode(created.body)
+              as Map<String, dynamic>;
+
+      final workspace =
+          body['workspace']
+              as Map<String, dynamic>;
+
+      final directories =
+          (workspace['directories']
+                  as List<dynamic>)
+              .cast<String>();
+
+      final files =
+          Map<String, dynamic>.from(
+        workspace['files'] as Map,
+      );
+
+      expect(
+        directories,
+        containsAll(
+          <String>[
+            'android',
+            'web',
+            'windows',
+            'lib',
+            'test',
+          ],
+        ),
+      );
+
+      expect(
+        files,
+        containsPair(
+          'lib/main.dart',
+          'void main() {}\n',
+        ),
+      );
+
+      expect(
+        files.containsKey(
+          'pubspec.yaml',
+        ),
+        isTrue,
+      );
+
+      expect(
+        files.containsKey(
+          'test/widget_test.dart',
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('binary Workspace envelope is restored to exact file bytes', () async {
     final logoBytes = <int>[0, 137, 80, 78, 71, 13, 10, 26, 10, 255, 1];
@@ -150,6 +273,8 @@ class _Response {
 }
 
 class _FakeExecutionBackend implements RunnerExecutionBackend {
+  List<String>? lastFlutterArguments;
+
   @override
   String get name => 'fake';
 
@@ -160,7 +285,90 @@ class _FakeExecutionBackend implements RunnerExecutionBackend {
   Future<int> runFlutterCommand(
     RunnerSession session,
     List<String> arguments,
-  ) async => 0;
+  ) async {
+    lastFlutterArguments = List<String>.of(arguments);
+
+    if (arguments.isNotEmpty &&
+        arguments.first == 'create') {
+      final libDirectory = Directory(
+        '${session.directory.path}'
+        '${Platform.pathSeparator}lib',
+      );
+
+      final testDirectory = Directory(
+        '${session.directory.path}'
+        '${Platform.pathSeparator}test',
+      );
+
+      await libDirectory.create(
+        recursive: true,
+      );
+
+      await testDirectory.create(
+        recursive: true,
+      );
+
+      await File(
+        '${libDirectory.path}'
+        '${Platform.pathSeparator}main.dart',
+      ).writeAsString(
+        'void main() {}\n',
+      );
+
+      await File(
+        '${session.directory.path}'
+        '${Platform.pathSeparator}pubspec.yaml',
+      ).writeAsString(
+        'name: my_app\n'
+        'environment:\n'
+        '  sdk: ^3.0.0\n'
+        'dependencies:\n'
+        '  flutter:\n'
+        '    sdk: flutter\n',
+      );
+
+      await File(
+        '${testDirectory.path}'
+        '${Platform.pathSeparator}widget_test.dart',
+      ).writeAsString(
+        'void main() {}\n',
+      );
+
+      final platformArgument =
+          arguments.firstWhere(
+        (argument) =>
+            argument.startsWith(
+          '--platforms=',
+        ),
+        orElse: () => '',
+      );
+
+      if (platformArgument.isNotEmpty) {
+        final platforms =
+            platformArgument
+                .substring(
+                  '--platforms='.length,
+                )
+                .split(',');
+
+        for (final platform in platforms) {
+          await Directory(
+            '${session.directory.path}'
+            '${Platform.pathSeparator}$platform',
+          ).create(
+            recursive: true,
+          );
+        }
+      }
+    }
+
+    return 0;
+  }
+
+  @override
+  Future<void> pullWorkspace(
+    RunnerSession session,
+  ) async {}
 
   @override
   Future<void> syncWorkspace(

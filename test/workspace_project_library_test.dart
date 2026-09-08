@@ -115,6 +115,86 @@ void main() {
     expect(imported.lifecycle, WorkspaceLifecycle.saved);
   });
 
+    test('generated Flutter workspaces persist selected platforms', () async {
+    final catalog = _MemoryWorkspaceProjectCatalogStore();
+    final snapshots = _MemoryWorkspaceSnapshotStore();
+
+    final library = WorkspaceProjectLibrary(
+      catalogStore: catalog,
+      snapshotStore: snapshots,
+    );
+
+    final seed = PlaygroundController();
+    final snapshot = seed.workspace.createSnapshot();
+    seed.dispose();
+
+    final generated = await library.createGeneratedFlutter(
+      name: 'my_app',
+      snapshot: snapshot,
+      platforms: const <String>{
+        'android',
+        'web',
+        'windows',
+      },
+    );
+
+    expect(
+      generated.kind,
+      WorkspaceProjectKind.generatedFlutter,
+    );
+
+    expect(
+      generated.lifecycle,
+      WorkspaceLifecycle.saved,
+    );
+
+    expect(
+      generated.flutterPlatforms,
+      unorderedEquals(
+        const <String>[
+          'android',
+          'web',
+          'windows',
+        ],
+      ),
+    );
+
+    expect(
+      snapshots.load(generated.storageKey),
+      isNotNull,
+    );
+
+    final reopened = WorkspaceProjectLibrary(
+      catalogStore: catalog,
+      snapshotStore: snapshots,
+    );
+
+    final restored = reopened.projectById(
+      generated.id,
+    );
+
+    expect(
+      restored,
+      isNotNull,
+    );
+
+    expect(
+      restored!.kind,
+      WorkspaceProjectKind.generatedFlutter,
+    );
+
+    expect(
+      restored.flutterPlatforms,
+      unorderedEquals(
+        const <String>[
+          'android',
+          'web',
+          'windows',
+        ],
+      ),
+    );
+  });
+
   test('projects persist and the last selected project is restored', () async {
     final catalog = _MemoryWorkspaceProjectCatalogStore();
     final snapshots = _MemoryWorkspaceSnapshotStore();

@@ -184,7 +184,8 @@ Container(
   }
 
   void updateCode() {
-    if (textController.isComposing) {
+    if (_restoringEditorUiState ||
+        textController.isComposing) {
       return;
     }
 
@@ -232,29 +233,322 @@ Container(
       return;
     }
 
-    try {
-      root = _parser.parse(_quickPreviewSource(code));
-    } catch (exception) {
+    final previewSource = _quickPreviewSource(code);
+
+    print(
+      'QUICK_PREVIEW DEBUG: '
+      'controller=${identityHashCode(this)}, '
+      'path=$activeFilePath, '
+      'start=${code.contains(_quickPreviewStart)}, '
+      'end=${code.contains(_quickPreviewEnd)}, '
+      'previewNull=${previewSource == null}, '
+      'previewLength=${previewSource?.length}',
+    );
+
+    if (previewSource == null) {
       root = null;
-      error = exception.toString();
+      error = null;
+    } else {
+      try {
+        root = _parser.parse(previewSource);
+      } catch (exception) {
+        root = null;
+        error = exception.toString();
+      }
     }
 
     isParsing = false;
     notifyListeners();
   }
 
-  String _quickPreviewSource(String source) {
-    final start = source.indexOf(_quickPreviewStart);
-    final end = source.indexOf(_quickPreviewEnd);
-    if (start == -1 || end == -1 || end <= start) {
-      return source;
+  String? _quickPreviewSource(String source) {
+  final marked = _markedQuickPreviewSource(source);
+
+  if (marked != null) {
+    return marked;
+  }
+
+  return _extractBuildReturnWidget(source);
+}
+
+String? _markedQuickPreviewSource(
+  String source,
+) {
+  final start = source.indexOf(
+    _quickPreviewStart,
+  );
+
+  final end = source.indexOf(
+    _quickPreviewEnd,
+  );
+
+  if (start == -1 ||
+      end == -1 ||
+      end <= start) {
+    return null;
+  }
+
+  final value = source
+      .substring(
+        start + _quickPreviewStart.length,
+        end,
+      )
+      .trim();
+
+  return value.isEmpty ? null : value;
+}
+
+String? _extractBuildReturnWidget(
+  String source,
+) {
+  final buildMatch = RegExp(
+    r'\bWidget\s+build\s*\([^)]*\)\s*\{',
+    multiLine: true,
+  ).firstMatch(source);
+
+  if (buildMatch == null) {
+    return null;
+  }
+
+  final bodyStart = source.indexOf(
+    '{',
+    buildMatch.start,
+  );
+
+  if (bodyStart == -1) {
+    return null;
+  }
+
+  final bodyEnd = _findMatchingBrace(
+    source,
+    bodyStart,
+  );
+
+  if (bodyEnd == -1) {
+    return null;
+  }
+
+  final returnMatch = RegExp(
+    r'\breturn\b',
+  ).firstMatch(
+    source.substring(
+      bodyStart + 1,
+      bodyEnd,
+    ),
+  );
+
+  if (returnMatch == null) {
+    return null;
+  }
+
+  final expressionStart =
+      bodyStart + 1 + returnMatch.end;
+
+  final expressionEnd =
+      _findReturnExpressionEnd(
+    source,
+    expressionStart,
+    bodyEnd,
+  );
+
+  if (expressionEnd == -1) {
+    return null;
+  }
+
+  final value = source
+      .substring(
+        expressionStart,
+        expressionEnd,
+      )
+      .trim();
+
+  return value.isEmpty ? null : value;
+}
+
+int _findMatchingBrace(
+  String source,
+  int openIndex,
+) {
+  var depth = 0;
+  String? quote;
+  var lineComment = false;
+  var blockComment = false;
+
+  for (var i = openIndex;
+      i < source.length;
+      i++) {
+    final ch = source[i];
+    final next = i + 1 < source.length
+        ? source[i + 1]
+        : '';
+
+    if (lineComment) {
+      if (ch == '\n') {
+        lineComment = false;
+      }
+
+      continue;
     }
 
-    return source.substring(
-      start + _quickPreviewStart.length,
-      end,
-    ).trim();
+    if (blockComment) {
+      if (ch == '*' && next == '/') {
+        blockComment = false;
+        i++;
+      }
+
+      continue;
+    }
+
+    if (quote != null) {
+      if (ch == '\\') {
+        i++;
+        continue;
+      }
+
+      if (ch == quote) {
+        quote = null;
+      }
+
+      continue;
+    }
+
+    if (ch == '/' && next == '/') {
+      lineComment = true;
+      i++;
+      continue;
+    }
+
+    if (ch == '/' && next == '*') {
+      blockComment = true;
+      i++;
+      continue;
+    }
+
+    if (ch == "'" || ch == '"') {
+      quote = ch;
+      continue;
+    }
+
+    if (ch == '{') {
+      depth++;
+      continue;
+    }
+
+    if (ch == '}') {
+      depth--;
+
+      if (depth == 0) {
+        return i;
+      }
+    }
   }
+
+  return -1;
+}
+
+int _findReturnExpressionEnd(
+  String source,
+  int start,
+  int limit,
+) {
+  var parenDepth = 0;
+  var bracketDepth = 0;
+  var braceDepth = 0;
+
+  String? quote;
+  var lineComment = false;
+  var blockComment = false;
+
+  for (var i = start; i < limit; i++) {
+    final ch = source[i];
+    final next = i + 1 < limit
+        ? source[i + 1]
+        : '';
+
+    if (lineComment) {
+      if (ch == '\n') {
+        lineComment = false;
+      }
+
+      continue;
+    }
+
+    if (blockComment) {
+      if (ch == '*' && next == '/') {
+        blockComment = false;
+        i++;
+      }
+
+      continue;
+    }
+
+    if (quote != null) {
+      if (ch == '\\') {
+        i++;
+        continue;
+      }
+
+      if (ch == quote) {
+        quote = null;
+      }
+
+      continue;
+    }
+
+    if (ch == '/' && next == '/') {
+      lineComment = true;
+      i++;
+      continue;
+    }
+
+    if (ch == '/' && next == '*') {
+      blockComment = true;
+      i++;
+      continue;
+    }
+
+    if (ch == "'" || ch == '"') {
+      quote = ch;
+      continue;
+    }
+
+    switch (ch) {
+      case '(':
+        parenDepth++;
+        break;
+
+      case ')':
+        parenDepth--;
+        break;
+
+      case '[':
+        bracketDepth++;
+        break;
+
+      case ']':
+        bracketDepth--;
+        break;
+
+      case '{':
+        braceDepth++;
+        break;
+
+      case '}':
+        braceDepth--;
+        break;
+
+      case ';':
+        if (parenDepth == 0 &&
+            bracketDepth == 0 &&
+            braceDepth == 0) {
+          return i;
+        }
+        break;
+    }
+  }
+
+  return -1;
+}
 
   void clearCode() {
     _debounce?.cancel();
@@ -273,13 +567,49 @@ Container(
   }
 
   void resetExample() {
-    _debounce?.cancel();
+  _debounce?.cancel();
 
-    workspace.openFile('lib/main.dart');
-    workspace.updateFileContent('lib/main.dart', exampleCode);
-    textController.text = exampleCode;
-    runCode();
-  }
+  _syncingWorkspaceSelection = true;
+  _restoringEditorUiState = true;
+
+  workspace.openFile('lib/main.dart');
+  workspace.updateFileContent(
+    'lib/main.dart',
+    exampleCode,
+  );
+
+  _loadedWorkspacePath = 'lib/main.dart';
+  _loadedWorkspaceEntryId =
+      workspace.activeEntry?.id ?? '';
+
+  textController.text = exampleCode;
+
+  root = null;
+  error = null;
+  warnings = [];
+
+  notifyListeners();
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    // re_editor 可能在程序化替换后延迟发出旧值，
+    // 下一帧再次确保 Workspace 与 Editor 完全一致。
+    workspace.updateFileContent(
+      'lib/main.dart',
+      exampleCode,
+    );
+
+    if (textController.text != exampleCode) {
+      textController.text = exampleCode;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncingWorkspaceSelection = false;
+      _restoringEditorUiState = false;
+
+      runCode();
+    });
+  });
+}
 
   void toggleAutoRun() {
     autoRun = !autoRun;
@@ -361,6 +691,15 @@ Container(
   }
 
   void _handleWorkspaceChanged() {
+    print(
+      'WORKSPACE CHANGE DEBUG: '
+      'controller=${identityHashCode(this)}, '
+      'path=${workspace.activePath}, '
+      'workspaceStart=${workspace.activeEntry?.content.contains(_quickPreviewStart)}, '
+      'editorStart=${textController.text.contains(_quickPreviewStart)}, '
+      'workspaceLength=${workspace.activeEntry?.content.length}, '
+      'editorLength=${textController.text.length}',
+    );
     if (_syncingWorkspaceSelection) return;
 
     final path = workspace.activePath;
@@ -391,11 +730,14 @@ Container(
     root = null;
     error = null;
     warnings = [];
-    _restoringEditorUiState = false;
     _syncingWorkspaceSelection = false;
 
     _restoreScrollAfterLayout(restoredState);
     notifyListeners();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoringEditorUiState = false;
+    });
   }
 
   void _applySelection(WorkspaceEditorState? state) {
@@ -457,7 +799,8 @@ Container(
     _debounce?.cancel();
     textController.removeListener(_handleEditorValueChanged);
     editorScrollController.verticalScroller.removeListener(_handleEditorScroll);
-    editorScrollController.horizontalScroller.removeListener(_handleEditorScroll);
+    editorScrollController.horizontalScroller
+        .removeListener(_handleEditorScroll);
     _workspaceAutosave?.dispose();
     workspace.removeListener(_handleWorkspaceChanged);
     editorScrollController.dispose();

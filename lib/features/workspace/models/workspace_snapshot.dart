@@ -93,7 +93,8 @@ class WorkspaceSnapshot {
 
   factory WorkspaceSnapshot.fromJson(Map<dynamic, dynamic> json) {
     final rawVersion = json['formatVersion'];
-    final version = rawVersion is int ? rawVersion : oldestSupportedFormatVersion;
+    final version =
+        rawVersion is int ? rawVersion : oldestSupportedFormatVersion;
     if (version < oldestSupportedFormatVersion ||
         version > currentFormatVersion) {
       throw FormatException('Unsupported workspace snapshot version: $version');

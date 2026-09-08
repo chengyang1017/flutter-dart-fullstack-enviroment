@@ -211,9 +211,8 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
       );
     }
 
-    final root = _direction == _FlowDirection.outgoing
-        ? graph.root
-        : graph.callersRoot;
+    final root =
+        _direction == _FlowDirection.outgoing ? graph.root : graph.callersRoot;
     final rows = <_FlowRow>[];
     _flatten(root, 0, rows);
 

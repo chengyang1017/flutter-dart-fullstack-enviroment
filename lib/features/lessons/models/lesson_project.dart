@@ -18,9 +18,7 @@ class LessonProject {
   final List<Lesson> lessons;
 
   int get availableLessonCount {
-    return lessons
-        .where((lesson) => !lesson.comingSoon)
-        .length;
+    return lessons.where((lesson) => !lesson.comingSoon).length;
   }
 
   int get totalStepCount {

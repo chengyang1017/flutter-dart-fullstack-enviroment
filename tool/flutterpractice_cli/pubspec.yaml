@@ -1,10 +1,13 @@
 name: flutterpractice_cli
-description: Rebuild a new local Flutter project from a portable Flutter practice package.
+description: ApplyKit CLI for creating and applying portable project change packages.
 publish_to: none
-version: 0.1.0
+version: 0.2.0
 
 environment:
   sdk: ^3.4.0
+
+executables:
+  applykit:
 
 dependencies:
   archive: ^4.2.0

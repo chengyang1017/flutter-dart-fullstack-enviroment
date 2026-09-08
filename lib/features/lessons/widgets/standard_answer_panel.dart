@@ -32,8 +32,7 @@ class StandardAnswerPanel extends StatefulWidget {
   }
 }
 
-class _StandardAnswerPanelState
-    extends State<StandardAnswerPanel> {
+class _StandardAnswerPanelState extends State<StandardAnswerPanel> {
   late String _stepId;
   late String selectedFile;
   late Future<AuthorAnswer> _answerFuture;
@@ -55,9 +54,8 @@ class _StandardAnswerPanelState
   ) {
     super.didUpdateWidget(oldWidget);
 
-    final currentStep = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final currentStep =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
     final targetChanged = !_sameTarget(
       oldWidget.navigationTarget,
@@ -92,29 +90,24 @@ class _StandardAnswerPanelState
   void _loadCurrentStep({
     CodeReference? target,
   }) {
-    final step = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final step =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
     _stepId = step.id;
 
     final files = _answerFiles(step);
 
-    final targetFile =
-        target != null &&
-                target.isStandardAnswer &&
-                target.stepIndex ==
-                    widget.controller.currentStepIndex &&
-                files.contains(target.fileName)
-            ? target.fileName
-            : null;
+    final targetFile = target != null &&
+            target.isStandardAnswer &&
+            target.stepIndex == widget.controller.currentStepIndex &&
+            files.contains(target.fileName)
+        ? target.fileName
+        : null;
 
     selectedFile =
-        targetFile ??
-        (files.isNotEmpty ? files.first : step.currentFile);
+        targetFile ?? (files.isNotEmpty ? files.first : step.currentFile);
 
-    _navigationTarget =
-        targetFile == null ? null : target;
+    _navigationTarget = targetFile == null ? null : target;
 
     _loadAnswer();
   }
@@ -128,12 +121,10 @@ class _StandardAnswerPanelState
   }
 
   void _loadAnswer() {
-    final step = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final step =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
-    final path =
-        step.standardAnswerAssets[selectedFile];
+    final path = step.standardAnswerAssets[selectedFile];
 
     _answerFuture = path == null
         ? Future<AuthorAnswer>.value(
@@ -167,8 +158,7 @@ class _StandardAnswerPanelState
       return;
     }
 
-    if (reference.stepIndex !=
-        widget.controller.currentStepIndex) {
+    if (reference.stepIndex != widget.controller.currentStepIndex) {
       await widget.controller.goTo(
         reference.stepIndex,
       );
@@ -178,9 +168,8 @@ class _StandardAnswerPanelState
       return;
     }
 
-    final step = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final step =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
     final files = _answerFiles(step);
 
@@ -198,46 +187,38 @@ class _StandardAnswerPanelState
 
   @override
   Widget build(BuildContext context) {
-    final step = widget.controller.lesson.steps[
-      widget.controller.currentStepIndex
-    ];
+    final step =
+        widget.controller.lesson.steps[widget.controller.currentStepIndex];
 
     final files = _answerFiles(step);
 
     return ColoredBox(
       color: Theme.of(context).colorScheme.surface,
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildHeader(context),
           const Divider(height: 1),
-          if (files.isNotEmpty)
-            _buildFileBar(files),
-          if (files.isNotEmpty)
-            const Divider(height: 1),
+          if (files.isNotEmpty) _buildFileBar(files),
+          if (files.isNotEmpty) const Divider(height: 1),
           Expanded(
             child: FutureBuilder<AuthorAnswer>(
               future: _answerFuture,
               builder: (context, snapshot) {
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child:
-                        CircularProgressIndicator(),
+                    child: CircularProgressIndicator(),
                   );
                 }
 
                 if (snapshot.hasError) {
                   return Center(
                     child: Padding(
-                      padding:
-                          const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(24),
                       child: Text(
                         '读取标准答案失败：\n'
                         '${snapshot.error}',
-                        textAlign:
-                            TextAlign.center,
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   );
@@ -250,12 +231,10 @@ class _StandardAnswerPanelState
                     answer.code == null) {
                   return const Center(
                     child: Padding(
-                      padding:
-                          EdgeInsets.all(24),
+                      padding: EdgeInsets.all(24),
                       child: Text(
                         '该部分标准答案尚未由课程作者录入。',
-                        textAlign:
-                            TextAlign.center,
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   );
@@ -270,16 +249,12 @@ class _StandardAnswerPanelState
                           '$selectedFile-'
                           '${answer.code.hashCode}',
                         ),
-                        lessonController:
-                            widget.controller,
+                        lessonController: widget.controller,
                         code: answer.code!,
                         fileName: selectedFile,
-                        stepIndex: widget
-                            .controller.currentStepIndex,
-                        navigationTarget:
-                            _navigationTarget,
-                        onOpenDefinition:
-                            _openDefinition,
+                        stepIndex: widget.controller.currentStepIndex,
+                        navigationTarget: _navigationTarget,
+                        onOpenDefinition: _openDefinition,
                       ),
                     ),
                     _buildActions(
@@ -311,35 +286,25 @@ class _StandardAnswerPanelState
           const SizedBox(width: 10),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '课程作者参考答案',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'Ctrl + 点击名称：直接切换到定义所在步骤和文件。',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
           IconButton(
-            tooltip: widget.isExpanded
-                ? '还原左右布局'
-                : '放大标准答案',
-            onPressed:
-                widget.onToggleExpanded,
+            tooltip: widget.isExpanded ? '还原左右布局' : '放大标准答案',
+            onPressed: widget.onToggleExpanded,
             icon: Icon(
-              widget.isExpanded
-                  ? Icons.fullscreen_exit
-                  : Icons.fullscreen,
+              widget.isExpanded ? Icons.fullscreen_exit : Icons.fullscreen,
             ),
           ),
           const SizedBox(width: 4),
@@ -368,14 +333,12 @@ class _StandardAnswerPanelState
         children: files.map(
           (file) {
             return Padding(
-              padding:
-                  const EdgeInsets.only(
+              padding: const EdgeInsets.only(
                 right: 8,
               ),
               child: ChoiceChip(
                 label: Text(file),
-                selected:
-                    selectedFile == file,
+                selected: selectedFile == file,
                 onSelected: (_) {
                   _selectFile(file);
                 },
@@ -389,18 +352,14 @@ class _StandardAnswerPanelState
 
   Widget _buildActions(String code) {
     return Material(
-      color: Theme.of(context)
-          .colorScheme
-          .surfaceContainerLow,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(
+        padding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 10,
         ),
         child: Row(
-          mainAxisAlignment:
-              MainAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
             TextButton.icon(
               onPressed: () async {
@@ -421,8 +380,7 @@ class _StandardAnswerPanelState
               icon: const Icon(
                 Icons.find_replace,
               ),
-              label:
-                  const Text('替换当前文件'),
+              label: const Text('替换当前文件'),
             ),
           ],
         ),
@@ -433,8 +391,7 @@ class _StandardAnswerPanelState
   Future<void> _confirmReplace(
     String code,
   ) async {
-    final confirmed =
-        await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (confirmContext) {
         return AlertDialog(
@@ -462,8 +419,7 @@ class _StandardAnswerPanelState
                   true,
                 );
               },
-              child:
-                  const Text('确认替换'),
+              child: const Text('确认替换'),
             ),
           ],
         );
@@ -474,8 +430,7 @@ class _StandardAnswerPanelState
       return;
     }
 
-    await widget.controller
-        .replaceFileWithAuthorCode(
+    await widget.controller.replaceFileWithAuthorCode(
       selectedFile,
       code,
     );

@@ -6,10 +6,10 @@ import '../models/workspace_project.dart';
 import '../models/workspace_secret.dart';
 import '../services/workspace_git_connection_coordinator.dart';
 
-typedef WorkspaceGitSecretLoader =
-    Future<List<WorkspaceSecretMetadata>> Function();
-typedef WorkspaceGitConnectionChecker =
-    Future<WorkspaceGitConnectionCheck> Function({
+typedef WorkspaceGitSecretLoader = Future<List<WorkspaceSecretMetadata>>
+    Function();
+typedef WorkspaceGitConnectionChecker = Future<WorkspaceGitConnectionCheck>
+    Function({
   String? secretName,
   String? secretValue,
   String? username,
@@ -106,14 +106,19 @@ class _WorkspaceGitConnectionDialogState
   }
 
   void _rememberSavedSecret(WorkspaceSecretMetadata? saved) {
-    if (saved == null || _secrets.any((item) => item.name == saved.name)) return;
+    if (saved == null || _secrets.any((item) => item.name == saved.name))
+      return;
     _secrets = [..._secrets, saved]..sort((a, b) => a.name.compareTo(b.name));
   }
 
   Future<void> _check() async {
     if (_busy) return;
 
-    late final ({String? secretName, String? secretValue, String? username}) input;
+    late final ({
+      String? secretName,
+      String? secretValue,
+      String? username
+    }) input;
     try {
       input = _credentialInput();
     } on FormatException catch (error) {
@@ -156,7 +161,11 @@ class _WorkspaceGitConnectionDialogState
   Future<void> _pull() async {
     if (_busy) return;
 
-    late final ({String? secretName, String? secretValue, String? username}) input;
+    late final ({
+      String? secretName,
+      String? secretValue,
+      String? username
+    }) input;
     try {
       input = _credentialInput();
     } on FormatException catch (error) {
@@ -404,7 +413,8 @@ class _GitCheckResultCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(branchFound ? Icons.check_circle_outline : Icons.warning_amber),
+            Icon(
+                branchFound ? Icons.check_circle_outline : Icons.warning_amber),
             const SizedBox(width: 10),
             Expanded(
               child: Column(

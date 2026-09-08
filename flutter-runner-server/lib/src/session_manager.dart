@@ -17,6 +17,25 @@ class SessionManager {
   static const flutterDartFrogProjectType = 'flutter-dart-frog';
   static const flutterServerpodMiniProjectType = 'flutter-serverpod-mini';
   static const serverpodServerDirectory = 'serverpod/practice_server';
+    static const supportedFlutterPlatforms = <String>{
+    'android',
+    'ios',
+    'web',
+    'windows',
+    'macos',
+    'linux',
+  };
+
+  static const _flutterPlatformOrder = <String>[
+    'android',
+    'ios',
+    'web',
+    'windows',
+    'macos',
+    'linux',
+  ];
+
+  static const _binaryFilePrefix = '\u0000workspace-base64:';
 
   final Directory rootDirectory;
   final RunnerExecutionBackend executionBackend;
@@ -35,14 +54,23 @@ class SessionManager {
     return session;
   }
 
-  Future<RunnerSession> createSession(Map<String, String> files) async {
+    Future<RunnerSession> createSession(
+    Map<String, String> files, {
+    String projectName = 'flutter_practice',
+    List<String> platforms = const <String>['web'],
+  }) async {
+    final cleanProjectName = _validateFlutterProjectName(projectName);
+    final cleanPlatforms = _validateFlutterPlatforms(platforms);
+
     await rootDirectory.create(recursive: true);
 
     final now = DateTime.now().toUtc();
     final id = 'flutter-${now.microsecondsSinceEpoch}-${_nextSession++}';
+
     final directory = Directory(
       '${rootDirectory.path}${Platform.pathSeparator}$id',
     );
+
     await directory.create(recursive: true);
 
     final session = RunnerSession(
@@ -50,39 +78,115 @@ class SessionManager {
       directory: directory,
       createdAt: now,
     )..projectType = _detectProjectType(files);
+
     _sessions[id] = session;
 
     try {
       session.addLog(
         '[runner] Preparing ${executionBackend.name} execution backend...',
       );
+
       await executionBackend.prepareSession(session);
 
-      session.addLog('[runner] Creating web-capable Flutter project...');
+      session.addLog(
+        '[runner] Creating Flutter project '
+        '$cleanProjectName '
+        '(${cleanPlatforms.join(', ')})...',
+      );
+
       final createExit = await executionBackend.runFlutterCommand(
         session,
-        const [
+        [
           'create',
           '--no-pub',
-          '--platforms=web',
-          '--project-name=flutter_practice',
+          '--platforms=${cleanPlatforms.join(',')}',
+          '--project-name=$cleanProjectName',
           '.',
         ],
       );
+
       if (createExit != 0) {
-        throw StateError('flutter create exited with code $createExit');
+        throw StateError(
+          'flutter create exited with code $createExit',
+        );
       }
 
+      // Docker 中 flutter create 生成在容器内。
+      // 这里拉回宿主机，Local 模式则什么都不做。
+      await executionBackend.pullWorkspace(session);
+
+      // 如果是正常 Runner session，
+      // 把 IDE Workspace 文件覆盖进刚生成的 Flutter scaffold。
       await syncWorkspace(session, files);
+
       session.setStatus('ready');
-      session.addLog('[runner] ${_projectLabel(session)} session is ready.');
+
+      session.addLog(
+        '[runner] ${_projectLabel(session)} session is ready.',
+      );
+
       return session;
     } catch (error) {
       session.setStatus('error');
-      session.addLog('[runner] Session creation failed: $error');
+      session.addLog(
+        '[runner] Session creation failed: $error',
+      );
+
       await _cleanupFailedSession(session);
       rethrow;
     }
+  }
+
+    Future<Map<String, Object?>> readWorkspaceTree(
+    RunnerSession session,
+  ) async {
+    // Docker 环境再次确保最新 workspace 已经拉回宿主机。
+    await executionBackend.pullWorkspace(session);
+
+    final files = <String, String>{};
+    final directories = <String>[];
+
+    if (!await session.directory.exists()) {
+      throw StateError(
+        'Workspace directory does not exist: ${session.directory.path}',
+      );
+    }
+
+    await for (final entity in session.directory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      final relativePath = _relativeWorkspacePath(
+        session.directory,
+        entity.path,
+      );
+
+      if (relativePath.isEmpty) continue;
+
+      if (entity is Directory) {
+        directories.add(relativePath);
+        continue;
+      }
+
+      if (entity is! File) continue;
+
+      final bytes = await entity.readAsBytes();
+
+      files[relativePath] = _encodeWorkspaceFile(bytes);
+    }
+
+    directories.sort();
+    final sortedFiles = Map<String, String>.fromEntries(
+      files.entries.toList()
+        ..sort(
+          (a, b) => a.key.compareTo(b.key),
+        ),
+    );
+
+    return <String, Object?>{
+      'directories': directories,
+      'files': sortedFiles,
+    };
   }
 
   Future<void> syncWorkspace(
@@ -611,6 +715,91 @@ class SessionManager {
       (segment) => segment.isEmpty || segment == '.' || segment == '..',
     )) {
       throw FormatException('Invalid workspace path: $path');
+    }
+  }
+
+    String _validateFlutterProjectName(String value) {
+    final clean = value.trim();
+
+    if (clean.isEmpty) {
+      throw const FormatException(
+        'Flutter project name cannot be empty.',
+      );
+    }
+
+    if (!RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(clean)) {
+      throw const FormatException(
+        'Flutter project name must use lowercase letters, '
+        'numbers and underscores, for example: my_app',
+      );
+    }
+
+    return clean;
+  }
+
+  List<String> _validateFlutterPlatforms(
+    Iterable<String> platforms,
+  ) {
+    final requested = platforms
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+
+    if (requested.isEmpty) {
+      throw const FormatException(
+        'Select at least one Flutter platform.',
+      );
+    }
+
+    final unsupported = requested.difference(
+      supportedFlutterPlatforms,
+    );
+
+    if (unsupported.isNotEmpty) {
+      throw FormatException(
+        'Unsupported Flutter platform: '
+        '${unsupported.join(', ')}',
+      );
+    }
+
+    return _flutterPlatformOrder
+        .where(requested.contains)
+        .toList(growable: false);
+  }
+
+  String _relativeWorkspacePath(
+    Directory root,
+    String absolutePath,
+  ) {
+    var rootPath = root.path;
+
+    if (!rootPath.endsWith(Platform.pathSeparator)) {
+      rootPath += Platform.pathSeparator;
+    }
+
+    if (!absolutePath.startsWith(rootPath)) {
+      throw StateError(
+        'Path is outside workspace: $absolutePath',
+      );
+    }
+
+    return absolutePath
+        .substring(rootPath.length)
+        .replaceAll(Platform.pathSeparator, '/');
+  }
+
+  String _encodeWorkspaceFile(List<int> bytes) {
+    if (bytes.contains(0)) {
+      return '$_binaryFilePrefix${base64Encode(bytes)}';
+    }
+
+    try {
+      return utf8.decode(
+        bytes,
+        allowMalformed: false,
+      );
+    } on FormatException {
+      return '$_binaryFilePrefix${base64Encode(bytes)}';
     }
   }
 }

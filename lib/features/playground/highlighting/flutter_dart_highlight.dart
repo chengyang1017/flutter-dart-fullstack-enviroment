@@ -34,7 +34,8 @@ final Mode flutterDartMode = langDart.copyWith(
       // add(
       Mode(
         scope: 'function',
-        match: r'\b(?!if\b|for\b|while\b|switch\b|catch\b|assert\b|return\b|throw\b|this\b|super\b|new\b)[a-z_][A-Za-z0-9_]*(?=\s*\()',
+        match:
+            r'\b(?!if\b|for\b|while\b|switch\b|catch\b|assert\b|return\b|throw\b|this\b|super\b|new\b)[a-z_][A-Za-z0-9_]*(?=\s*\()',
         relevance: 0,
       ),
 
@@ -86,8 +87,7 @@ const TextStyle _annotation = TextStyle(
 );
 
 /// 名称保持不变。
-const Map<String, TextStyle> vscodeDark2026Theme =
-    <String, TextStyle>{
+const Map<String, TextStyle> vscodeDark2026Theme = <String, TextStyle>{
   // 普通文字、局部变量、对象属性
   'root': TextStyle(
     color: Color(0xffd6deeb),

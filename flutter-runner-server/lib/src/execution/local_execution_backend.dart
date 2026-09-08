@@ -70,6 +70,11 @@ class LocalExecutionBackend implements RunnerExecutionBackend {
   }
 
   @override
+  Future<void> pullWorkspace(
+    RunnerSession session,
+  ) async {}
+
+  @override
   Future<void> syncWorkspace(
     RunnerSession session, {
     required Set<String> removedPaths,

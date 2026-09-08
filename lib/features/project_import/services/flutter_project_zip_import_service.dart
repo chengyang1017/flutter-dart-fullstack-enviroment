@@ -114,9 +114,8 @@ class FlutterProjectZipImportService {
     if (binaryPaths.isNotEmpty) {
       binaryPaths.sort();
       final shown = binaryPaths.take(8).join(', ');
-      final suffix = binaryPaths.length > 8
-          ? ' (+${binaryPaths.length - 8} more)'
-          : '';
+      final suffix =
+          binaryPaths.length > 8 ? ' (+${binaryPaths.length - 8} more)' : '';
       throw FormatException(
         'This project contains binary portable assets that the current '
         'Workspace protocol cannot preserve yet: $shown$suffix',

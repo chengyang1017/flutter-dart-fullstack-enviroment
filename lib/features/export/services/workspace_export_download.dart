@@ -1,7 +1,8 @@
 import 'dart:typed_data';
 
 import 'workspace_export_download_stub.dart'
-    if (dart.library.html) 'workspace_export_download_web.dart' as implementation;
+    if (dart.library.html) 'workspace_export_download_web.dart'
+    as implementation;
 
 bool get supportsWorkspaceExportDownload =>
     implementation.supportsWorkspaceExportDownload;

@@ -26,8 +26,7 @@ class LessonListScreen extends StatefulWidget {
   }
 }
 
-class _LessonListScreenState
-    extends State<LessonListScreen> {
+class _LessonListScreenState extends State<LessonListScreen> {
   late final LessonProgressStore _progressStore;
 
   @override
@@ -87,13 +86,9 @@ class _LessonListScreenState
   int _completedStepCount(Lesson lesson) {
     final progress = _progressStore.load(lesson.id);
 
-    final completedSteps =
-        (progress['completedSteps'] as List?) ??
-            const [];
+    final completedSteps = (progress['completedSteps'] as List?) ?? const [];
 
-    return completedSteps.length
-        .clamp(0, lesson.steps.length)
-        .toInt();
+    return completedSteps.length.clamp(0, lesson.steps.length).toInt();
   }
 
   int _projectCompletedSteps(
@@ -118,9 +113,8 @@ class _LessonListScreenState
         ),
       ),
       body: SafeArea(
-        child: project == null
-            ? _buildProjectList()
-            : _buildLessonList(project),
+        child:
+            project == null ? _buildProjectList() : _buildLessonList(project),
       ),
     );
   }
@@ -128,27 +122,23 @@ class _LessonListScreenState
   Widget _buildProjectList() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columnCount =
-            constraints.maxWidth >= 850 ? 2 : 1;
+        final columnCount = constraints.maxWidth >= 850 ? 2 : 1;
 
         return GridView.builder(
           padding: const EdgeInsets.all(20),
           itemCount: LessonCatalog.projects.length,
-          gridDelegate:
-              SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columnCount,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
             mainAxisExtent: 230,
           ),
           itemBuilder: (context, index) {
-            final project =
-                LessonCatalog.projects[index];
+            final project = LessonCatalog.projects[index];
 
             return _ProjectCard(
               project: project,
-              completedSteps:
-                  _projectCompletedSteps(project),
+              completedSteps: _projectCompletedSteps(project),
               onTap: () => _openProject(project),
             );
           },
@@ -168,15 +158,12 @@ class _LessonListScreenState
       },
       itemBuilder: (context, index) {
         final lesson = project.lessons[index];
-        final completed =
-            _completedStepCount(lesson);
+        final completed = _completedStepCount(lesson);
 
         return Card(
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: lesson.comingSoon
-                ? null
-                : () => _openLesson(lesson),
+            onTap: lesson.comingSoon ? null : () => _openLesson(lesson),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -187,17 +174,14 @@ class _LessonListScreenState
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
                             Expanded(
                               child: Text(
                                 lesson.title,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium,
+                                style: Theme.of(context).textTheme.titleMedium,
                               ),
                             ),
                             if (lesson.comingSoon)
@@ -229,8 +213,7 @@ class _LessonListScreenState
                             (tag) {
                               return Chip(
                                 label: Text(tag),
-                                visualDensity:
-                                    VisualDensity.compact,
+                                visualDensity: VisualDensity.compact,
                               );
                             },
                           ).toList(),
@@ -266,9 +249,7 @@ class _ProjectCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final totalSteps = project.totalStepCount;
 
-    final progress = totalSteps == 0
-        ? 0.0
-        : completedSteps / totalSteps;
+    final progress = totalSteps == 0 ? 0.0 : completedSteps / totalSteps;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -277,8 +258,7 @@ class _ProjectCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(22),
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
@@ -286,18 +266,13 @@ class _ProjectCard extends StatelessWidget {
                     width: 54,
                     height: 54,
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primaryContainer,
-                      borderRadius:
-                          BorderRadius.circular(16),
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Icon(
                       project.icon,
                       size: 30,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onPrimaryContainer,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
                     ),
                   ),
                   const Spacer(),
@@ -309,9 +284,7 @@ class _ProjectCard extends StatelessWidget {
               const SizedBox(height: 18),
               Text(
                 project.title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 6),
               Text(

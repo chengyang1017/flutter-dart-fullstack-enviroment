@@ -159,7 +159,9 @@ class WorkspaceGitRemote {
         'Git repository URL must identify a repository path.',
       );
     }
-    return source.endsWith('/') ? source.substring(0, source.length - 1) : source;
+    return source.endsWith('/')
+        ? source.substring(0, source.length - 1)
+        : source;
   }
 
   static String _validateRemoteName(String value) {
@@ -205,7 +207,10 @@ class WorkspaceGitRemote {
     }
     final parts = source.split('/');
     if (parts.any((part) =>
-        part.isEmpty || part == '.' || part == '..' || part.contains('\u0000'))) {
+        part.isEmpty ||
+        part == '.' ||
+        part == '..' ||
+        part.contains('\u0000'))) {
       throw const FormatException('Invalid Git Flutter project path.');
     }
     return source;

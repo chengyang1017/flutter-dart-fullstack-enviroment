@@ -186,38 +186,46 @@ class WorkspaceFileExplorer extends StatelessWidget {
   }
 
   Widget _draggable(WorkspaceEntry entry, Widget child) {
-    return LongPressDraggable<String>(
-      data: entry.path,
-      feedback: Material(
-        elevation: 6,
-        color: const Color(0xff242832),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                entry.isDirectory
-                    ? Icons.folder_outlined
-                    : entry.isBinary
-                        ? Icons.image_outlined
-                        : _fileIcon(entry.name),
-                size: 16,
-                color: Colors.white70,
+  return Draggable<String>(
+    data: entry.path,
+    feedback: Material(
+      elevation: 6,
+      color: const Color(0xff242832),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 8,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              entry.isDirectory
+                  ? Icons.folder_outlined
+                  : entry.isBinary
+                      ? Icons.image_outlined
+                      : _fileIcon(entry.name),
+              size: 16,
+              color: Colors.white70,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              entry.name,
+              style: const TextStyle(
+                color: Colors.white,
               ),
-              const SizedBox(width: 6),
-              Text(
-                entry.name,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-      childWhenDragging: Opacity(opacity: .35, child: child),
+    ),
+    childWhenDragging: Opacity(
+      opacity: .35,
       child: child,
-    );
-  }
+    ),
+    child: child,
+  );
+}
 
   bool _hasDirtyDescendant(String directory) {
     return workspace.entries.any(
@@ -236,7 +244,9 @@ class WorkspaceFileExplorer extends StatelessWidget {
     final name = await _askForName(
       context,
       title: type == WorkspaceEntryType.file ? '新建文件' : '新建文件夹',
-      hint: type == WorkspaceEntryType.file ? '例如 home_screen.dart' : '例如 screens',
+      hint: type == WorkspaceEntryType.file
+          ? '例如 home_screen.dart'
+          : '例如 screens',
     );
     if (name == null) return;
 
@@ -290,38 +300,59 @@ class WorkspaceFileExplorer extends StatelessWidget {
   }
 
   Future<String?> _askForName(
-    BuildContext context, {
-    required String title,
-    required String hint,
-    String? initialValue,
-  }) async {
-    final controller = TextEditingController(text: initialValue);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(hintText: hint),
-          onSubmitted: (value) => Navigator.pop(context, value.trim()),
+  BuildContext context, {
+  required String title,
+  required String hint,
+  String? initialValue,
+}) async {
+  var currentValue = initialValue ?? '';
+
+  final value = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: TextFormField(
+        initialValue: initialValue,
+        autofocus: true,
+        decoration: InputDecoration(
+          hintText: hint,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('确定'),
-          ),
-        ],
+        onChanged: (value) {
+          currentValue = value;
+        },
+        onFieldSubmitted: (value) {
+          Navigator.pop(
+            context,
+            value.trim(),
+          );
+        },
       ),
-    );
-    controller.dispose();
-    if (value == null || value.isEmpty) return null;
-    return value;
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(
+              context,
+              currentValue.trim(),
+            );
+          },
+          child: const Text('确定'),
+        ),
+      ],
+    ),
+  );
+
+  if (value == null || value.isEmpty) {
+    return null;
   }
+
+  return value;
+}
 
   void _runAction(BuildContext context, VoidCallback action) {
     try {

@@ -30,8 +30,7 @@ class StandardAnswerCodeView extends StatefulWidget {
   }
 }
 
-class _StandardAnswerCodeViewState
-    extends State<StandardAnswerCodeView> {
+class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
   late final CodeLineEditingController _controller;
 
   @override
@@ -83,8 +82,7 @@ class _StandardAnswerCodeViewState
         first.stepIndex == second.stepIndex &&
         first.line == second.line &&
         first.column == second.column &&
-        first.isStandardAnswer ==
-            second.isStandardAnswer;
+        first.isStandardAnswer == second.isStandardAnswer;
   }
 
   void _scheduleJump() {
@@ -114,21 +112,17 @@ class _StandardAnswerCodeViewState
       return;
     }
 
-    final lineIndex = (target.line - 1)
-        .clamp(0, lines.length - 1)
-        .toInt();
+    final lineIndex = (target.line - 1).clamp(0, lines.length - 1).toInt();
 
-    final offset = (target.column - 1)
-        .clamp(0, lines[lineIndex].length)
-        .toInt();
+    final offset =
+        (target.column - 1).clamp(0, lines[lineIndex].length).toInt();
 
     final position = CodeLinePosition(
       index: lineIndex,
       offset: offset,
     );
 
-    _controller.selection =
-        CodeLineSelection.collapsed(
+    _controller.selection = CodeLineSelection.collapsed(
       index: lineIndex,
       offset: offset,
     );

@@ -216,8 +216,7 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
             ],
             Row(
               children: [
-                if (_statusCode != null)
-                  Chip(label: Text('HTTP $_statusCode')),
+                if (_statusCode != null) Chip(label: Text('HTTP $_statusCode')),
                 if (_elapsedMilliseconds != null) ...[
                   const SizedBox(width: 8),
                   Chip(label: Text('${_elapsedMilliseconds} ms')),

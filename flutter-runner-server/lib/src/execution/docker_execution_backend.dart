@@ -172,6 +172,23 @@ class DockerExecutionBackend implements RunnerExecutionBackend {
     );
   }
 
+    @override
+  Future<void> pullWorkspace(RunnerSession session) async {
+    final container = _requireContainer(session);
+
+    final result = await _runDocker([
+      'cp',
+      '$container:/workspace/.',
+      session.directory.path,
+    ]);
+
+    _ensureSuccess(
+      session,
+      result,
+      'copy generated Flutter workspace from container',
+    );
+  }
+
   @override
   Future<void> syncWorkspace(
     RunnerSession session, {

@@ -85,9 +85,7 @@ class DartCodeFlowAnalyzer {
     final dartFiles = entries
         .where(
           (entry) =>
-              entry.isFile &&
-              entry.isText &&
-              entry.path.endsWith('.dart'),
+              entry.isFile && entry.isText && entry.path.endsWith('.dart'),
         )
         .toList(growable: false);
 
@@ -291,8 +289,8 @@ class DartCodeFlowAnalyzer {
     final children = <CodeFlowNode>[];
     final addedCallers = <String>{};
 
-    for (final caller in
-        callersByTargetKey[key] ?? const <_FlowDeclaration>[]) {
+    for (final caller
+        in callersByTargetKey[key] ?? const <_FlowDeclaration>[]) {
       if (!addedCallers.add(caller.key)) continue;
       children.add(
         _buildIncomingNode(

@@ -36,6 +36,19 @@ abstract interface class RunnerExecutionBackend {
     String workingDirectory = 'serverpod/practice_server',
   });
 
+  /// 把运行环境中的 /workspace 拉回宿主机。
+  ///
+  /// Local 模式本来就在宿主机，所以是 no-op。
+  /// Docker 模式需要 docker cp。
+  
+  //Future<void> pullWorkspace(RunnerSession session);
+
+  @override
+  Future<void> pullWorkspace(RunnerSession session) async {
+    // Local runner 本身就在 session.directory 中运行。
+    // 不需要复制任何东西。
+  }
+
   Future<void> syncWorkspace(
     RunnerSession session, {
     required Set<String> removedPaths,

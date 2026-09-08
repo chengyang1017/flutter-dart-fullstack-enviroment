@@ -13,7 +13,8 @@ class WorkspaceRemoteCatalog {
   final String revision;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'projects': projects.map((project) => project.toJson()).toList(growable: false),
+        'projects':
+            projects.map((project) => project.toJson()).toList(growable: false),
         'revision': revision,
       };
 
@@ -99,7 +100,6 @@ class WorkspaceRevisionConflict implements Exception {
   final String actualRevision;
 
   @override
-  String toString() =>
-      'WorkspaceRevisionConflict(workspaceId: $workspaceId, '
+  String toString() => 'WorkspaceRevisionConflict(workspaceId: $workspaceId, '
       'expected: $expectedRevision, actual: $actualRevision)';
 }
