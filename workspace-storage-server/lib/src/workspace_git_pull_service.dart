@@ -5,12 +5,48 @@ import 'workspace_git_remote_checker.dart';
 import 'workspace_secret_store.dart';
 import 'workspace_store.dart';
 
+class WorkspaceGitFlutterProjectCandidate {
+  const WorkspaceGitFlutterProjectCandidate({
+    required this.projectName,
+    required this.projectPath,
+  });
+
+  final String projectName;
+  final String? projectPath;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'projectName': projectName,
+        'projectPath': projectPath,
+      };
+}
+
+class WorkspaceGitProjectSelectionRequired implements Exception {
+  WorkspaceGitProjectSelectionRequired(
+    Iterable<WorkspaceGitFlutterProjectCandidate> candidates,
+  ) : candidates = List<WorkspaceGitFlutterProjectCandidate>.unmodifiable(
+          candidates,
+        ) {
+    if (this.candidates.length < 2) {
+      throw ArgumentError(
+        'Git project selection requires at least two candidates.',
+      );
+    }
+  }
+
+  final List<WorkspaceGitFlutterProjectCandidate> candidates;
+
+  @override
+  String toString() =>
+      'WorkspaceGitProjectSelectionRequired(${candidates.map((item) => item.projectPath ?? '(repository root)').join(', ')})';
+}
+
 class WorkspaceGitPullResult {
   const WorkspaceGitPullResult({
     required this.repositoryUrl,
     required this.branch,
     required this.provider,
     required this.projectName,
+    required this.projectPath,
     required this.remoteHead,
     required this.files,
     required this.importedFileCount,
@@ -21,6 +57,7 @@ class WorkspaceGitPullResult {
   final String branch;
   final String provider;
   final String projectName;
+  final String? projectPath;
   final String remoteHead;
 
   /// UTF-8 text is returned as-is. Binary files use the same NUL-prefixed
@@ -35,6 +72,7 @@ class WorkspaceGitPullResult {
         'branch': branch,
         'provider': provider,
         'projectName': projectName,
+        'projectPath': projectPath,
         'remoteHead': remoteHead,
         'files': files,
         'importedFileCount': importedFileCount,
@@ -295,6 +333,7 @@ class WorkspaceGitPullService {
         branch: branch,
         provider: provider,
         projectName: imported.projectName,
+        projectPath: imported.projectPath,
         remoteHead: remoteHead,
         files: imported.files,
         importedFileCount: imported.files.length,
@@ -362,9 +401,16 @@ class WorkspaceGitPullService {
       }
       if (candidates.length > 1) {
         candidates.sort();
-        throw FormatException(
-          'Git repository contains multiple runnable Flutter projects: '
-          '${candidates.join(', ')}. Bind a Flutter project path first.',
+        throw WorkspaceGitProjectSelectionRequired(
+          candidates.map(
+            (candidateRoot) => WorkspaceGitFlutterProjectCandidate(
+              projectName: _projectName(
+                pubspecs[candidateRoot]!,
+                candidateRoot,
+              ),
+              projectPath: candidateRoot.isEmpty ? null : candidateRoot,
+            ),
+          ),
         );
       }
       root = candidates.single;
@@ -413,6 +459,7 @@ class WorkspaceGitPullService {
 
     return _PortableFlutterProject(
       projectName: _projectName(pubspecs[root]!, root),
+      projectPath: root.isEmpty ? null : root,
       files: Map<String, String>.unmodifiable(files),
       ignoredFileCount: ignoredFileCount,
     );
@@ -567,11 +614,13 @@ class WorkspaceGitPullService {
 class _PortableFlutterProject {
   const _PortableFlutterProject({
     required this.projectName,
+    required this.projectPath,
     required this.files,
     required this.ignoredFileCount,
   });
 
   final String projectName;
+  final String? projectPath;
   final Map<String, String> files;
   final int ignoredFileCount;
 }

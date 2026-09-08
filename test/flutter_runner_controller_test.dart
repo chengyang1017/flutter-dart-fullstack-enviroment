@@ -111,4 +111,38 @@ void main() {
     expect(runner.logs, isEmpty);
     expect(runner.status, RunnerStatus.running);
   });
+
+  test('standalone Pub Get verifies only the current pubspec revision', () async {
+    final workspace = WorkspaceController.flutterPlayground(
+      mainDartContent: 'void main() {}',
+    );
+    final runner = FlutterRunnerController(
+      workspace: workspace,
+      client: MockFlutterRunnerClient(),
+    );
+    addTearDown(runner.dispose);
+    addTearDown(workspace.dispose);
+
+    expect(runner.canPubGet, isTrue);
+    expect(runner.isPubGetVerifiedForCurrentPubspec, isFalse);
+
+    final result = await runner.pubGet();
+    await settleRunnerEvents();
+
+    expect(result.hasPackageConfig, isTrue);
+    expect(runner.status, RunnerStatus.ready);
+    expect(runner.isPubGetVerifiedForCurrentPubspec, isTrue);
+    expect(
+      runner.logs.any((line) => line.contains('flutter pub get')),
+      isTrue,
+    );
+
+    final currentPubspec = workspace.entryAt('pubspec.yaml')!.content;
+    workspace.updateFileContent(
+      'pubspec.yaml',
+      '$currentPubspec\n# package changed\n',
+    );
+
+    expect(runner.isPubGetVerifiedForCurrentPubspec, isFalse);
+  });
 }

@@ -68,29 +68,94 @@ void main() {
       await _write(root, 'README.md', '# Remote\n');
     };
 
-    final request = await client.postUrl(
-      baseUri.resolve('workspaces/workspace-a/git/pull'),
+    final result = await _postPull(
+      client: client,
+      baseUri: baseUri,
+      body: <String, dynamic>{'secretName': 'GITHUB_TOKEN'},
     );
-    request.headers.set(
-      HttpHeaders.authorizationHeader,
-      'Bearer alice-token',
-    );
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode(<String, dynamic>{
-      'secretName': 'GITHUB_TOKEN',
-    }));
-    final response = await request.close();
-    final text = await utf8.decoder.bind(response).join();
-    final body = jsonDecode(text) as Map<String, dynamic>;
 
-    expect(response.statusCode, HttpStatus.ok);
-    expect(body['projectName'], 'pulled_app');
-    expect(body['remoteHead'], 'fedcba9876543210');
-    expect((body['files'] as Map)['lib/main.dart'], 'void main() {}\n');
-    expect(text, isNot(contains('github_pat_pull_only')));
+    expect(result.response.statusCode, HttpStatus.ok);
+    expect(result.body['projectName'], 'pulled_app');
+    expect(result.body['remoteHead'], 'fedcba9876543210');
+    expect(
+      (result.body['files'] as Map)['lib/main.dart'],
+      'void main() {}\n',
+    );
+    expect(result.text, isNot(contains('github_pat_pull_only')));
     expect(cloneExecutor.secret, 'github_pat_pull_only');
     expect(cloneExecutor.username, 'x-access-token');
   });
+
+  test('Git pull returns structured Flutter candidates for a monorepo', () async {
+    cloneExecutor.populate = (root) async {
+      await _write(
+        root,
+        'apps/customer/pubspec.yaml',
+        'name: customer_app\ndependencies:\n  flutter:\n    sdk: flutter\n',
+      );
+      await _write(root, 'apps/customer/lib/main.dart', 'void main() {}\n');
+      await _write(
+        root,
+        'apps/driver/pubspec.yaml',
+        'name: driver_app\ndependencies:\n  flutter:\n    sdk: flutter\n',
+      );
+      await _write(root, 'apps/driver/lib/main.dart', 'void main() {}\n');
+    };
+
+    final result = await _postPull(
+      client: client,
+      baseUri: baseUri,
+      body: const <String, dynamic>{},
+    );
+
+    expect(result.response.statusCode, HttpStatus.conflict);
+    expect(result.body['code'], 'git_flutter_project_selection_required');
+    final candidates = result.body['candidates'] as List<dynamic>;
+    expect(candidates, hasLength(2));
+    expect(candidates.first, <String, Object?>{
+      'projectName': 'customer_app',
+      'projectPath': 'apps/customer',
+    });
+    expect(candidates.last, <String, Object?>{
+      'projectName': 'driver_app',
+      'projectPath': 'apps/driver',
+    });
+  });
+}
+
+Future<_HttpResult> _postPull({
+  required HttpClient client,
+  required Uri baseUri,
+  required Map<String, dynamic> body,
+}) async {
+  final request = await client.postUrl(
+    baseUri.resolve('workspaces/workspace-a/git/pull'),
+  );
+  request.headers.set(
+    HttpHeaders.authorizationHeader,
+    'Bearer alice-token',
+  );
+  request.headers.contentType = ContentType.json;
+  request.write(jsonEncode(body));
+  final response = await request.close();
+  final text = await utf8.decoder.bind(response).join();
+  return _HttpResult(
+    response: response,
+    text: text,
+    body: jsonDecode(text) as Map<String, dynamic>,
+  );
+}
+
+class _HttpResult {
+  const _HttpResult({
+    required this.response,
+    required this.text,
+    required this.body,
+  });
+
+  final HttpClientResponse response;
+  final String text;
+  final Map<String, dynamic> body;
 }
 
 class _FakeCloneExecutor implements WorkspaceGitCloneExecutor {

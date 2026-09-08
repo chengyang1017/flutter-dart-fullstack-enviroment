@@ -66,6 +66,29 @@ class WorkspaceStorageHttpServer {
         return;
       }
 
+      if (request.method == 'GET' &&
+          segments.length == 1 &&
+          segments.first == 'me') {
+        final principal = await authenticator.authenticatePrincipal(request);
+        if (principal == null) {
+          await _sendError(
+            request.response,
+            HttpStatus.unauthorized,
+            'Authentication required.',
+          );
+          return;
+        }
+        await _sendJson(
+          request.response,
+          HttpStatus.ok,
+          <String, Object?>{
+            'userId': principal.userId,
+            'username': principal.username,
+          },
+        );
+        return;
+      }
+
       if (segments.isEmpty || segments.first != 'workspaces') {
         await _sendError(
           request.response,
@@ -310,6 +333,17 @@ class WorkspaceStorageHttpServer {
           'workspaceId': error.workspaceId,
           'expectedRemoteHead': error.expectedRemoteHead,
           'actualRemoteHead': error.actualRemoteHead,
+        },
+      );
+    } on WorkspaceGitProjectSelectionRequired catch (error) {
+      await _sendJson(
+        request.response,
+        HttpStatus.conflict,
+        <String, Object?>{
+          'code': 'git_flutter_project_selection_required',
+          'candidates': [
+            for (final candidate in error.candidates) candidate.toJson(),
+          ],
         },
       );
     } on WorkspaceDocumentNotFound catch (error) {

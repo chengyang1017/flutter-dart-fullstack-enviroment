@@ -48,7 +48,11 @@ class WorkspaceGitPullCoordinator {
     try {
       workspace.restoreSnapshot(pulled);
       await projects.snapshotStore.save(project.storageKey, pulled);
-      await projects.markGitSyncedHead(project.id, result.remoteHead);
+      await projects.markGitPullSynced(
+        project.id,
+        remoteHead: result.remoteHead,
+        projectPath: result.projectPath,
+      );
       return result;
     } catch (_) {
       workspace.restoreSnapshot(original);

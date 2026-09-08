@@ -1,9 +1,9 @@
 import 'package:http/http.dart' as http;
 
-import '../models/workspace_identity.dart';
 import 'http_workspace_git_remote_service.dart';
 import 'http_workspace_remote_persistence.dart';
 import 'http_workspace_secret_service.dart';
+import 'workspace_cloud_runtime.dart';
 import 'workspace_git_connection_coordinator.dart';
 
 class WorkspaceGitConnectionRuntime {
@@ -12,18 +12,23 @@ class WorkspaceGitConnectionRuntime {
     required this.coordinator,
   }) : _client = client;
 
-  static const apiUrl = String.fromEnvironment('WORKSPACE_STORAGE_API_URL');
-  static const accessToken = String.fromEnvironment('WORKSPACE_ACCESS_TOKEN');
-  static const userId = String.fromEnvironment(
-    'WORKSPACE_USER_ID',
-    defaultValue: 'workspace-user',
-  );
+  static String get apiUrl => WorkspaceCloudRuntime.apiUrl;
+  static String get accessToken => WorkspaceCloudRuntime.accessToken ?? '';
+
+  /// Stable owner id resolved by the storage server's authenticated `/me`
+  /// endpoint. It is never supplied by a client-side owner parameter.
+  static String get userId =>
+      WorkspaceCloudRuntime.identity?.userId ?? 'authenticated-workspace-user';
 
   final http.Client _client;
   final WorkspaceGitConnectionCoordinator coordinator;
 
   static WorkspaceGitConnectionRuntime? tryFromEnvironment() {
-    if (apiUrl.trim().isEmpty || accessToken.trim().isEmpty) return null;
+    final token = accessToken.trim();
+    if (apiUrl.trim().isEmpty || token.isEmpty) return null;
+
+    final identity = WorkspaceCloudRuntime.identity;
+    if (identity == null) return null;
 
     final baseUri = Uri.tryParse(apiUrl.trim());
     if (baseUri == null ||
@@ -34,19 +39,19 @@ class WorkspaceGitConnectionRuntime {
 
     final client = http.Client();
     final remote = HttpWorkspaceRemotePersistence(
-      identity: WorkspaceIdentity(userId: userId),
+      identity: identity,
       baseUri: baseUri,
-      accessToken: accessToken,
+      accessToken: token,
       client: client,
     );
     final secrets = HttpWorkspaceSecretService(
       baseUri: baseUri,
-      accessToken: accessToken,
+      accessToken: token,
       client: client,
     );
     final git = HttpWorkspaceGitRemoteService(
       baseUri: baseUri,
-      accessToken: accessToken,
+      accessToken: token,
       client: client,
     );
 

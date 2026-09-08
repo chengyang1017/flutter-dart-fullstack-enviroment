@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/workspace_project.dart';
+import '../services/workspace_cloud_runtime.dart';
+
+enum _CompactProjectAction {
+  rename,
+  delete,
+}
 
 class WorkspaceProjectBar extends StatelessWidget {
   const WorkspaceProjectBar({
@@ -33,6 +39,8 @@ class WorkspaceProjectBar extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final showStatus = constraints.maxWidth >= 700;
+            final compactActions = constraints.maxWidth < 600;
+
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
@@ -88,25 +96,34 @@ class WorkspaceProjectBar extends StatelessWidget {
                       onPressed: onKeep,
                       icon: const Icon(Icons.bookmark_add_outlined, size: 18),
                     ),
-                  IconButton(
-                    key: const ValueKey('workspace-project-rename'),
-                    tooltip: '重命名当前练习',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: onRename,
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                  ),
-                  IconButton(
-                    key: const ValueKey('workspace-project-delete'),
-                    tooltip: '删除当前本地练习',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: projects.length > 1 ? onDelete : null,
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                  ),
+                  if (compactActions)
+                    _CompactProjectMenu(
+                      canDelete: projects.length > 1,
+                      onRename: onRename,
+                      onDelete: onDelete,
+                    )
+                  else ...[
+                    IconButton(
+                      key: const ValueKey('workspace-project-rename'),
+                      tooltip: '重命名当前练习',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onRename,
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                    ),
+                    IconButton(
+                      key: const ValueKey('workspace-project-delete'),
+                      tooltip: '删除当前项目',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: projects.length > 1 ? onDelete : null,
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                    ),
+                  ],
                   if (showStatus) ...[
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
                         _statusText(activeProject),
+                        key: const ValueKey('workspace-project-namespace'),
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
@@ -121,32 +138,28 @@ class WorkspaceProjectBar extends StatelessWidget {
     );
   }
 
-  String _statusText(
-    WorkspaceProject project,
-  ) {
+  String _statusText(WorkspaceProject project) {
+    final identity = WorkspaceCloudRuntime.identity;
+    final namespace = identity == null
+        ? project.slug
+        : '${identity.accountNamespace} / ${project.slug}';
+    final storage = identity == null ? '浏览器本地保存' : '云端保存';
+
     if (project.kind == WorkspaceProjectKind.generatedFlutter) {
-      final platforms =
-          project.flutterPlatforms.map(_platformLabel).join(' · ');
-
-      return platforms.isEmpty
-          ? 'Flutter 项目 · 浏览器本地保存'
-          : 'Flutter · $platforms';
+      final platforms = project.flutterPlatforms.map(_platformLabel).join(' · ');
+      final projectType = platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
+      return '$namespace · $projectType · $storage';
     }
-
     if (project.kind == WorkspaceProjectKind.importedFlutter) {
-      return '已导入 Flutter Workspace · 浏览器本地保存';
+      return '$namespace · 导入的 Flutter 项目 · $storage';
     }
-
     if (project.lifecycle == WorkspaceLifecycle.temporary) {
-      return '临时练习 · 浏览器自动保存';
+      return '$namespace · 临时练习 · $storage';
     }
-
-    return '已保留 Workspace · 浏览器本地保存';
+    return '$namespace · Workspace · $storage';
   }
 
-  String _platformLabel(
-    String platform,
-  ) {
+  String _platformLabel(String platform) {
     return switch (platform) {
       'android' => 'Android',
       'ios' => 'iOS',
@@ -156,5 +169,57 @@ class WorkspaceProjectBar extends StatelessWidget {
       'linux' => 'Linux',
       _ => platform,
     };
+  }
+}
+
+class _CompactProjectMenu extends StatelessWidget {
+  const _CompactProjectMenu({
+    required this.canDelete,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  final bool canDelete;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_CompactProjectAction>(
+      key: const ValueKey('workspace-project-more'),
+      tooltip: '更多项目操作',
+      onSelected: (action) {
+        switch (action) {
+          case _CompactProjectAction.rename:
+            onRename();
+            break;
+          case _CompactProjectAction.delete:
+            onDelete();
+            break;
+        }
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: _CompactProjectAction.rename,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.edit_outlined),
+            title: Text('重命名'),
+          ),
+        ),
+        PopupMenuItem(
+          value: _CompactProjectAction.delete,
+          enabled: canDelete,
+          child: const ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.delete_outline),
+            title: Text('删除'),
+          ),
+        ),
+      ],
+      icon: const Icon(Icons.more_horiz_rounded, size: 19),
+    );
   }
 }

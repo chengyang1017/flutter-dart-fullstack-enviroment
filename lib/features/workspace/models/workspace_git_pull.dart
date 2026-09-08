@@ -1,12 +1,64 @@
 import 'workspace_entry.dart';
 import 'workspace_snapshot.dart';
 
+class WorkspaceGitFlutterProjectCandidate {
+  const WorkspaceGitFlutterProjectCandidate({
+    required this.projectName,
+    this.projectPath,
+  });
+
+  final String projectName;
+  final String? projectPath;
+
+  String get displayPath => projectPath ?? '(repository root)';
+
+  factory WorkspaceGitFlutterProjectCandidate.fromJson(
+    Map<dynamic, dynamic> json,
+  ) {
+    final projectName = json['projectName'];
+    final projectPath = json['projectPath'];
+    if (projectName is! String ||
+        projectName.trim().isEmpty ||
+        (projectPath != null && projectPath is! String)) {
+      throw const FormatException('Invalid Git Flutter project candidate.');
+    }
+
+    return WorkspaceGitFlutterProjectCandidate(
+      projectName: projectName.trim(),
+      projectPath: WorkspaceGitPullResult.validateProjectPath(
+        projectPath as String?,
+      ),
+    );
+  }
+}
+
+class WorkspaceGitProjectSelectionRequired implements Exception {
+  WorkspaceGitProjectSelectionRequired(
+    Iterable<WorkspaceGitFlutterProjectCandidate> candidates,
+  ) : candidates = List<WorkspaceGitFlutterProjectCandidate>.unmodifiable(
+          candidates,
+        ) {
+    if (this.candidates.length < 2) {
+      throw ArgumentError(
+        'Git project selection requires at least two candidates.',
+      );
+    }
+  }
+
+  final List<WorkspaceGitFlutterProjectCandidate> candidates;
+
+  @override
+  String toString() =>
+      'WorkspaceGitProjectSelectionRequired(${candidates.map((item) => item.displayPath).join(', ')})';
+}
+
 class WorkspaceGitPullResult {
   WorkspaceGitPullResult({
     required this.repositoryUrl,
     required this.branch,
     required this.provider,
     required this.projectName,
+    this.projectPath,
     required this.remoteHead,
     required Map<String, String> files,
     required this.importedFileCount,
@@ -17,6 +69,7 @@ class WorkspaceGitPullResult {
   final String branch;
   final String provider;
   final String projectName;
+  final String? projectPath;
   final String remoteHead;
 
   /// Text files are raw UTF-8 strings. Binary files use the same guarded
@@ -30,6 +83,7 @@ class WorkspaceGitPullResult {
     final branch = json['branch'];
     final provider = json['provider'];
     final projectName = json['projectName'];
+    final projectPath = json['projectPath'];
     final remoteHead = json['remoteHead'];
     final importedFileCount = json['importedFileCount'];
     final ignoredFileCount = json['ignoredFileCount'];
@@ -40,6 +94,7 @@ class WorkspaceGitPullResult {
         provider is! String ||
         projectName is! String ||
         projectName.isEmpty ||
+        (projectPath != null && projectPath is! String) ||
         remoteHead is! String ||
         remoteHead.isEmpty ||
         importedFileCount is! int ||
@@ -50,6 +105,7 @@ class WorkspaceGitPullResult {
       throw const FormatException('Invalid Git pull response.');
     }
 
+    final normalizedProjectPath = validateProjectPath(projectPath as String?);
     final files = <String, String>{};
     for (final entry in rawFiles.entries) {
       if (entry.key is! String || entry.value is! String) {
@@ -84,6 +140,7 @@ class WorkspaceGitPullResult {
       branch: branch,
       provider: provider,
       projectName: projectName,
+      projectPath: normalizedProjectPath,
       remoteHead: remoteHead,
       files: files,
       importedFileCount: importedFileCount,
@@ -155,6 +212,30 @@ class WorkspaceGitPullResult {
   }
 
   static int _depth(String path) => '/'.allMatches(path).length;
+
+  static String? validateProjectPath(String? value) {
+    if (value == null) return null;
+    var source = value.trim();
+    if (source.isEmpty) return null;
+    while (source.endsWith('/')) {
+      source = source.substring(0, source.length - 1);
+    }
+    if (source.isEmpty ||
+        source.startsWith('/') ||
+        source.contains('\\') ||
+        source.contains('//')) {
+      throw const FormatException(
+        'Git pull response contains an unsafe project path.',
+      );
+    }
+    final segments = source.split('/');
+    if (segments.any((part) => part.isEmpty || part == '.' || part == '..')) {
+      throw const FormatException(
+        'Git pull response contains an unsafe project path.',
+      );
+    }
+    return source;
+  }
 
   static void _validatePortablePath(String path) {
     if (path.isEmpty || path.startsWith('/') || path.contains('\\')) {

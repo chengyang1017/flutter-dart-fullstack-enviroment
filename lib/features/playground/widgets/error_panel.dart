@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../runner/controllers/flutter_runner_controller.dart';
 import '../controllers/playground_controller.dart';
 
 class ErrorPanel extends StatelessWidget {
@@ -14,6 +15,15 @@ class ErrorPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeRunner = FlutterRunnerController.activeInstance;
+
+    // Quick Preview uses a deliberately limited parser. When a real Flutter
+    // Runner is connected, its compiler/analyzer and console are authoritative;
+    // a Quick Preview parse failure must never look like a project build error.
+    if (activeRunner != null && !activeRunner.isMock) {
+      return const SizedBox.shrink();
+    }
+
     if (controller.error == null && controller.warnings.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -31,8 +41,8 @@ class ErrorPanel extends StatelessWidget {
           ),
           title: Text(
             controller.error == null
-                ? '警告 (${controller.warnings.length})'
-                : '解析错误',
+                ? '快速预览警告 (${controller.warnings.length})'
+                : '快速预览解析错误',
           ),
           children: [
             ConstrainedBox(

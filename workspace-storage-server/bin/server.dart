@@ -10,18 +10,16 @@ Future<void> main() async {
   final storageRoot = environment['WORKSPACE_STORAGE_ROOT'] ?? '.workspace-storage';
   final temporaryTtlHours =
       int.tryParse(environment['TEMPORARY_WORKSPACE_TTL_HOURS'] ?? '') ?? 168;
+  final sessionTtlDays =
+      int.tryParse(environment['WORKSPACE_SESSION_TTL_DAYS'] ?? '') ?? 30;
+
   if (temporaryTtlHours <= 0) {
     stderr.writeln('TEMPORARY_WORKSPACE_TTL_HOURS must be greater than zero.');
     exitCode = 64;
     return;
   }
-
-  final authTokens = environment['WORKSPACE_AUTH_TOKENS'];
-  if (authTokens == null || authTokens.trim().isEmpty) {
-    stderr.writeln(
-      'WORKSPACE_AUTH_TOKENS is required. Example: '
-      '''{"dev-token":"user-1"}''',
-    );
+  if (sessionTtlDays <= 0) {
+    stderr.writeln('WORKSPACE_SESSION_TTL_DAYS must be greater than zero.');
     exitCode = 64;
     return;
   }
@@ -47,9 +45,29 @@ Future<void> main() async {
     return;
   }
 
-  final authenticator = StaticBearerWorkspaceAuthenticator.fromJson(authTokens);
   final root = Directory(storageRoot);
-  final handler = WorkspaceStorageHttpServer(
+  final accounts = FileWorkspaceAccountStore(
+    root,
+    sessionTtl: Duration(days: sessionTtlDays),
+  );
+
+  final authenticators = <WorkspaceAuthenticator>[accounts];
+  final authTokens = environment['WORKSPACE_AUTH_TOKENS'];
+  StaticBearerWorkspaceAuthenticator? legacyAuthenticator;
+  if (authTokens != null && authTokens.trim().isNotEmpty) {
+    try {
+      legacyAuthenticator = StaticBearerWorkspaceAuthenticator.fromJson(authTokens);
+      authenticators.insert(0, legacyAuthenticator);
+    } on FormatException catch (error) {
+      stderr.writeln(error.message);
+      exitCode = 64;
+      return;
+    }
+  }
+
+  final authenticator = CompositeWorkspaceAuthenticator(authenticators);
+  final allowedOrigin = environment['ALLOWED_ORIGIN'] ?? '*';
+  final workspaceHandler = WorkspaceStorageHttpServer(
     store: FileWorkspaceStore(
       root,
       temporaryWorkspaceTtl: Duration(hours: temporaryTtlHours),
@@ -59,7 +77,13 @@ Future<void> main() async {
       masterKey: decodedSecretMasterKey,
     ),
     authenticator: authenticator,
-    allowedOrigin: environment['ALLOWED_ORIGIN'] ?? '*',
+    allowedOrigin: allowedOrigin,
+  );
+  final handler = WorkspaceAuthHttpHandler(
+    accounts: accounts,
+    workspaceHandler: workspaceHandler,
+    legacyAuthenticator: legacyAuthenticator,
+    allowedOrigin: allowedOrigin,
   );
 
   final server = await HttpServer.bind(host, port);
@@ -68,7 +92,13 @@ Future<void> main() async {
   );
   stdout.writeln('Storage root: ${root.absolute.path}');
   stdout.writeln('Temporary Workspace TTL: $temporaryTtlHours hours');
+  stdout.writeln('Workspace account sessions: $sessionTtlDays days');
+  stdout.writeln('Workspace password hashing: PBKDF2-HMAC-SHA256');
   stdout.writeln('Workspace secret vault: AES-GCM-256 enabled');
+  if (authTokens != null && authTokens.trim().isNotEmpty) {
+    stdout.writeln('Static development bearer identities: enabled');
+    stdout.writeln('Legacy account claiming: enabled');
+  }
 
   final subscriptions = <StreamSubscription<ProcessSignal>>[];
   Future<void> shutdown(ProcessSignal signal) async {

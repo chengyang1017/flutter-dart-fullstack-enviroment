@@ -71,11 +71,46 @@ void main() {
     expect(executor.username, 'x-access-token');
     expect(executor.secret, 'github_pat_runtime_only');
     expect(result.projectName, 'pulled_app');
+    expect(result.projectPath, 'apps/mobile');
+    expect(result.toJson()['projectPath'], 'apps/mobile');
     expect(result.remoteHead, '0123456789abcdef');
     expect(result.files['lib/main.dart'], 'void main() {}\n');
     expect(result.files['README.md'], '# Pulled\n');
     expect(result.files, isNot(contains('android/local.properties')));
     expect(result.files, isNot(contains('tools/readme.txt')));
+  });
+
+  test('pull returns named candidates instead of guessing in a multi-app repo',
+      () async {
+    executor.populate = (root) async {
+      await _write(
+        root,
+        'apps/customer/pubspec.yaml',
+        'name: customer_app\ndependencies:\n  flutter:\n    sdk: flutter\n',
+      );
+      await _write(root, 'apps/customer/lib/main.dart', 'void main() {}\n');
+      await _write(
+        root,
+        'apps/driver/pubspec.yaml',
+        'name: driver_app\ndependencies:\n  flutter:\n    sdk: flutter\n',
+      );
+      await _write(root, 'apps/driver/lib/main.dart', 'void main() {}\n');
+      await _write(root, 'apps/api/package.json', '{}\n');
+    };
+
+    try {
+      await pullService.pull(
+        userId: 'alice',
+        workspaceId: 'workspace-a',
+      );
+      fail('Expected WorkspaceGitProjectSelectionRequired.');
+    } on WorkspaceGitProjectSelectionRequired catch (error) {
+      expect(error.candidates, hasLength(2));
+      expect(error.candidates.first.projectName, 'customer_app');
+      expect(error.candidates.first.projectPath, 'apps/customer');
+      expect(error.candidates.last.projectName, 'driver_app');
+      expect(error.candidates.last.projectPath, 'apps/driver');
+    }
   });
 
   test('pull preserves binary portable assets with the binary envelope', () async {
@@ -99,6 +134,7 @@ void main() {
       workspaceId: 'workspace-a',
     );
 
+    expect(result.projectPath, isNull);
     final payload = result.files['assets/logo.png'];
     expect(payload, isNotNull);
     expect(payload, startsWith(WorkspaceGitPullService.binaryFilePrefix));
