@@ -12,6 +12,14 @@ enum WorkspaceLifecycle {
   saved,
 }
 
+String normalizeWorkspaceProjectSlug(String value) {
+  var slug = value.trim().toLowerCase();
+  slug = slug.replaceAll(RegExp(r'[\s/\\?#%]+'), '-');
+  slug = slug.replaceAll(RegExp(r'-+'), '-');
+  slug = slug.replaceAll(RegExp(r'^[-.]+|[-.]+$'), '');
+  return slug.isEmpty ? 'project' : slug;
+}
+
 class WorkspaceProject {
   const WorkspaceProject({
     required this.id,
@@ -20,15 +28,17 @@ class WorkspaceProject {
     required this.kind,
     required this.createdAt,
     required this.updatedAt,
+    String? slug,
     this.lifecycle = WorkspaceLifecycle.saved,
     this.firebaseCapabilities = const <FirebaseCapability>{},
     this.flutterPlatforms = const <String>{},
     this.gitRemote,
-  });
+  }) : _slug = slug;
 
   final String id;
   final String name;
   final String storageKey;
+  final String? _slug;
   final WorkspaceProjectKind kind;
   final WorkspaceLifecycle lifecycle;
   final DateTime createdAt;
@@ -40,8 +50,14 @@ class WorkspaceProject {
 
   final WorkspaceGitRemote? gitRemote;
 
+  /// Human-readable project route segment. The immutable [id] remains the
+  /// storage identity, while this slug can change when the project is renamed.
+  String get slug => normalizeWorkspaceProjectSlug(_slug ?? name);
+
   WorkspaceProject copyWith({
     String? name,
+    String? slug,
+    bool clearSlug = false,
     WorkspaceLifecycle? lifecycle,
     DateTime? updatedAt,
     Set<FirebaseCapability>? firebaseCapabilities,
@@ -53,6 +69,7 @@ class WorkspaceProject {
       id: id,
       name: name ?? this.name,
       storageKey: storageKey,
+      slug: clearSlug ? null : slug ?? _slug,
       kind: kind,
       lifecycle: lifecycle ?? this.lifecycle,
       createdAt: createdAt,
@@ -66,6 +83,7 @@ class WorkspaceProject {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'name': name,
+        'slug': slug,
         'storageKey': storageKey,
         'kind': kind.name,
         'lifecycle': lifecycle.name,
@@ -94,6 +112,11 @@ class WorkspaceProject {
       throw const FormatException(
         'Invalid workspace project metadata.',
       );
+    }
+
+    final rawSlug = json['slug'];
+    if (rawSlug != null && rawSlug is! String) {
+      throw const FormatException('Invalid Workspace project slug.');
     }
 
     final kindName = json['kind'];
@@ -141,6 +164,7 @@ class WorkspaceProject {
     return WorkspaceProject(
       id: id,
       name: name,
+      slug: rawSlug is String && rawSlug.trim().isNotEmpty ? rawSlug : null,
       storageKey: storageKey,
       kind: kind,
       lifecycle: lifecycle,

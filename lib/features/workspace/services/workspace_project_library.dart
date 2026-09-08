@@ -18,6 +18,7 @@ class WorkspaceProjectLibrary {
         WorkspaceProject(
           id: defaultProjectId,
           name: 'Flutter Practice',
+          slug: 'flutter-practice',
           storageKey: defaultStorageKey,
           kind: WorkspaceProjectKind.practice,
           lifecycle: WorkspaceLifecycle.saved,
@@ -26,6 +27,8 @@ class WorkspaceProjectLibrary {
         ),
       );
     }
+
+    _ensureUniqueProjectSlugs();
 
     final storedActive = catalogStore.loadActiveProjectId();
     _activeProjectId = _projects.any((project) => project.id == storedActive)
@@ -67,6 +70,14 @@ class WorkspaceProjectLibrary {
     return null;
   }
 
+  WorkspaceProject? projectBySlug(String slug) {
+    final normalized = normalizeWorkspaceProjectSlug(slug);
+    for (final project in _projects) {
+      if (project.slug == normalized) return project;
+    }
+    return null;
+  }
+
   Future<WorkspaceProject> createPractice(String name) async {
     final cleanName = _validateName(name);
     final now = DateTime.now().toUtc();
@@ -74,6 +85,7 @@ class WorkspaceProjectLibrary {
     final project = WorkspaceProject(
       id: id,
       name: cleanName,
+      slug: _uniqueSlug(cleanName),
       storageKey: 'workspace:$id',
       kind: WorkspaceProjectKind.practice,
       lifecycle: WorkspaceLifecycle.temporary,
@@ -99,6 +111,7 @@ class WorkspaceProjectLibrary {
     final project = WorkspaceProject(
       id: id,
       name: cleanName,
+      slug: _uniqueSlug(cleanName),
       storageKey: 'workspace:$id',
       kind: WorkspaceProjectKind.generatedFlutter,
       lifecycle: WorkspaceLifecycle.saved,
@@ -148,6 +161,7 @@ class WorkspaceProjectLibrary {
     final project = WorkspaceProject(
       id: id,
       name: cleanName,
+      slug: _uniqueSlug(cleanName),
       storageKey: 'workspace:$id',
       kind: WorkspaceProjectKind.importedFlutter,
       lifecycle: WorkspaceLifecycle.saved,
@@ -184,9 +198,11 @@ class WorkspaceProjectLibrary {
 
   Future<void> renameProject(String id, String name) async {
     final index = _projectIndex(id);
+    final cleanName = _validateName(name);
     final now = DateTime.now().toUtc();
     _projects[index] = _projects[index].copyWith(
-      name: _validateName(name),
+      name: cleanName,
+      slug: _uniqueSlug(cleanName, excludingProjectId: id),
       updatedAt: now,
     );
     await catalogStore.saveProjects(projects);
@@ -310,6 +326,42 @@ class WorkspaceProjectLibrary {
       throw ArgumentError('Workspace project does not exist: $id');
     }
     return index;
+  }
+
+  void _ensureUniqueProjectSlugs() {
+    final used = <String>{};
+    for (var index = 0; index < _projects.length; index += 1) {
+      final project = _projects[index];
+      final base = project.slug;
+      var candidate = base;
+      var suffix = 2;
+      while (used.contains(candidate)) {
+        candidate = '$base-$suffix';
+        suffix += 1;
+      }
+      used.add(candidate);
+      if (candidate != project.slug) {
+        _projects[index] = project.copyWith(slug: candidate);
+      }
+    }
+  }
+
+  String _uniqueSlug(
+    String name, {
+    String? excludingProjectId,
+  }) {
+    final base = normalizeWorkspaceProjectSlug(name);
+    final used = _projects
+        .where((project) => project.id != excludingProjectId)
+        .map((project) => project.slug)
+        .toSet();
+    if (!used.contains(base)) return base;
+
+    var suffix = 2;
+    while (used.contains('$base-$suffix')) {
+      suffix += 1;
+    }
+    return '$base-$suffix';
   }
 
   String _validateName(String value) {
