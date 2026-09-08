@@ -23,9 +23,9 @@ class CodeRelationshipOverlay extends StatelessWidget {
 
   static const _maxFocusedWires = 6;
   static const _maxFallbackWires = 4;
-  static const _laneStartX = 16.0;
+  static const _laneRightInset = 30.0;
   static const _laneSpacing = 24.0;
-  static const _codeDockX = 5.0;
+  static const _tokenGap = 7.0;
 
   final List<CodeRelationship> relationships;
   final Set<int> activeRelationshipIndexes;
@@ -77,7 +77,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
               ),
             ),
             for (final layout in layouts) ...[
-              if (layout.sourceVisible)
+              if (layout.sourceDockVisible)
                 _EndpointHitTarget(
                   point: layout.sourceDock,
                   tooltip: '${layout.relationship.kind.label}: '
@@ -86,7 +86,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
                   onExit: () => onHoverRelationship(null),
                   onTap: () => onJumpTo(layout.relationship.target),
                 ),
-              if (layout.targetVisible)
+              if (layout.targetDockVisible)
                 _EndpointHitTarget(
                   point: layout.targetDock,
                   tooltip: '${layout.relationship.kind.label}: '
@@ -98,7 +98,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
             ],
             Positioned(
               top: 6,
-              right: 6,
+              right: 24,
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -215,11 +215,17 @@ class CodeRelationshipOverlay extends StatelessWidget {
   }) {
     final rawSourceY = _yFor(relationship.source);
     final rawTargetY = _yFor(relationship.target);
-    final sourceVisible = _isVerticallyVisible(rawSourceY, size);
-    final targetVisible = _isVerticallyVisible(rawTargetY, size);
 
-    final requestedX = _laneStartX + (laneIndex * _laneSpacing);
-    final laneX = requestedX.clamp(14.0, size.width - 10.0).toDouble();
+    // Lanes live inside the editor, immediately to the left of its scrollbar.
+    // Each selected relationship gets a separate lane with a generous gap.
+    final rightMostLane = math.max(
+      codeOriginX + 48,
+      size.width - _laneRightInset,
+    );
+    final laneX = math.max(
+      codeOriginX + 24,
+      rightMostLane - (laneIndex * _laneSpacing),
+    );
 
     final source = Offset(
       laneX,
@@ -229,8 +235,26 @@ class CodeRelationshipOverlay extends StatelessWidget {
       laneX,
       rawTargetY.clamp(0, size.height).toDouble(),
     );
-    final sourceDock = Offset(_codeDockX, source.dy);
-    final targetDock = Offset(_codeDockX, target.dy);
+
+    final rawSourceDockX = _dockXFor(relationship.source);
+    final rawTargetDockX = _dockXFor(relationship.target);
+    final sourceDockX = math.min(rawSourceDockX, laneX - 10);
+    final targetDockX = math.min(rawTargetDockX, laneX - 10);
+
+    final sourceDock = Offset(sourceDockX, source.dy);
+    final targetDock = Offset(targetDockX, target.dy);
+    final sourceDockVisible = _isAnchorVisible(
+      x: rawSourceDockX,
+      y: rawSourceY,
+      laneX: laneX,
+      size: size,
+    );
+    final targetDockVisible = _isAnchorVisible(
+      x: rawTargetDockX,
+      y: rawTargetY,
+      laneX: laneX,
+      size: size,
+    );
 
     return _WireLayout(
       relationship: relationship,
@@ -240,14 +264,22 @@ class CodeRelationshipOverlay extends StatelessWidget {
       sourceDock: sourceDock,
       targetDock: targetDock,
       active: active,
-      sourceVisible: sourceVisible,
-      targetVisible: targetVisible,
+      sourceDockVisible: sourceDockVisible,
+      targetDockVisible: targetDockVisible,
       bothOutsideSameSide: _bothOutsideSameSide(
         rawSourceY,
         rawTargetY,
         size,
       ),
     );
+  }
+
+  double _dockXFor(CodeRelationshipAnchor anchor) {
+    final tokenEndColumn = (anchor.column - 1) + anchor.length;
+    return codeOriginX +
+        (tokenEndColumn * charWidth) -
+        horizontalScrollOffset +
+        _tokenGap;
   }
 
   double _yFor(CodeRelationshipAnchor anchor) {
@@ -258,6 +290,17 @@ class CodeRelationshipOverlay extends StatelessWidget {
   }
 
   bool _isVerticallyVisible(double y, Size size) => y >= 0 && y <= size.height;
+
+  bool _isAnchorVisible({
+    required double x,
+    required double y,
+    required double laneX,
+    required Size size,
+  }) {
+    return _isVerticallyVisible(y, size) &&
+        x >= codeOriginX - charWidth &&
+        x <= laneX - 8;
+  }
 
   bool _bothOutsideSameSide(double a, double b, Size size) {
     if (a < 0 && b < 0) return true;
@@ -327,8 +370,8 @@ class _WireLayout {
     required this.sourceDock,
     required this.targetDock,
     required this.active,
-    required this.sourceVisible,
-    required this.targetVisible,
+    required this.sourceDockVisible,
+    required this.targetDockVisible,
     required this.bothOutsideSameSide,
   });
 
@@ -339,8 +382,8 @@ class _WireLayout {
   final Offset sourceDock;
   final Offset targetDock;
   final bool active;
-  final bool sourceVisible;
-  final bool targetVisible;
+  final bool sourceDockVisible;
+  final bool targetDockVisible;
   final bool bothOutsideSameSide;
 }
 
@@ -406,11 +449,13 @@ class _RelationshipWirePainter extends CustomPainter {
         ..color = coreColor
         ..style = PaintingStyle.fill;
 
-      if (layout.sourceVisible) {
+      if (layout.sourceDockVisible) {
         _drawSourceMarker(canvas, layout, markerPaint, highlighted);
       }
 
-      if (layout.targetVisible) {
+      // The arrow is drawn only at the real target token. If that token is
+      // outside the viewport, the visible wire simply continues off-screen.
+      if (layout.targetDockVisible) {
         _drawCodeFacingArrow(canvas, layout, markerPaint, highlighted);
       }
     }
@@ -419,7 +464,7 @@ class _RelationshipWirePainter extends CustomPainter {
   Path _pathFor(_WireLayout layout) {
     final path = Path();
 
-    if (layout.sourceVisible) {
+    if (layout.sourceDockVisible) {
       path
         ..moveTo(layout.sourceDock.dx, layout.sourceDock.dy)
         ..lineTo(layout.source.dx, layout.source.dy);
@@ -429,7 +474,7 @@ class _RelationshipWirePainter extends CustomPainter {
       ..moveTo(layout.source.dx, layout.source.dy)
       ..lineTo(layout.target.dx, layout.target.dy);
 
-    if (layout.targetVisible) {
+    if (layout.targetDockVisible) {
       path.lineTo(layout.targetDock.dx, layout.targetDock.dy);
     }
 
