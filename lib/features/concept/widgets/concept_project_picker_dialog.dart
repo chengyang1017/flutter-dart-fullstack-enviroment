@@ -78,27 +78,25 @@ class _ConceptProjectPickerDialogState
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 360),
                     child: SingleChildScrollView(
-                      child: RadioGroup<int>(
-                        groupValue: selectedIndex,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => selectedIndex = value);
-                          }
-                        },
-                        child: Column(
-                          children: [
-                            for (var index = 0;
-                                index < candidates.length;
-                                index++)
-                              _ProjectCandidateTile(
-                                key: ValueKey(
-                                  'concept-project-candidate-${candidates[index].projectRoot}',
-                                ),
-                                index: index,
-                                candidate: candidates[index],
+                      child: Column(
+                        children: [
+                          for (var index = 0;
+                              index < candidates.length;
+                              index++)
+                            _ProjectCandidateTile(
+                              key: ValueKey(
+                                'concept-project-candidate-${candidates[index].projectRoot}',
                               ),
-                          ],
-                        ),
+                              index: index,
+                              candidate: candidates[index],
+                              selectedIndex: selectedIndex,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => selectedIndex = value);
+                                }
+                              },
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -135,15 +133,21 @@ class _ProjectCandidateTile extends StatelessWidget {
     super.key,
     required this.index,
     required this.candidate,
+    required this.selectedIndex,
+    required this.onChanged,
   });
 
   final int index;
   final ConceptFlutterProjectCandidate candidate;
+  final int selectedIndex;
+  final ValueChanged<int?> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return RadioListTile<int>(
       value: index,
+      groupValue: selectedIndex,
+      onChanged: onChanged,
       title: Text(
         candidate.projectName,
         style: const TextStyle(fontWeight: FontWeight.w700),
