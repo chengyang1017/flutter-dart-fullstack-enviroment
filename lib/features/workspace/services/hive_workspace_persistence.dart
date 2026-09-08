@@ -16,6 +16,8 @@ class HiveWorkspacePersistence implements WorkspacePersistence {
   static const snapshotBoxName = 'workspace_snapshots';
   static const libraryBoxName = 'workspace_library';
 
+  static WorkspacePersistence? _runtimePersistence;
+
   @override
   final WorkspaceProjectCatalogStore catalogStore;
 
@@ -31,7 +33,8 @@ class HiveWorkspacePersistence implements WorkspacePersistence {
     }
   }
 
-  static HiveWorkspacePersistence? tryFromOpenBoxes() {
+  /// Raw browser persistence used as the local cache beneath cloud storage.
+  static HiveWorkspacePersistence? localFromOpenBoxes() {
     if (!Hive.isBoxOpen(snapshotBoxName) || !Hive.isBoxOpen(libraryBoxName)) {
       return null;
     }
@@ -40,5 +43,16 @@ class HiveWorkspacePersistence implements WorkspacePersistence {
       snapshotBox: Hive.box<dynamic>(snapshotBoxName),
       libraryBox: Hive.box<dynamic>(libraryBoxName),
     );
+  }
+
+  /// Normal application persistence boundary.
+  ///
+  /// When cloud storage is configured this returns the cloud-backed adapter;
+  /// otherwise it falls back to the browser Hive implementation.
+  static WorkspacePersistence? tryFromOpenBoxes() =>
+      _runtimePersistence ?? localFromOpenBoxes();
+
+  static void useRuntimePersistence(WorkspacePersistence persistence) {
+    _runtimePersistence = persistence;
   }
 }
