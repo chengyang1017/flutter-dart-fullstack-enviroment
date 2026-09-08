@@ -82,27 +82,29 @@ class CodeRelationshipOverlay extends StatelessWidget {
                 ),
             ],
             Positioned(
-              top: 7,
-              right: 9,
+              top: 6,
+              left: math.max(4, codeOriginX - 45),
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: const Color(0xff111318).withValues(alpha: .86),
-                    border: Border.all(color: const Color(0xff334155)),
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xff111318).withValues(alpha: .9),
+                    border: Border.all(
+                      color: const Color(0xff334155).withValues(alpha: .8),
+                    ),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
+                      horizontal: 5,
+                      vertical: 3,
                     ),
                     child: Text(
-                      '电线 ${relationships.length}  ·  ● 起点  ▷ 终点',
+                      '⚡ ${relationships.length}',
                       key: const ValueKey('code-relationship-count'),
                       style: const TextStyle(
                         color: Color(0xffaab4c3),
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -120,18 +122,28 @@ class CodeRelationshipOverlay extends StatelessWidget {
     required int index,
     required Size size,
   }) {
-    final rawSource = _pointFor(relationship.source, size);
-    final rawTarget = _pointFor(relationship.target, size);
-    final sourceVisible = _isVisible(rawSource, size);
-    final targetVisible = _isVisible(rawTarget, size);
+    final rawSourceY = _yFor(relationship.source);
+    final rawTargetY = _yFor(relationship.target);
+    final sourceVisible = _isVerticallyVisible(rawSourceY, size);
+    final targetVisible = _isVerticallyVisible(rawTargetY, size);
+
+    // The editor already leaves padding between the line-number divider and
+    // the first code character. Treat that padding as a dedicated wire gutter
+    // so relationship wires never have to cross source text.
+    final laneSpacing = math.max(3.5, charWidth * .42);
+    final laneX = math.max(
+      4.0,
+      codeOriginX - 6 - ((index % 4) * laneSpacing),
+    );
+    final codeEdgeX = math.max(laneX, codeOriginX - 1);
 
     final source = Offset(
-      rawSource.dx.clamp(6, size.width - 6).toDouble(),
-      rawSource.dy.clamp(7, size.height - 7).toDouble(),
+      laneX,
+      rawSourceY.clamp(0, size.height).toDouble(),
     );
     final target = Offset(
-      rawTarget.dx.clamp(6, size.width - 6).toDouble(),
-      rawTarget.dy.clamp(7, size.height - 7).toDouble(),
+      laneX,
+      rawTargetY.clamp(0, size.height).toDouble(),
     );
 
     return _WireLayout(
@@ -139,29 +151,30 @@ class CodeRelationshipOverlay extends StatelessWidget {
       index: index,
       source: source,
       target: target,
+      codeEdgeX: codeEdgeX,
       sourceVisible: sourceVisible,
       targetVisible: targetVisible,
-      bothOutsideSameSide: _bothOutsideSameSide(rawSource, rawTarget, size),
+      bothOutsideSameSide: _bothOutsideSameSide(
+        rawSourceY,
+        rawTargetY,
+        size,
+      ),
     );
   }
 
-  Offset _pointFor(CodeRelationshipAnchor anchor, Size size) {
-    final x = codeOriginX +
-        ((anchor.column - 1) * charWidth) -
-        horizontalScrollOffset;
-    final y = verticalPadding +
+  double _yFor(CodeRelationshipAnchor anchor) {
+    return verticalPadding +
         ((anchor.line - 1) * lineHeight) +
         (lineHeight / 2) -
         verticalScrollOffset;
-    return Offset(x, y);
   }
 
-  bool _isVisible(Offset point, Size size) =>
-      point.dy >= 0 && point.dy <= size.height && point.dx >= 0 && point.dx <= size.width;
+  bool _isVerticallyVisible(double y, Size size) =>
+      y >= 0 && y <= size.height;
 
-  bool _bothOutsideSameSide(Offset a, Offset b, Size size) {
-    if (a.dy < 0 && b.dy < 0) return true;
-    if (a.dy > size.height && b.dy > size.height) return true;
+  bool _bothOutsideSameSide(double a, double b, Size size) {
+    if (a < 0 && b < 0) return true;
+    if (a > size.height && b > size.height) return true;
     return false;
   }
 }
@@ -212,6 +225,7 @@ class _WireLayout {
     required this.index,
     required this.source,
     required this.target,
+    required this.codeEdgeX,
     required this.sourceVisible,
     required this.targetVisible,
     required this.bothOutsideSameSide,
@@ -221,6 +235,7 @@ class _WireLayout {
   final int index;
   final Offset source;
   final Offset target;
+  final double codeEdgeX;
   final bool sourceVisible;
   final bool targetVisible;
   final bool bothOutsideSameSide;
@@ -239,136 +254,122 @@ class _RelationshipWirePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final layout in layouts) {
       if (layout.bothOutsideSameSide) continue;
+
       final highlighted = highlightedIndex == layout.index;
       final hasHighlight = highlightedIndex != null;
-      final color = _colorFor(layout.relationship.kind).withValues(
+      final baseColor = _colorFor(layout.relationship.kind);
+      final coreColor = baseColor.withValues(
         alpha: highlighted
-            ? .96
+            ? .98
             : hasHighlight
-                ? .13
-                : .42,
+                ? .2
+                : .72,
       );
-      final paint = Paint()
-        ..color = color
-        ..strokeWidth = highlighted ? 2.7 : 1.55
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
+      final glowColor = baseColor.withValues(
+        alpha: highlighted
+            ? .28
+            : hasHighlight
+                ? .035
+                : .12,
+      );
 
-      final path = _pathFor(layout, size);
-      canvas.drawPath(path, paint);
+      final path = _pathFor(layout);
+
+      // Soft outer stroke gives the wire a restrained neon/electrical glow.
+      final glowPaint = Paint()
+        ..color = glowColor
+        ..strokeWidth = highlighted ? 11 : 8
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.square
+        ..strokeJoin = StrokeJoin.miter;
+      canvas.drawPath(path, glowPaint);
+
+      final wirePaint = Paint()
+        ..color = coreColor
+        ..strokeWidth = highlighted ? 4.0 : 2.7
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.square
+        ..strokeJoin = StrokeJoin.miter;
+      canvas.drawPath(path, wirePaint);
 
       final markerPaint = Paint()
-        ..color = color
+        ..color = coreColor
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(layout.source, highlighted ? 4.5 : 3.2, markerPaint);
-      _drawArrow(canvas, layout, markerPaint);
 
-      if (highlighted) {
-        _drawLabel(canvas, layout, size);
+      if (layout.sourceVisible) {
+        _drawSourceMarker(canvas, layout, markerPaint, highlighted);
+      }
+
+      // Never invent an arrow head at the viewport boundary. The target arrow
+      // appears only when the real target line itself is currently visible.
+      if (layout.targetVisible) {
+        _drawVerticalArrow(canvas, layout, markerPaint, highlighted);
       }
     }
   }
 
-  Path _pathFor(_WireLayout layout, Size size) {
-    final source = layout.source;
-    final target = layout.target;
-    final laneOffset = 28.0 + ((layout.index % 6) * 11.0);
-    final laneX = math.min(
-      size.width - 14,
-      math.max(source.dx, target.dx) + laneOffset,
-    );
-
-    final path = Path()..moveTo(source.dx, source.dy);
-    if ((source.dy - target.dy).abs() < 2) {
-      final loopY = math.max(
-        10.0,
-        source.dy - 18 - (layout.index % 4) * 5,
-      );
-      path.cubicTo(
-        source.dx + 18,
-        loopY,
-        target.dx + 18,
-        loopY,
-        target.dx,
-        target.dy,
-      );
-      return path;
-    }
-
-    path.cubicTo(
-      laneX,
-      source.dy,
-      laneX,
-      target.dy,
-      target.dx,
-      target.dy,
-    );
-    return path;
+  Path _pathFor(_WireLayout layout) {
+    return Path()
+      ..moveTo(layout.source.dx, layout.source.dy)
+      ..lineTo(layout.target.dx, layout.target.dy);
   }
 
-  void _drawArrow(Canvas canvas, _WireLayout layout, Paint paint) {
-    final target = layout.target;
-    final source = layout.source;
-    final laneX = math.max(source.dx, target.dx) + 24;
-    final incoming = Offset(target.dx - laneX, target.dy - target.dy);
-    final fallback = target - source;
-    final vector = incoming.distance > .1 ? incoming : fallback;
-    final angle = math.atan2(vector.dy, vector.dx);
-    const length = 7.0;
-    const spread = .55;
-    final p1 = Offset(
-      target.dx - length * math.cos(angle - spread),
-      target.dy - length * math.sin(angle - spread),
-    );
-    final p2 = Offset(
-      target.dx - length * math.cos(angle + spread),
-      target.dy - length * math.sin(angle + spread),
-    );
-    final arrow = Path()
-      ..moveTo(target.dx, target.dy)
-      ..lineTo(p1.dx, p1.dy)
-      ..lineTo(p2.dx, p2.dy)
-      ..close();
-    canvas.drawPath(arrow, paint);
-  }
-
-  void _drawLabel(Canvas canvas, _WireLayout layout, Size size) {
-    final text = '${layout.relationship.kind.label} · ${layout.relationship.description}';
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          color: Color(0xffe6edf7),
-          fontSize: 10.5,
-          fontWeight: FontWeight.w600,
-        ),
+  void _drawSourceMarker(
+    Canvas canvas,
+    _WireLayout layout,
+    Paint paint,
+    bool highlighted,
+  ) {
+    final size = highlighted ? 5.5 : 4.5;
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: layout.source,
+        width: size,
+        height: size,
       ),
-      maxLines: 1,
-      ellipsis: '…',
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: math.min(300, size.width * .52));
+      paint,
+    );
 
-    final midpoint = Offset(
-      (layout.source.dx + layout.target.dx) / 2,
-      (layout.source.dy + layout.target.dy) / 2,
+    // A short tick points from the wire gutter toward the source line while
+    // stopping before the first code character, so it never covers source.
+    final tickPaint = Paint()
+      ..color = paint.color
+      ..strokeWidth = highlighted ? 3.2 : 2.3
+      ..strokeCap = StrokeCap.square;
+    canvas.drawLine(
+      layout.source,
+      Offset(layout.codeEdgeX, layout.source.dy),
+      tickPaint,
     );
-    final left = (midpoint.dx + 8)
-        .clamp(6, size.width - painter.width - 12)
-        .toDouble();
-    final top = (midpoint.dy - painter.height - 6)
-        .clamp(6, size.height - painter.height - 8)
-        .toDouble();
-    final rect = Rect.fromLTWH(
-      left - 5,
-      top - 3,
-      painter.width + 10,
-      painter.height + 6,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(6)),
-      Paint()..color = const Color(0xff1d2430).withValues(alpha: .96),
-    );
-    painter.paint(canvas, Offset(left, top));
+  }
+
+  void _drawVerticalArrow(
+    Canvas canvas,
+    _WireLayout layout,
+    Paint paint,
+    bool highlighted,
+  ) {
+    final target = layout.target;
+    final targetLine = layout.relationship.target.line;
+    final sourceLine = layout.relationship.source.line;
+    final pointsDown = targetLine >= sourceLine;
+    final length = highlighted ? 10.0 : 8.0;
+    final halfWidth = highlighted ? 5.5 : 4.5;
+
+    final arrow = Path();
+    if (pointsDown) {
+      arrow
+        ..moveTo(target.dx, target.dy)
+        ..lineTo(target.dx - halfWidth, target.dy - length)
+        ..lineTo(target.dx + halfWidth, target.dy - length);
+    } else {
+      arrow
+        ..moveTo(target.dx, target.dy)
+        ..lineTo(target.dx - halfWidth, target.dy + length)
+        ..lineTo(target.dx + halfWidth, target.dy + length);
+    }
+    arrow.close();
+    canvas.drawPath(arrow, paint);
   }
 
   Color _colorFor(CodeRelationshipKind kind) => switch (kind) {
