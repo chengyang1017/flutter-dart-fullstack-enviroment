@@ -24,7 +24,7 @@ class CodeRelationshipOverlay extends StatelessWidget {
   static const _maxFocusedWires = 6;
   static const _maxFallbackWires = 4;
   static const _laneStartX = 16.0;
-  static const _laneSpacing = 18.0;
+  static const _laneSpacing = 24.0;
   static const _codeDockX = 5.0;
 
   final List<CodeRelationship> relationships;
@@ -410,8 +410,6 @@ class _RelationshipWirePainter extends CustomPainter {
         _drawSourceMarker(canvas, layout, markerPaint, highlighted);
       }
 
-      // The target wire turns back toward the editor. The arrow head exists
-      // only when the real target line is visible, and points left into code.
       if (layout.targetVisible) {
         _drawCodeFacingArrow(canvas, layout, markerPaint, highlighted);
       }
