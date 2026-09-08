@@ -66,6 +66,29 @@ class WorkspaceStorageHttpServer {
         return;
       }
 
+      if (request.method == 'GET' &&
+          segments.length == 1 &&
+          segments.first == 'me') {
+        final principal = await authenticator.authenticatePrincipal(request);
+        if (principal == null) {
+          await _sendError(
+            request.response,
+            HttpStatus.unauthorized,
+            'Authentication required.',
+          );
+          return;
+        }
+        await _sendJson(
+          request.response,
+          HttpStatus.ok,
+          <String, Object?>{
+            'userId': principal.userId,
+            'username': principal.username,
+          },
+        );
+        return;
+      }
+
       if (segments.isEmpty || segments.first != 'workspaces') {
         await _sendError(
           request.response,

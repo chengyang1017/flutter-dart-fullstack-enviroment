@@ -1,44 +1,127 @@
 import 'dart:convert';
 import 'dart:io';
 
-abstract interface class WorkspaceAuthenticator {
-  Future<String?> authenticate(HttpRequest request);
+class WorkspacePrincipal {
+  const WorkspacePrincipal({
+    required this.userId,
+    required this.username,
+  });
+
+  final String userId;
+  final String username;
+
+  Map<String, String> toJson() => <String, String>{
+        'userId': userId,
+        'username': username,
+      };
 }
 
-class StaticBearerWorkspaceAuthenticator implements WorkspaceAuthenticator {
-  const StaticBearerWorkspaceAuthenticator(this.tokenToUserId);
+abstract class WorkspaceAuthenticator {
+  const WorkspaceAuthenticator();
+
+  Future<String?> authenticate(HttpRequest request);
+
+  Future<WorkspacePrincipal?> authenticatePrincipal(HttpRequest request) async {
+    final userId = await authenticate(request);
+    if (userId == null) return null;
+    return WorkspacePrincipal(userId: userId, username: userId);
+  }
+}
+
+class StaticBearerWorkspaceAuthenticator extends WorkspaceAuthenticator {
+  const StaticBearerWorkspaceAuthenticator(this.tokenToUserId)
+      : tokenToPrincipal = const <String, WorkspacePrincipal>{};
+
+  const StaticBearerWorkspaceAuthenticator.principals(this.tokenToPrincipal)
+      : tokenToUserId = const <String, String>{};
 
   final Map<String, String> tokenToUserId;
+  final Map<String, WorkspacePrincipal> tokenToPrincipal;
 
   factory StaticBearerWorkspaceAuthenticator.fromJson(String source) {
     final decoded = jsonDecode(source);
     if (decoded is! Map) {
       throw const FormatException(
-        'WORKSPACE_AUTH_TOKENS must be a JSON object mapping token to user id.',
+        'WORKSPACE_AUTH_TOKENS must be a JSON object mapping token to user identity.',
       );
     }
 
-    final result = <String, String>{};
+    final result = <String, WorkspacePrincipal>{};
     for (final entry in decoded.entries) {
-      if (entry.key is! String ||
-          (entry.key as String).isEmpty ||
-          entry.value is! String ||
-          (entry.value as String).isEmpty) {
+      final token = entry.key;
+      if (token is! String || token.isEmpty) {
         throw const FormatException(
-          'WORKSPACE_AUTH_TOKENS keys and values must be non-empty strings.',
+          'WORKSPACE_AUTH_TOKENS keys must be non-empty strings.',
         );
       }
-      result[entry.key as String] = entry.value as String;
+
+      final value = entry.value;
+      if (value is String && value.isNotEmpty) {
+        result[token] = WorkspacePrincipal(
+          userId: value,
+          username: value,
+        );
+        continue;
+      }
+
+      if (value is Map) {
+        final userId = value['userId'];
+        final usernameSource = value['username'];
+        if (userId is! String ||
+            userId.trim().isEmpty ||
+            usernameSource is! String ||
+            usernameSource.trim().isEmpty) {
+          throw const FormatException(
+            'Structured WORKSPACE_AUTH_TOKENS values require non-empty userId and username.',
+          );
+        }
+
+        final username = usernameSource.trim().toLowerCase();
+        if (!_usernamePattern.hasMatch(username)) {
+          throw const FormatException(
+            'Workspace username must use lowercase letters, numbers, or hyphens and be at most 39 characters.',
+          );
+        }
+
+        result[token] = WorkspacePrincipal(
+          userId: userId.trim(),
+          username: username,
+        );
+        continue;
+      }
+
+      throw const FormatException(
+        'WORKSPACE_AUTH_TOKENS values must be a user id string or an identity object.',
+      );
     }
-    return StaticBearerWorkspaceAuthenticator(Map.unmodifiable(result));
+
+    return StaticBearerWorkspaceAuthenticator.principals(
+      Map<String, WorkspacePrincipal>.unmodifiable(result),
+    );
+  }
+
+  WorkspacePrincipal? principalForToken(String token) {
+    final configured = tokenToPrincipal[token];
+    if (configured != null) return configured;
+
+    final userId = tokenToUserId[token];
+    if (userId == null) return null;
+    return WorkspacePrincipal(userId: userId, username: userId);
   }
 
   @override
   Future<String?> authenticate(HttpRequest request) async {
+    return (await authenticatePrincipal(request))?.userId;
+  }
+
+  @override
+  Future<WorkspacePrincipal?> authenticatePrincipal(HttpRequest request) async {
     final header = request.headers.value(HttpHeaders.authorizationHeader);
     if (header == null || !header.startsWith('Bearer ')) return null;
     final token = header.substring('Bearer '.length).trim();
     if (token.isEmpty) return null;
-    return tokenToUserId[token];
+    return principalForToken(token);
   }
 }
+
+final RegExp _usernamePattern = RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,38})$');
