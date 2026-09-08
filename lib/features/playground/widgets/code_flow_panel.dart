@@ -3,6 +3,7 @@ import 'package:re_editor/re_editor.dart';
 
 import '../controllers/playground_controller.dart';
 import '../services/dart_code_flow_analyzer.dart';
+import 'function_call_graph_view.dart';
 
 class CodeFlowPanel extends StatefulWidget {
   const CodeFlowPanel({
@@ -18,15 +19,13 @@ class CodeFlowPanel extends StatefulWidget {
   State<CodeFlowPanel> createState() => _CodeFlowPanelState();
 }
 
-enum _FlowDirection { outgoing, incoming }
-
 class _CodeFlowPanelState extends State<CodeFlowPanel> {
   static const _analyzer = DartCodeFlowAnalyzer();
 
   CodeFlowGraph? _graph;
   String? _error;
   bool _analyzing = false;
-  _FlowDirection _direction = _FlowDirection.outgoing;
+  FunctionCallGraphDirection _direction = FunctionCallGraphDirection.outgoing;
 
   @override
   void didUpdateWidget(covariant CodeFlowPanel oldWidget) {
@@ -35,7 +34,7 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
       _graph = null;
       _error = null;
       _analyzing = false;
-      _direction = _FlowDirection.outgoing;
+      _direction = FunctionCallGraphDirection.outgoing;
     }
   }
 
@@ -161,22 +160,22 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: SegmentedButton<_FlowDirection>(
+              child: SegmentedButton<FunctionCallGraphDirection>(
                 key: const ValueKey('code-flow-direction-selector'),
                 showSelectedIcon: false,
-                segments: <ButtonSegment<_FlowDirection>>[
-                  ButtonSegment<_FlowDirection>(
-                    value: _FlowDirection.outgoing,
+                segments: <ButtonSegment<FunctionCallGraphDirection>>[
+                  ButtonSegment<FunctionCallGraphDirection>(
+                    value: FunctionCallGraphDirection.outgoing,
                     icon: const Icon(Icons.call_made_outlined, size: 16),
-                    label: Text('下游 ${graph.directCalleeCount}'),
+                    label: Text('我调用 ${graph.directCalleeCount}'),
                   ),
-                  ButtonSegment<_FlowDirection>(
-                    value: _FlowDirection.incoming,
+                  ButtonSegment<FunctionCallGraphDirection>(
+                    value: FunctionCallGraphDirection.incoming,
                     icon: const Icon(Icons.call_received_outlined, size: 16),
-                    label: Text('上游 ${graph.directCallerCount}'),
+                    label: Text('调用我 ${graph.directCallerCount}'),
                   ),
                 ],
-                selected: <_FlowDirection>{_direction},
+                selected: <FunctionCallGraphDirection>{_direction},
                 onSelectionChanged: (selection) {
                   if (selection.isEmpty) return;
                   setState(() => _direction = selection.first);
@@ -211,33 +210,26 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
       );
     }
 
-    final root =
-        _direction == _FlowDirection.outgoing ? graph.root : graph.callersRoot;
-    final rows = <_FlowRow>[];
-    _flatten(root, 0, rows);
+    final root = _direction == FunctionCallGraphDirection.outgoing
+        ? graph.root
+        : graph.callersRoot;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-            itemCount: rows.length,
-            itemBuilder: (context, index) {
-              final row = rows[index];
-              return _FlowNodeRow(
-                row: row,
-                direction: _direction,
-                onTap: () => _openNode(row.node),
-              );
-            },
+          child: FunctionCallGraphView(
+            key: const ValueKey('function-call-graph'),
+            root: root,
+            direction: _direction,
+            onNodeTap: _openNode,
           ),
         ),
         if (root.children.isEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 6, 14, 14),
             child: Text(
-              _direction == _FlowDirection.outgoing
+              _direction == FunctionCallGraphDirection.outgoing
                   ? 'Workspace 内没有解析到这个方法继续调用的本地方法。'
                   : 'Workspace 内没有解析到调用这个方法的本地方法。',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -247,99 +239,6 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
           ),
       ],
     );
-  }
-
-  void _flatten(CodeFlowNode node, int depth, List<_FlowRow> rows) {
-    rows.add(_FlowRow(node: node, depth: depth));
-    for (final child in node.children) {
-      _flatten(child, depth + 1, rows);
-    }
-  }
-}
-
-class _FlowRow {
-  const _FlowRow({required this.node, required this.depth});
-
-  final CodeFlowNode node;
-  final int depth;
-}
-
-class _FlowNodeRow extends StatelessWidget {
-  const _FlowNodeRow({
-    required this.row,
-    required this.direction,
-    required this.onTap,
-  });
-
-  final _FlowRow row;
-  final _FlowDirection direction;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final node = row.node;
-    final theme = Theme.of(context);
-    return Padding(
-      padding: EdgeInsets.only(left: row.depth * 16.0, bottom: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Icon(
-                  _nodeIcon(node),
-                  size: 17,
-                  color: node.isCycle
-                      ? theme.colorScheme.tertiary
-                      : theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      node.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight:
-                            row.depth == 0 ? FontWeight.w700 : FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${node.location.filePath}:${node.location.line}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.open_in_new, size: 14),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _nodeIcon(CodeFlowNode node) {
-    if (node.isCycle) return Icons.replay_outlined;
-    if (row.depth == 0) return Icons.radio_button_checked;
-    return direction == _FlowDirection.outgoing
-        ? Icons.subdirectory_arrow_right
-        : Icons.subdirectory_arrow_left;
   }
 }
 
