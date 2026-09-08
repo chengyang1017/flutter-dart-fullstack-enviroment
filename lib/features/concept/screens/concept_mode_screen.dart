@@ -13,16 +13,23 @@ import '../../runner/services/http_flutter_runner_client.dart';
 import '../../runner/services/mock_flutter_runner_client.dart';
 import '../../runner/services/runner_preview_tab.dart';
 import '../../runner/widgets/runner_preview_panel.dart';
+import '../../workspace/models/workspace_project.dart';
 import '../../workspace/services/hive_workspace_persistence.dart';
 import '../../workspace/services/keyed_workspace_snapshot_store.dart';
+import '../../workspace/services/workspace_project_library.dart';
+import '../../workspace/services/workspace_snapshot_store.dart';
 import '../../workspace/widgets/workspace_editor_tabs.dart';
 import '../models/concept_project_context.dart';
+import '../services/concept_project_projection_service.dart';
+import '../widgets/concept_existing_project_dialog.dart';
 import '../widgets/concept_lib_explorer.dart';
+import '../widgets/concept_project_picker_dialog.dart';
 
 class ConceptModeScreen extends StatefulWidget {
   const ConceptModeScreen({
     super.key,
     this.projection,
+    this.workspaceStore,
   });
 
   /// When supplied, Concept Mode opens a selected Flutter subproject projected
@@ -31,6 +38,11 @@ class ConceptModeScreen extends StatefulWidget {
   /// not need to understand monorepo prefixes.
   final ConceptProjectProjection? projection;
 
+  /// Optional persistence boundary for an existing project from Project Mode.
+  /// Passing the project's keyed store makes Concept Mode edit the same saved
+  /// Flutter Workspace instead of creating a detached copy.
+  final WorkspaceSnapshotStore? workspaceStore;
+
   @override
   State<ConceptModeScreen> createState() => _ConceptModeScreenState();
 }
@@ -38,6 +50,7 @@ class ConceptModeScreen extends StatefulWidget {
 class _ConceptModeScreenState extends State<ConceptModeScreen> {
   static const _runnerApiUrl = String.fromEnvironment('RUNNER_API_URL');
   static const _storageKey = 'concept-mode-workspace';
+  static const _projectionService = ConceptProjectProjectionService();
 
   late final PlaygroundController controller;
   late final FlutterRunnerController runner;
@@ -48,19 +61,20 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     super.initState();
 
     final persistence = HiveWorkspacePersistence.tryFromOpenBoxes();
-    final conceptStore = widget.projection != null || persistence == null
-        ? null
-        : KeyedWorkspaceSnapshotStore(
-            delegate: persistence.snapshotStore,
-            storageKey: _storageKey,
-          );
+    final conceptStore = widget.workspaceStore ??
+        (widget.projection != null || persistence == null
+            ? null
+            : KeyedWorkspaceSnapshotStore(
+                delegate: persistence.snapshotStore,
+                storageKey: _storageKey,
+              ));
 
     controller = PlaygroundController(
       workspaceStore: conceptStore,
     )..addListener(_refresh);
 
     final projection = widget.projection;
-    if (projection != null) {
+    if (projection != null && widget.workspaceStore == null) {
       controller.workspace.restoreSnapshot(projection.snapshot);
     }
 
@@ -135,6 +149,111 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     await runner.run();
   }
 
+  Future<void> _openExistingProject() async {
+    final persistence = HiveWorkspacePersistence.tryFromOpenBoxes();
+    if (persistence == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('当前环境没有可用的本地项目库。')),
+      );
+      return;
+    }
+
+    final library = WorkspaceProjectLibrary.fromPersistence(persistence);
+    final project = await showConceptExistingProjectDialog(
+      context,
+      projects: library.projects,
+    );
+    if (project == null || !mounted) return;
+
+    final snapshot = persistence.snapshotStore.load(project.storageKey);
+    if (snapshot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${project.name} 还没有可打开的 Workspace 快照。')),
+      );
+      return;
+    }
+
+    final candidates = _projectionService.detectFlutterProjects(snapshot);
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${project.name} 不是可运行 Flutter 项目。')),
+      );
+      return;
+    }
+
+    ConceptProjectProjection? projection;
+    WorkspaceSnapshotStore? targetStore;
+
+    if (candidates.length == 1 && candidates.single.projectRoot.isEmpty) {
+      projection = ConceptProjectProjection(
+        context: ConceptProjectContext(
+          repositoryName: _projectSourceName(project),
+          projectName: project.name,
+          projectRoot: project.gitRemote?.projectPath ?? '',
+        ),
+        snapshot: snapshot,
+      );
+      targetStore = KeyedWorkspaceSnapshotStore(
+        delegate: persistence.snapshotStore,
+        storageKey: project.storageKey,
+      );
+    } else if (candidates.length == 1) {
+      projection = _projectionService.project(
+        repositorySnapshot: snapshot,
+        repositoryName: _projectSourceName(project),
+        candidate: candidates.single,
+      );
+    } else {
+      projection = await showConceptProjectPickerDialog(
+        context,
+        repositorySnapshot: snapshot,
+        repositoryName: _projectSourceName(project),
+      );
+    }
+
+    if (projection == null || !mounted) return;
+
+    await controller.flushWorkspacePersistence();
+    if (!mounted) return;
+
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => ConceptModeScreen(
+          projection: projection,
+          workspaceStore: targetStore,
+        ),
+      ),
+    );
+  }
+
+  String _projectSourceName(WorkspaceProject project) {
+    final remote = project.gitRemote;
+    if (remote == null) return project.name;
+
+    final source = remote.repositoryUrl;
+    final scp = RegExp(r'^[^@]+@[^:]+:(.+)$').firstMatch(source);
+    var path = scp?.group(1);
+    if (path == null) {
+      final uri = Uri.tryParse(source);
+      if (uri != null && uri.host.isNotEmpty) {
+        path = uri.path;
+      }
+    }
+    if (path == null) return project.name;
+
+    final segments = path
+        .replaceAll('\\', '/')
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .toList(growable: false);
+    if (segments.length < 2) return project.name;
+
+    final owner = segments[segments.length - 2];
+    final repository = segments.last.replaceFirst(RegExp(r'\.git$'), '');
+    return '$owner/$repository';
+  }
+
   void _closePendingWebPreviewTab() {
     _pendingWebPreviewTab?.close();
     _pendingWebPreviewTab = null;
@@ -182,6 +301,12 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            key: const ValueKey('concept-open-existing-project'),
+            tooltip: '打开现有项目',
+            onPressed: () => unawaited(_openExistingProject()),
+            icon: const Icon(Icons.folder_open_rounded),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 6),
             child: FilledButton.tonalIcon(
