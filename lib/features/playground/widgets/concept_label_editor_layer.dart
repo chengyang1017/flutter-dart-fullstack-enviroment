@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:re_editor/re_editor.dart';
 
+import '../controllers/concept_label_controller.dart';
 import '../controllers/playground_controller.dart';
 import '../highlighting/flutter_dart_highlight.dart';
 
@@ -8,11 +9,13 @@ class ConceptLabelEditorLayer extends StatefulWidget {
   const ConceptLabelEditorLayer({
     super.key,
     required this.controller,
+    required this.labels,
     required this.enabled,
     required this.child,
   });
 
   final PlaygroundController controller;
+  final ConceptLabelController labels;
   final bool enabled;
   final Widget child;
 
@@ -38,51 +41,6 @@ class _ConceptLabelEditorLayerState extends State<ConceptLabelEditorLayer> {
   static const _verticalPadding = 14.0;
   static const _codeLeftPadding = 12.0;
 
-  // Reusable label rules are deliberately separated by language. Dart rules
-  // never leak into JavaScript, Java, Python, or another future language view.
-  static const Map<String, Map<String, String>> _rulesByLanguage = {
-    'dart': {
-      '@override': '覆盖父类行为',
-      'await ': '等待 ',
-      'async': '异步',
-      'return ': '返回 ',
-      'final ': '固定变量 ',
-      'const ': '常量 ',
-      'var ': '变量 ',
-      'late ': '稍后初始化 ',
-      'required ': '必填 ',
-      'if (': '如果 (',
-      'else if (': '否则如果 (',
-      'else': '否则',
-      'switch (': '按值分支 (',
-      'case ': '情况 ',
-      'default:': '默认情况:',
-      'break;': '结束当前分支;',
-      'for (': '循环 (',
-      'while (': '条件循环 (',
-      'try {': '尝试 {',
-      'catch (': '捕获错误 (',
-      'throw ': '抛出错误 ',
-      'class ': '定义类 ',
-      'extends ': '继承 ',
-      'implements ': '实现 ',
-      'Future<': '异步结果<',
-      'Stream<': '数据流<',
-      'setState(': '重画当前界面(',
-      'notifyListeners()': '通知监听者()',
-      'runApp(': '启动 Flutter 应用(',
-      'MaterialApp(': 'Flutter 应用外壳(',
-      'Scaffold(': '页面骨架(',
-      'Navigator.push(': '进入新页面(',
-      'Navigator.pop(': '返回上一页(',
-      'context.read<': '读取供应器<',
-      'context.watch<': '监听供应器<',
-      'Provider.of<': '获取供应器<',
-      'jsonDecode(': '解析 JSON(',
-      'jsonEncode(': '生成 JSON(',
-    },
-  };
-
   late final CodeLineEditingController _labelController;
   late final CodeScrollController _labelScrollController;
   bool _updatingLabelController = false;
@@ -100,6 +58,7 @@ class _ConceptLabelEditorLayerState extends State<ConceptLabelEditorLayer> {
     _labelScrollController = CodeScrollController();
     _labelController.addListener(_handleLabelSelectionChanged);
     _attach(widget.controller);
+    widget.labels.addListener(_handleLabelsChanged);
 
     if (widget.enabled) {
       _refreshLabelDocument(resetReveal: true);
@@ -119,6 +78,12 @@ class _ConceptLabelEditorLayerState extends State<ConceptLabelEditorLayer> {
       _lastSource = '';
       _lastPath = '';
       _revealedLine = null;
+    }
+
+    if (!identical(oldWidget.labels, widget.labels)) {
+      oldWidget.labels.removeListener(_handleLabelsChanged);
+      widget.labels.addListener(_handleLabelsChanged);
+      if (widget.enabled) _refreshLabelDocument();
     }
 
     if (!oldWidget.enabled && widget.enabled) {
@@ -147,6 +112,7 @@ class _ConceptLabelEditorLayerState extends State<ConceptLabelEditorLayer> {
   @override
   void dispose() {
     _detach(widget.controller);
+    widget.labels.removeListener(_handleLabelsChanged);
     _labelController.removeListener(_handleLabelSelectionChanged);
     _labelController.dispose();
     _labelScrollController.dispose();
@@ -163,6 +129,11 @@ class _ConceptLabelEditorLayerState extends State<ConceptLabelEditorLayer> {
   void _detach(PlaygroundController controller) {
     controller.textController.removeListener(_handleSourceChanged);
     controller.workspace.removeListener(_handleWorkspaceChanged);
+  }
+
+  void _handleLabelsChanged() {
+    if (!mounted || !widget.enabled) return;
+    _refreshLabelDocument();
   }
 
   void _handleSourceChanged() {
@@ -229,59 +200,33 @@ class _ConceptLabelEditorLayerState extends State<ConceptLabelEditorLayer> {
     required String source,
     required String path,
   }) {
-    final language = _languageForPath(path);
-    final rules = _rulesByLanguage[language];
-    if (rules == null) return source;
-
+    final reusableRules = widget.labels.reusableRulesForPath(path);
     final lines = source.split('\n');
+
     return List<String>.generate(lines.length, (index) {
-      final line = lines[index];
-      if (_revealedLine == index) return line;
-      return _labelLine(line, rules);
+      final sourceLine = lines[index];
+      if (_revealedLine == index) return sourceLine;
+
+      final lineRule = widget.labels.lineRuleFor(
+        path: path,
+        lineNumber: index + 1,
+      );
+      if (lineRule != null && lineRule.source == sourceLine) {
+        return _keepIndent(sourceLine, lineRule.label);
+      }
+
+      var result = sourceLine;
+      for (final rule in reusableRules) {
+        if (rule.source.isEmpty) continue;
+        result = result.replaceAll(rule.source, rule.label);
+      }
+      return result;
     }).join('\n');
   }
 
-  String _labelLine(String line, Map<String, String> rules) {
-    if (line.trim().isEmpty) return line;
-
-    final indentMatch = RegExp(r'^\s*').firstMatch(line);
-    final indent = indentMatch?.group(0) ?? '';
-    final body = line.substring(indent.length);
-
-    if (body.startsWith('///')) {
-      return '$indent文档说明：${body.substring(3).trimLeft()}';
-    }
-    if (body.startsWith('//')) {
-      return '$indent说明：${body.substring(2).trimLeft()}';
-    }
-    if (body == '{') return '${indent}进入代码块';
-    if (body == '}' || body == '};') return '${indent}结束当前结构';
-    if (body == ');') return '${indent}结束当前调用';
-    if (body == '],') return '${indent}结束列表';
-
-    var result = body;
-    for (final rule in rules.entries) {
-      result = result.replaceAll(rule.key, rule.value);
-    }
-
-    if (result == body) {
-      if (body.endsWith('{')) {
-        result = '进入 · $body';
-      } else if (body.endsWith(');')) {
-        result = '执行 · $body';
-      }
-    }
-
-    return '$indent$result';
-  }
-
-  String _languageForPath(String path) {
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.dart')) return 'dart';
-    if (lower.endsWith('.js') || lower.endsWith('.ts')) return 'javascript';
-    if (lower.endsWith('.java')) return 'java';
-    if (lower.endsWith('.py')) return 'python';
-    return 'plain';
+  String _keepIndent(String sourceLine, String label) {
+    final indent = RegExp(r'^\s*').firstMatch(sourceLine)?.group(0) ?? '';
+    return '$indent$label';
   }
 
   void _copySourceScrollToLabels() {
