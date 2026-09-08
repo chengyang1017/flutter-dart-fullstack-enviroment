@@ -20,8 +20,10 @@ import '../../workspace/services/workspace_project_library.dart';
 import '../../workspace/services/workspace_snapshot_store.dart';
 import '../../workspace/widgets/workspace_editor_tabs.dart';
 import '../models/concept_project_context.dart';
+import '../services/concept_git_import_service.dart';
 import '../services/concept_project_projection_service.dart';
 import '../widgets/concept_existing_project_dialog.dart';
+import '../widgets/concept_git_import_dialog.dart';
 import '../widgets/concept_lib_explorer.dart';
 import '../widgets/concept_project_picker_dialog.dart';
 
@@ -51,6 +53,7 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
   static const _runnerApiUrl = String.fromEnvironment('RUNNER_API_URL');
   static const _storageKey = 'concept-mode-workspace';
   static const _projectionService = ConceptProjectProjectionService();
+  static const _gitImportService = ConceptGitImportService();
 
   late final PlaygroundController controller;
   late final FlutterRunnerController runner;
@@ -227,6 +230,44 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     );
   }
 
+  Future<void> _openGitProject() async {
+    final persistence = HiveWorkspacePersistence.tryFromOpenBoxes();
+    if (persistence == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('当前环境没有可用的本地项目库。')),
+      );
+      return;
+    }
+
+    final request = await showConceptGitImportDialog(context);
+    if (request == null || !mounted) return;
+
+    try {
+      await controller.flushWorkspacePersistence();
+      final result = await _gitImportService.import(
+        persistence: persistence,
+        seedSnapshot: controller.workspace.createSnapshot(),
+        request: request,
+      );
+      if (!mounted) return;
+
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => ConceptModeScreen(
+            projection: result.projection,
+            workspaceStore: result.workspaceStore,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('从 Git 打开失败：$error')),
+      );
+    }
+  }
+
   String _projectSourceName(WorkspaceProject project) {
     final remote = project.gitRemote;
     if (remote == null) return project.name;
@@ -306,6 +347,12 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
             tooltip: '打开现有项目',
             onPressed: () => unawaited(_openExistingProject()),
             icon: const Icon(Icons.folder_open_rounded),
+          ),
+          IconButton(
+            key: const ValueKey('concept-open-git-project'),
+            tooltip: '从 Git 打开',
+            onPressed: () => unawaited(_openGitProject()),
+            icon: const Icon(Icons.cloud_download_outlined),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 6),
