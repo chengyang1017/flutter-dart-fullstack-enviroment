@@ -143,10 +143,12 @@ html, body, #container { background: #111318 !important; }
   String _selectionSignature = '';
   bool _syncingMirror = false;
   int _syncGeneration = 0;
+  late String _initialText;
 
   @override
   void initState() {
     super.initState();
+    _initialText = widget.controller.textController.text;
     _attach(widget.controller);
     _attachLabels(widget.labels);
   }
@@ -160,6 +162,7 @@ html, body, #container { background: #111318 !important; }
       _displayedPath = '';
       _monacoText = '';
       _selectionSignature = '';
+      _initialText = widget.controller.textController.text;
       _attach(widget.controller);
       unawaited(_syncFromMirror(forceText: true));
     }
@@ -281,11 +284,16 @@ html, body, #container { background: #111318 !important; }
 
   void _handleMonacoContent(String value) {
     _monacoText = value;
-    if (value == widget.controller.textController.text) return;
+
+    final mirror = widget.controller.textController;
+    if (value == mirror.text) return;
 
     _syncingMirror = true;
     try {
-      widget.controller.textController.text = value;
+      mirror.value = mirror.value.copyWith(
+        codeLines: CodeLines.fromText(value),
+        selection: mirror.selection,
+      );
       widget.controller.updateCode();
     } finally {
       _syncingMirror = false;
@@ -365,8 +373,8 @@ html, body, #container { background: #111318 !important; }
       return;
     }
 
-    await _pushMirrorSelection(monaco);
     if (textChanged) {
+      await _pushMirrorSelection(monaco);
       await _syncLabelDecorations();
     }
   }
@@ -639,7 +647,7 @@ html, body, #container { background: #111318 !important; }
         fit: StackFit.expand,
         children: [
           MonacoEditor(
-            initialText: widget.controller.textController.text,
+            initialText: _initialText,
             options: _options,
             page: _page,
             autofocus: false,

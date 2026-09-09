@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../export/services/workspace_import_picker.dart';
 import '../../project_creation/services/flutter_project_scaffold_service.dart';
@@ -18,6 +19,7 @@ import '../../workspace/services/hive_workspace_persistence.dart';
 import '../../workspace/services/keyed_workspace_snapshot_store.dart';
 import '../../workspace/services/workspace_persistence.dart';
 import '../../workspace/services/workspace_project_library.dart';
+import '../../workspace/services/workspace_share_service.dart';
 import '../../workspace/services/workspace_snapshot_store.dart';
 import '../../workspace/widgets/workspace_project_bar.dart';
 import '../controllers/playground_controller.dart';
@@ -674,6 +676,38 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     }
   }
 
+  Future<void> _shareCurrentProject() async {
+    final library = _projectLibrary;
+    if (library == null) return;
+
+    final project = library.activeProject;
+    try {
+      // The server snapshots the durable cloud Workspace. Flush local edits
+      // first so the generated link always points at what the user currently
+      // sees in the editor.
+      await controller.flushWorkspacePersistence();
+
+      final share = await WorkspaceShareService().createShare(project.id);
+      await Clipboard.setData(ClipboardData(text: share.url.toString()));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '只读分享链接已复制 · ${share.revision}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('创建只读分享失败：$error'),
+        ),
+      );
+    }
+  }
+
   Future<void> _commitWorkspace() async {
     final staged = controller.workspace.stagedChanges;
     if (staged.isEmpty) {
@@ -1016,6 +1050,9 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                       _commitWorkspace(),
                     )
                 : null,
+            onShare: () => unawaited(
+              _shareCurrentProject(),
+            ),
             onKeep: () => unawaited(
               _keepProject(),
             ),

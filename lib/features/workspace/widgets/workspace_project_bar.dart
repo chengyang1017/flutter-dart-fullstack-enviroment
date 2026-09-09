@@ -26,6 +26,7 @@ class WorkspaceProjectBar extends StatelessWidget {
     this.onOpenFolder,
     this.onImportZip,
     this.onCommit,
+    this.onShare,
     this.onKeep,
   });
 
@@ -38,6 +39,7 @@ class WorkspaceProjectBar extends StatelessWidget {
   final VoidCallback? onOpenFolder;
   final VoidCallback? onImportZip;
   final VoidCallback? onCommit;
+  final VoidCallback? onShare;
   final VoidCallback? onKeep;
 
   static const _surface = Color(0xff15191f);
@@ -77,6 +79,16 @@ class WorkspaceProjectBar extends StatelessWidget {
             label: 'Commit',
             onPressed: onCommit,
           ),
+          if (WorkspaceCloudRuntime.enabled && onShare != null) ...[
+            const SizedBox(width: 4),
+            _ProjectActionButton(
+              key: const ValueKey('workspace-project-share'),
+              tooltip: '生成当前 Workspace 的固定版本只读分享链接',
+              icon: Icons.ios_share_rounded,
+              label: '分享',
+              onPressed: onShare,
+            ),
+          ],
           if (WorkspaceCloudRuntime.enabled) ...[
             const SizedBox(width: 4),
             const _CloudStorageStatusChip(),

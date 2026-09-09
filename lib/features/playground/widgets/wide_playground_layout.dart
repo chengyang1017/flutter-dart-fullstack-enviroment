@@ -43,27 +43,12 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
   bool _labelModeEnabled = false;
   String? _sourceDiffPath;
   late final ConceptLabelController _labels;
-  late Widget _persistentMonacoEditor;
 
   @override
   void initState() {
     super.initState();
     _labels = ConceptLabelController();
-    _persistentMonacoEditor = _buildPersistentMonacoEditor();
     unawaited(_labels.load());
-  }
-
-  Widget _buildPersistentMonacoEditor() {
-    return MonacoCodeEditorPanel(
-      controller: widget.controller,
-      labels: _labels,
-      labelModeEnabled: _labelModeEnabled,
-      wireModeEnabled: _wireModeEnabled,
-    );
-  }
-
-  void _refreshPersistentMonacoEditor() {
-    _persistentMonacoEditor = _buildPersistentMonacoEditor();
   }
 
   @override
@@ -71,7 +56,6 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.controller, widget.controller)) {
       _sourceDiffPath = null;
-      _refreshPersistentMonacoEditor();
     }
   }
 
@@ -85,7 +69,6 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
     if (_labelModeEnabled) {
       setState(() {
         _labelModeEnabled = false;
-        _refreshPersistentMonacoEditor();
       });
       await Future<void>.delayed(Duration.zero);
     }
@@ -326,20 +309,17 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                     onToggleWireMode: () {
                       setState(() {
                         _wireModeEnabled = !_wireModeEnabled;
-                        _refreshPersistentMonacoEditor();
                       });
                     },
                     onToggleLabelMode: () {
                       setState(() {
                         _labelModeEnabled = !_labelModeEnabled;
-                        _refreshPersistentMonacoEditor();
                       });
                     },
                     onAddLabel: _openAddLabelDialog,
                     onManageLabels: _openManageLabelsDialog,
                     explorerVisible: _showExplorer,
                     previewVisible: _showPreview,
-                    persistentMonacoEditor: _persistentMonacoEditor,
                     sourceDiffPath: _sourceDiffPath,
                     onCloseSourceDiff: () {
                       setState(() => _sourceDiffPath = null);
@@ -390,7 +370,6 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                                   onPressed: () {
                                     setState(() {
                                       _wireModeEnabled = false;
-                                      _refreshPersistentMonacoEditor();
                                     });
                                   },
                                   icon: const Icon(Icons.close, size: 18),
@@ -451,7 +430,6 @@ class _EditorArea extends StatelessWidget {
     required this.onManageLabels,
     required this.explorerVisible,
     required this.previewVisible,
-    required this.persistentMonacoEditor,
     required this.sourceDiffPath,
     required this.onCloseSourceDiff,
   });
@@ -465,7 +443,6 @@ class _EditorArea extends StatelessWidget {
   final bool labelModeEnabled;
   final bool explorerVisible;
   final bool previewVisible;
-  final Widget persistentMonacoEditor;
   final String? sourceDiffPath;
   final VoidCallback onCloseSourceDiff;
   final VoidCallback onToggleConsole;
@@ -504,18 +481,32 @@ class _EditorArea extends StatelessWidget {
         Expanded(
           child: IdeEditorPanelSplit(
             panelExpanded: showConsole,
-            editor: viewMode.isSourceControl && sourceDiffPath != null
-                ? WorkspaceDiffPanel(
-                    workspace: controller.workspace,
-                    path: sourceDiffPath!,
-                    onClose: onCloseSourceDiff,
-                  )
-                : Column(
-                    children: [
-                      Expanded(child: persistentMonacoEditor),
-                      ErrorPanel(controller: controller, maxHeight: 110),
-                    ],
+            editor: Stack(
+              fit: StackFit.expand,
+              children: [
+                Column(
+                  children: [
+                    Expanded(
+                      child: MonacoCodeEditorPanel(
+                        controller: controller,
+                        labels: labels,
+                        labelModeEnabled: labelModeEnabled,
+                        wireModeEnabled: wireModeEnabled,
+                      ),
+                    ),
+                    ErrorPanel(controller: controller, maxHeight: 110),
+                  ],
+                ),
+                if (viewMode.isSourceControl && sourceDiffPath != null)
+                  Positioned.fill(
+                    child: WorkspaceDiffPanel(
+                      workspace: controller.workspace,
+                      path: sourceDiffPath!,
+                      onClose: onCloseSourceDiff,
+                    ),
                   ),
+              ],
+            ),
             panel: IdeBottomPanel(
               runner: runner,
               expanded: showConsole,
