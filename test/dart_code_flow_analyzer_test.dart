@@ -147,6 +147,50 @@ void second() {
     expect(callerCycle.children, isEmpty);
   });
 
+
+  test('records concrete call-site locations for Monaco wire rendering', () {
+    const entries = <WorkspaceEntry>[
+      WorkspaceEntry(
+        id: 'main',
+        path: 'lib/main.dart',
+        type: WorkspaceEntryType.file,
+        content: '''
+void buildCart() {
+  loadCart();
+  loadCart();
+}
+
+void loadCart() {}
+''',
+      ),
+    ];
+
+    final graph = analyzer.analyze(
+      entries: entries,
+      activeFilePath: 'lib/main.dart',
+      cursorLine: 1,
+      cursorColumn: 5,
+    );
+
+    expect(graph.edges, hasLength(2));
+
+    final first = graph.edges.first;
+    final second = graph.edges.last;
+
+    expect(first.sourceName, 'buildCart');
+    expect(first.source.filePath, 'lib/main.dart');
+    expect(first.source.line, 2);
+    expect(first.callSite.filePath, 'lib/main.dart');
+    expect(first.callSite.line, 3);
+    expect(first.callSite.column, 3);
+    expect(first.callSite.length, 'loadCart'.length);
+    expect(first.targetName, 'loadCart');
+    expect(first.target.line, 7);
+
+    expect(second.callSite.line, 4);
+    expect(second.target.line, 7);
+  });
+
   test('requires the cursor to identify a method or function', () {
     const entries = <WorkspaceEntry>[
       WorkspaceEntry(

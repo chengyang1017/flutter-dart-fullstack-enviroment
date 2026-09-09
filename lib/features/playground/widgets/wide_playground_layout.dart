@@ -371,21 +371,21 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'ç”µçº¿æ¨¡å¼',
+                                        '电线模式',
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
                                       Text(
-                                        'æŒç»­æ˜¾ç¤º Â· è‡ªåŠ¨è·Ÿéšä»£ç ',
+                                        '持续显示 · 自动跟随代码',
                                         style: TextStyle(fontSize: 10),
                                       ),
                                     ],
                                   ),
                                 ),
                                 IconButton(
-                                  tooltip: 'å…³é—­ç”µçº¿æ¨¡å¼',
+                                  tooltip: '关闭电线模式',
                                   visualDensity: VisualDensity.compact,
                                   onPressed: () {
                                     setState(() {

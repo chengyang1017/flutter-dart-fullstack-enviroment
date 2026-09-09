@@ -18,6 +18,32 @@ class CodeFlowLocation {
   final int length;
 }
 
+class CodeFlowCall {
+  const CodeFlowCall({
+    required this.name,
+    required this.location,
+  });
+
+  final String name;
+  final CodeFlowLocation location;
+}
+
+class CodeFlowEdge {
+  const CodeFlowEdge({
+    required this.sourceName,
+    required this.source,
+    required this.callSite,
+    required this.targetName,
+    required this.target,
+  });
+
+  final String sourceName;
+  final CodeFlowLocation source;
+  final CodeFlowLocation callSite;
+  final String targetName;
+  final CodeFlowLocation target;
+}
+
 class CodeFlowNode {
   const CodeFlowNode({
     required this.name,
@@ -40,6 +66,7 @@ class CodeFlowGraph {
     required this.callersRoot,
     required this.scannedFiles,
     required this.declarationCount,
+    required this.edges,
   });
 
   /// Methods/functions called by the declaration under the cursor.
@@ -50,6 +77,12 @@ class CodeFlowGraph {
 
   final int scannedFiles;
   final int declarationCount;
+
+  /// Concrete call-site edges across the parsed Workspace.
+  ///
+  /// Unlike the tree nodes, this preserves repeated calls to the same target so
+  /// Monaco can later draw a wire from each invocation to its declaration.
+  final List<CodeFlowEdge> edges;
 
   int get directCalleeCount => root.children.length;
   int get directCallerCount => callersRoot.children.length;
@@ -115,9 +148,12 @@ class DartCodeFlowAnalyzer {
     }
 
     for (final declaration in declarations) {
-      final calls = _MethodCallCollector();
+      final calls = _MethodCallCollector(
+        filePath: declaration.filePath,
+        source: sourceByPath[declaration.filePath]!,
+      );
       declaration.body.accept(calls);
-      declaration.calls.addAll(calls.names);
+      declaration.calls.addAll(calls.calls);
     }
 
     final byName = <String, List<_FlowDeclaration>>{};
@@ -171,7 +207,47 @@ class DartCodeFlowAnalyzer {
       ),
       scannedFiles: dartFiles.length,
       declarationCount: declarations.length,
+      edges: _buildEdges(
+        declarations: declarations,
+        byName: byName,
+      ),
     );
+  }
+
+  List<CodeFlowEdge> _buildEdges({
+    required List<_FlowDeclaration> declarations,
+    required Map<String, List<_FlowDeclaration>> byName,
+  }) {
+    final edges = <CodeFlowEdge>[];
+    final seen = <String>{};
+
+    for (final caller in declarations) {
+      for (final call in caller.calls) {
+        final targets = _resolveTargets(
+          caller,
+          call.name,
+          byName[call.name] ?? const <_FlowDeclaration>[],
+        );
+
+        for (final target in targets) {
+          final key = '${caller.key}#'
+              '${call.location.line}:${call.location.column}->${target.key}';
+          if (!seen.add(key)) continue;
+
+          edges.add(
+            CodeFlowEdge(
+              sourceName: caller.displayName,
+              source: caller.location,
+              callSite: call.location,
+              targetName: target.displayName,
+              target: target.location,
+            ),
+          );
+        }
+      }
+    }
+
+    return List<CodeFlowEdge>.unmodifiable(edges);
   }
 
   Map<String, List<_FlowDeclaration>> _buildCallersIndex({
@@ -182,11 +258,11 @@ class DartCodeFlowAnalyzer {
 
     for (final caller in declarations) {
       final linkedTargets = <String>{};
-      for (final callName in caller.calls) {
+      for (final call in caller.calls) {
         final targets = _resolveTargets(
           caller,
-          callName,
-          byName[callName] ?? const <_FlowDeclaration>[],
+          call.name,
+          byName[call.name] ?? const <_FlowDeclaration>[],
         );
         for (final target in targets) {
           if (!linkedTargets.add(target.key)) continue;
@@ -251,11 +327,11 @@ class DartCodeFlowAnalyzer {
     final children = <CodeFlowNode>[];
     final addedTargets = <String>{};
 
-    for (final callName in declaration.calls) {
+    for (final call in declaration.calls) {
       final targets = _resolveTargets(
         declaration,
-        callName,
-        byName[callName] ?? const <_FlowDeclaration>[],
+        call.name,
+        byName[call.name] ?? const <_FlowDeclaration>[],
       );
       for (final target in targets) {
         if (!addedTargets.add(target.key)) continue;
@@ -353,7 +429,7 @@ class _FlowDeclaration {
   final int startOffset;
   final int endOffset;
   final FunctionBody body;
-  final List<String> calls = <String>[];
+  final List<CodeFlowCall> calls = <CodeFlowCall>[];
 
   String get key => '$filePath#$startOffset';
   String get displayName => owner == null ? name : '$owner.$name';
@@ -435,13 +511,29 @@ class _DeclarationCollector extends RecursiveAstVisitor<void> {
 }
 
 class _MethodCallCollector extends RecursiveAstVisitor<void> {
-  final List<String> names = <String>[];
-  final Set<String> _seen = <String>{};
+  _MethodCallCollector({
+    required this.filePath,
+    required this.source,
+  });
+
+  final String filePath;
+  final String source;
+  final List<CodeFlowCall> calls = <CodeFlowCall>[];
 
   @override
   void visitMethodInvocation(MethodInvocation node) {
-    final name = node.methodName.name;
-    if (_seen.add(name)) names.add(name);
+    final methodName = node.methodName;
+    calls.add(
+      CodeFlowCall(
+        name: methodName.name,
+        location: _locationFor(
+          filePath,
+          source,
+          methodName.offset,
+          methodName.length,
+        ),
+      ),
+    );
     super.visitMethodInvocation(node);
   }
 }
