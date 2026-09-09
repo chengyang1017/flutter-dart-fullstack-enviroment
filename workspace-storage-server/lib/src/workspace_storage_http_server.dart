@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
+
 import 'workspace_authenticator.dart';
 import 'workspace_git_pull_service.dart';
 import 'workspace_git_push_service.dart';
 import 'workspace_git_remote_checker.dart';
 import 'workspace_secret_store.dart';
+import 'workspace_share_store.dart';
 import 'workspace_store.dart';
 
 
@@ -80,9 +83,11 @@ class WorkspaceStorageHttpServer {
     WorkspaceGitRemoteChecker? gitRemoteChecker,
     WorkspaceGitPullService? gitPullService,
     WorkspaceGitPushService? gitPushService,
+    FileWorkspaceShareStore? shareStore,
     this.allowedOrigin = '*',
   })  : store = store,
         secretStore = secretStore,
+        shareStore = shareStore ?? FileWorkspaceShareStore(store.root),
         gitRemoteChecker = gitRemoteChecker ??
             WorkspaceGitRemoteChecker(
               workspaceStore: store,
@@ -105,6 +110,7 @@ class WorkspaceStorageHttpServer {
 
   final FileWorkspaceStore store;
   final FileWorkspaceSecretStore secretStore;
+  final FileWorkspaceShareStore shareStore;
   final WorkspaceGitRemoteChecker gitRemoteChecker;
   final WorkspaceGitPullService gitPullService;
   final WorkspaceGitPushService gitPushService;
@@ -169,6 +175,11 @@ class WorkspaceStorageHttpServer {
         }
         final status = await _readStorageStatus(store.root);
         await _sendJson(request.response, HttpStatus.ok, status);
+        return;
+      }
+
+      if (segments.isNotEmpty && segments.first == 'shares') {
+        await _handlePublicShare(request, segments);
         return;
       }
 
@@ -267,6 +278,75 @@ class WorkspaceStorageHttpServer {
           username: _readOptionalString(body, 'username'),
         );
         await _sendJson(request.response, HttpStatus.ok, result.toJson());
+        return;
+      }
+
+      if (segments.length >= 3 && segments[2] == 'shares') {
+        final workspaceId = _readWorkspaceIdFromRoute(segments[1]);
+        final workspace = await store.loadWorkspace(userId, workspaceId);
+        if (workspace == null) {
+          await _sendError(
+            request.response,
+            HttpStatus.notFound,
+            'Workspace not found.',
+          );
+          return;
+        }
+
+        if (segments.length == 3 && request.method == 'GET') {
+          final shares = await shareStore.listShares(
+            userId: userId,
+            workspaceId: workspaceId,
+          );
+          await _sendJson(
+            request.response,
+            HttpStatus.ok,
+            <String, Object?>{
+              'shares': [
+                for (final share in shares) share.toPublicJson(),
+              ],
+            },
+          );
+          return;
+        }
+
+        if (segments.length == 3 && request.method == 'POST') {
+          final share = await shareStore.createShare(
+            userId: userId,
+            workspaceId: workspaceId,
+            document: workspace,
+          );
+          await _sendJson(
+            request.response,
+            HttpStatus.created,
+            share.toPublicJson(),
+          );
+          return;
+        }
+
+        if (segments.length == 4 && request.method == 'DELETE') {
+          final deleted = await shareStore.revoke(
+            userId: userId,
+            workspaceId: workspaceId,
+            token: segments[3],
+          );
+          if (!deleted) {
+            await _sendError(
+              request.response,
+              HttpStatus.notFound,
+              'Workspace share not found.',
+            );
+            return;
+          }
+          await _sendEmpty(request.response, HttpStatus.noContent);
+          return;
+        }
+
+        await _sendError(
+          request.response,
+          HttpStatus.notFound,
+          'Route not found.',
+        );
         return;
       }
 
@@ -396,6 +476,10 @@ class WorkspaceStorageHttpServer {
           workspaceId: workspaceId,
           expectedRevision: _readRevision(body),
         );
+        await shareStore.revokeWorkspace(
+          userId: userId,
+          workspaceId: workspaceId,
+        );
         await secretStore.deleteWorkspaceSecrets(
           userId: userId,
           workspaceId: workspaceId,
@@ -475,6 +559,190 @@ class WorkspaceStorageHttpServer {
         'Internal server error.',
       );
     }
+  }
+
+  Future<void> _handlePublicShare(
+    HttpRequest request,
+    List<String> segments,
+  ) async {
+    if (request.method != 'GET' || segments.length < 2) {
+      await _sendError(
+        request.response,
+        HttpStatus.notFound,
+        'Route not found.',
+      );
+      return;
+    }
+
+    final token = segments[1];
+    final shared = await shareStore.resolve(token);
+    if (shared == null) {
+      await _sendError(
+        request.response,
+        HttpStatus.notFound,
+        'Workspace share not found.',
+      );
+      return;
+    }
+
+    if (segments.length == 2) {
+      final project = _readObject(shared.document, 'project');
+      await _sendJson(
+        request.response,
+        HttpStatus.ok,
+        <String, Object?>{
+          'apiVersion': 1,
+          'kind': 'workspace-share',
+          'revision': shared.share.revision,
+          'createdAt': shared.share.createdAt.toUtc().toIso8601String(),
+          'project': _publicProject(project),
+          'treePath': '/shares/$token/tree',
+          'rawPathTemplate': '/shares/$token/raw/{path}',
+        },
+      );
+      return;
+    }
+
+    if (segments.length == 3 && segments[2] == 'tree') {
+      final tree = await _shareTree(shared, token);
+      await _sendJson(
+        request.response,
+        HttpStatus.ok,
+        <String, Object?>{
+          'revision': shared.share.revision,
+          'tree': tree,
+        },
+      );
+      return;
+    }
+
+    if (segments.length >= 4 && segments[2] == 'raw') {
+      final path = segments.sublist(3).join('/');
+      final entry = _findSharedEntry(shared, path);
+      if (entry == null || entry['type'] != 'file') {
+        await _sendError(
+          request.response,
+          HttpStatus.notFound,
+          'Shared file not found.',
+        );
+        return;
+      }
+
+      final encoding = entry['encoding'] == 'base64' ? 'base64' : 'utf8';
+      final content = entry['content'];
+      final source = content is String ? content : '';
+      final bytes = encoding == 'base64'
+          ? base64Decode(source)
+          : utf8.encode(source);
+      await _sendBytes(
+        request.response,
+        HttpStatus.ok,
+        bytes,
+        binary: encoding == 'base64',
+      );
+      return;
+    }
+
+    await _sendError(
+      request.response,
+      HttpStatus.notFound,
+      'Route not found.',
+    );
+  }
+
+  Map<String, Object?> _publicProject(Map<String, dynamic> project) {
+    return <String, Object?>{
+      for (final key in const <String>[
+        'id',
+        'name',
+        'slug',
+        'kind',
+        'lifecycle',
+        'updatedAt',
+        'flutterPlatforms',
+      ])
+        if (project.containsKey(key)) key: project[key],
+    };
+  }
+
+  Future<List<Map<String, Object?>>> _shareTree(
+    WorkspaceSharedDocument shared,
+    String token,
+  ) async {
+    final snapshot = _readObject(shared.document, 'snapshot');
+    final rawEntries = snapshot['entries'];
+    if (rawEntries is! Iterable) {
+      throw const FormatException('Workspace share entries are invalid.');
+    }
+
+    final tree = <Map<String, Object?>>[];
+    for (final raw in rawEntries) {
+      if (raw is! Map) {
+        throw const FormatException('Workspace share entry is invalid.');
+      }
+      final entry = Map<String, dynamic>.from(raw);
+      final path = entry['path'];
+      final type = entry['type'];
+      if (path is! String || path.isEmpty) {
+        throw const FormatException('Workspace share entry path is invalid.');
+      }
+
+      if (type == 'directory') {
+        tree.add(<String, Object?>{
+          'path': path,
+          'type': 'tree',
+        });
+        continue;
+      }
+      if (type != 'file') {
+        throw const FormatException('Workspace share entry type is invalid.');
+      }
+
+      final encoding = entry['encoding'] == 'base64' ? 'base64' : 'utf8';
+      final content = entry['content'];
+      final source = content is String ? content : '';
+      final bytes = encoding == 'base64'
+          ? base64Decode(source)
+          : utf8.encode(source);
+      final encodedPath = path
+          .split('/')
+          .map(Uri.encodeComponent)
+          .join('/');
+      tree.add(<String, Object?>{
+        'path': path,
+        'type': 'blob',
+        'encoding': encoding,
+        'size': bytes.length,
+        'sha256': await _sha256Hex(bytes),
+        'rawPath': '/shares/$token/raw/$encodedPath',
+      });
+    }
+    tree.sort((a, b) => (a['path'] as String).compareTo(b['path'] as String));
+    return tree;
+  }
+
+  Map<String, dynamic>? _findSharedEntry(
+    WorkspaceSharedDocument shared,
+    String path,
+  ) {
+    final snapshot = _readObject(shared.document, 'snapshot');
+    final rawEntries = snapshot['entries'];
+    if (rawEntries is! Iterable) {
+      throw const FormatException('Workspace share entries are invalid.');
+    }
+    for (final raw in rawEntries) {
+      if (raw is Map && raw['path'] == path) {
+        return Map<String, dynamic>.from(raw);
+      }
+    }
+    return null;
+  }
+
+  Future<String> _sha256Hex(List<int> bytes) async {
+    final digest = await Sha256().hash(bytes);
+    return digest.bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 
   Future<Map<String, dynamic>> _readJsonObject(HttpRequest request) async {
@@ -580,6 +848,21 @@ class WorkspaceStorageHttpServer {
   Future<void> _sendEmpty(HttpResponse response, int statusCode) async {
     _setCors(response);
     response.statusCode = statusCode;
+    await response.close();
+  }
+
+  Future<void> _sendBytes(
+    HttpResponse response,
+    int statusCode,
+    List<int> bytes, {
+    required bool binary,
+  }) async {
+    _setCors(response);
+    response.statusCode = statusCode;
+    response.headers.contentType = binary
+        ? ContentType.binary
+        : ContentType('text', 'plain', charset: 'utf-8');
+    response.add(bytes);
     await response.close();
   }
 
