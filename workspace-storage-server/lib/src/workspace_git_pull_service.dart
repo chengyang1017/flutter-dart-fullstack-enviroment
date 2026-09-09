@@ -186,7 +186,8 @@ class ProcessWorkspaceGitCloneExecutor implements WorkspaceGitCloneExecutor {
 
   Future<File> _createAskPass(Directory directory) async {
     if (Platform.isWindows) {
-      final file = File('${directory.path}${Platform.pathSeparator}askpass.cmd');
+      final file =
+          File('${directory.path}${Platform.pathSeparator}askpass.cmd');
       await file.writeAsString(
         '@echo off\r\n'
         'echo %~1 | findstr /I "Username" >nul\r\n'
@@ -267,7 +268,8 @@ class WorkspaceGitPullService {
     String? secretName,
     String? username,
   }) async {
-    final document = await workspaceStore.loadWorkspace(userId, workspaceId);
+    final document =
+        await workspaceStore.loadWorkspaceMeta(userId, workspaceId);
     if (document == null) {
       throw WorkspaceDocumentNotFound(workspaceId);
     }
@@ -357,7 +359,8 @@ class WorkspaceGitPullService {
     }
 
     final repositoryFiles = <String, File>{};
-    await for (final entity in checkout.list(recursive: true, followLinks: false)) {
+    await for (final entity
+        in checkout.list(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
       final relative = _relativePath(checkout, entity);
       if (relative.isEmpty || _shouldIgnore(relative)) continue;

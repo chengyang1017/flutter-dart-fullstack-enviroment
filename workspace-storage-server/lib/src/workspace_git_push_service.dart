@@ -18,8 +18,7 @@ class WorkspaceGitHeadMismatch implements Exception {
   final String actualRemoteHead;
 
   @override
-  String toString() =>
-      'WorkspaceGitHeadMismatch(workspaceId: $workspaceId, '
+  String toString() => 'WorkspaceGitHeadMismatch(workspaceId: $workspaceId, '
       'expected: $expectedRemoteHead, actual: $actualRemoteHead)';
 }
 
@@ -227,7 +226,8 @@ class ProcessWorkspaceGitPushCommandExecutor
 
   Future<File> _createAskPass(Directory directory) async {
     if (Platform.isWindows) {
-      final file = File('${directory.path}${Platform.pathSeparator}askpass.cmd');
+      final file =
+          File('${directory.path}${Platform.pathSeparator}askpass.cmd');
       await file.writeAsString(
         '@echo off\r\n'
         'echo %~1 | findstr /I "Username" >nul\r\n'
@@ -312,7 +312,11 @@ class WorkspaceGitPushService {
     String? secretName,
     String? username,
   }) async {
-    final document = await workspaceStore.loadWorkspace(userId, workspaceId);
+    final document = await workspaceStore.loadWorkspace(
+      userId,
+      workspaceId,
+      includeBaseEntries: false,
+    );
     if (document == null) {
       throw WorkspaceDocumentNotFound(workspaceId);
     }
@@ -365,7 +369,8 @@ class WorkspaceGitPushService {
 
     final temp = await Directory.systemTemp.createTemp('workspace-git-push-');
     try {
-      final checkout = Directory('${temp.path}${Platform.pathSeparator}checkout');
+      final checkout =
+          Directory('${temp.path}${Platform.pathSeparator}checkout');
       final clone = await cloneExecutor.clone(
         repositoryUrl: repositoryUrl,
         branch: branch,
@@ -456,7 +461,8 @@ class WorkspaceGitPushService {
       final path = item['path'];
       final content = item['content'];
       final encoding = item['encoding'];
-      if (path is! String || content is! String ||
+      if (path is! String ||
+          content is! String ||
           (encoding != null && encoding is! String)) {
         throw const FormatException('Workspace snapshot file is invalid.');
       }
@@ -467,7 +473,8 @@ class WorkspaceGitPushService {
         );
       }
       if (files.containsKey(path)) {
-        throw FormatException('Workspace snapshot contains duplicate path: $path');
+        throw FormatException(
+            'Workspace snapshot contains duplicate path: $path');
       }
 
       switch (encoding) {
@@ -479,19 +486,23 @@ class WorkspaceGitPushService {
           try {
             base64.decode(content);
           } on FormatException {
-            throw FormatException('Workspace binary file has invalid base64: $path');
+            throw FormatException(
+                'Workspace binary file has invalid base64: $path');
           }
           files[path] = '$_binaryEnvelope$content';
           break;
         default:
-          throw FormatException('Unsupported Workspace file encoding: $encoding');
+          throw FormatException(
+              'Unsupported Workspace file encoding: $encoding');
       }
     }
 
     final pubspec = files['pubspec.yaml'];
     final main = files['lib/main.dart'];
-    if (pubspec == null || main == null ||
-        _isBinaryPayload(pubspec) || _isBinaryPayload(main)) {
+    if (pubspec == null ||
+        main == null ||
+        _isBinaryPayload(pubspec) ||
+        _isBinaryPayload(main)) {
       throw const FormatException(
         'Workspace Git push requires text pubspec.yaml and lib/main.dart.',
       );
@@ -534,7 +545,8 @@ class WorkspaceGitPushService {
     }
 
     final candidates = <String>[];
-    await for (final entity in checkout.list(recursive: true, followLinks: false)) {
+    await for (final entity
+        in checkout.list(recursive: true, followLinks: false)) {
       if (entity is Link) {
         final relative = _relativePath(checkout, entity.path);
         if (!_shouldIgnore(relative)) {

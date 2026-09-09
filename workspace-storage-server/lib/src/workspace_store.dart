@@ -14,8 +14,7 @@ class WorkspaceRevisionMismatch implements Exception {
   final String actualRevision;
 
   @override
-  String toString() =>
-      'WorkspaceRevisionMismatch(workspaceId: $workspaceId, '
+  String toString() => 'WorkspaceRevisionMismatch(workspaceId: $workspaceId, '
       'expected: $expectedRevision, actual: $actualRevision)';
 }
 
@@ -57,9 +56,79 @@ class FileWorkspaceStore {
 
   Future<Map<String, dynamic>?> loadWorkspace(
     String userId,
+    String workspaceId, {
+    bool includeBaseEntries = true,
+  }) {
+    return _serialized(
+      userId,
+      () => _readDocument(
+        userId,
+        workspaceId,
+        includeBaseEntries: includeBaseEntries,
+      ),
+    );
+  }
+
+  /// Reads only project/snapshot metadata and revision. Split Workspace entry
+  /// collections are not materialized. Legacy documents still require one full
+  /// decode, but only old pre-split data takes that path.
+  Future<Map<String, dynamic>?> loadWorkspaceMeta(
+    String userId,
     String workspaceId,
   ) {
-    return _serialized(userId, () => _readDocument(userId, workspaceId));
+    return _serialized(
+      userId,
+      () => _readWorkspaceMetaOnly(userId, workspaceId),
+    );
+  }
+
+  Future<bool> workspaceExists(String userId, String workspaceId) {
+    return _serialized(userId, () async {
+      if (await _workspaceMetaFile(userId, workspaceId).exists()) return true;
+      return _documentFile(userId, workspaceId).exists();
+    });
+  }
+
+  /// Visits only the current `snapshot.entries` collection while holding the
+  /// user's Workspace serialization lock. This lets immutable consumers such
+  /// as share creation copy one entry at a time without ever rebuilding the
+  /// entire Workspace document in memory.
+  Future<Map<String, dynamic>?> visitWorkspaceSnapshot({
+    required String userId,
+    required String workspaceId,
+    required Future<void> Function(Map<String, dynamic> entry) onEntry,
+  }) {
+    return _serialized(userId, () async {
+      final splitMeta = await _readSplitMeta(userId, workspaceId);
+      if (splitMeta != null) {
+        final metadata = _metadataFromSplitMeta(splitMeta);
+        await _visitSplitEntryCollection(
+          _workspaceEntriesDirectory(userId, workspaceId),
+          label: 'entries',
+          onEntry: onEntry,
+        );
+        return metadata;
+      }
+
+      final legacy = await _readLegacyDocument(userId, workspaceId);
+      if (legacy == null) return null;
+      final snapshot = legacy['snapshot'];
+      if (snapshot is! Map) {
+        throw const FormatException('Stored Workspace snapshot is invalid.');
+      }
+      final entries = snapshot['entries'];
+      if (entries is Iterable) {
+        for (final raw in entries) {
+          if (raw is! Map) {
+            throw const FormatException('Stored Workspace entry is invalid.');
+          }
+          await onEntry(Map<String, dynamic>.from(raw));
+        }
+      } else if (entries != null) {
+        throw const FormatException('Stored Workspace entries are invalid.');
+      }
+      return _metadataFromDocument(legacy);
+    });
   }
 
   Future<Map<String, dynamic>> createWorkspace({
@@ -69,7 +138,7 @@ class FileWorkspaceStore {
   }) {
     return _serialized(userId, () async {
       final workspaceId = _readWorkspaceId(project);
-      final existing = await _readDocument(userId, workspaceId);
+      final existing = await _readWorkspaceMetaOnly(userId, workspaceId);
       if (existing != null) {
         throw StateError('Workspace already exists: $workspaceId');
       }
@@ -111,7 +180,7 @@ class FileWorkspaceStore {
         );
       }
 
-      final current = await _readDocument(userId, workspaceId);
+      final current = await _readWorkspaceMetaOnly(userId, workspaceId);
       if (current == null) {
         throw WorkspaceDocumentNotFound(workspaceId);
       }
@@ -267,7 +336,7 @@ class FileWorkspaceStore {
     required String expectedRevision,
   }) {
     return _serialized(userId, () async {
-      final current = await _readDocument(userId, workspaceId);
+      final current = await _readWorkspaceMetaOnly(userId, workspaceId);
       if (current == null) {
         throw WorkspaceDocumentNotFound(workspaceId);
       }
@@ -458,11 +527,26 @@ class FileWorkspaceStore {
 
   Future<Map<String, dynamic>?> _readDocument(
     String userId,
-    String workspaceId,
-  ) async {
-    final split = await _readSplitDocument(userId, workspaceId);
+    String workspaceId, {
+    bool includeBaseEntries = true,
+  }) async {
+    final split = await _readSplitDocument(
+      userId,
+      workspaceId,
+      includeBaseEntries: includeBaseEntries,
+    );
     if (split != null) return split;
-    return _readLegacyDocument(userId, workspaceId);
+
+    final legacy = await _readLegacyDocument(userId, workspaceId);
+    if (legacy == null || includeBaseEntries) return legacy;
+    final snapshot = legacy['snapshot'];
+    if (snapshot is! Map) return legacy;
+    final nextSnapshot = Map<String, dynamic>.from(snapshot)
+      ..remove('baseEntries');
+    return <String, dynamic>{
+      ...legacy,
+      'snapshot': nextSnapshot,
+    };
   }
 
   Future<Map<String, dynamic>?> _readLegacyDocument(
@@ -476,8 +560,9 @@ class FileWorkspaceStore {
 
   Future<Map<String, dynamic>?> _readSplitDocument(
     String userId,
-    String workspaceId,
-  ) async {
+    String workspaceId, {
+    required bool includeBaseEntries,
+  }) async {
     final meta = await _readSplitMeta(userId, workspaceId);
     if (meta == null) return null;
 
@@ -496,10 +581,12 @@ class FileWorkspaceStore {
       _workspaceEntriesDirectory(userId, workspaceId),
       label: 'entries',
     );
-    snapshot['baseEntries'] = await _readSplitEntryCollection(
-      _workspaceBaseEntriesDirectory(userId, workspaceId),
-      label: 'baseEntries',
-    );
+    if (includeBaseEntries) {
+      snapshot['baseEntries'] = await _readSplitEntryCollection(
+        _workspaceBaseEntriesDirectory(userId, workspaceId),
+        label: 'baseEntries',
+      );
+    }
 
     return <String, dynamic>{
       'project': Map<String, dynamic>.from(rawProject),
@@ -515,6 +602,55 @@ class FileWorkspaceStore {
     final file = _workspaceMetaFile(userId, workspaceId);
     if (!await file.exists()) return null;
     return _readJsonObject(file, 'Workspace metadata');
+  }
+
+  Future<Map<String, dynamic>?> _readWorkspaceMetaOnly(
+    String userId,
+    String workspaceId,
+  ) async {
+    final splitMeta = await _readSplitMeta(userId, workspaceId);
+    if (splitMeta != null) return _metadataFromSplitMeta(splitMeta);
+
+    final legacy = await _readLegacyDocument(userId, workspaceId);
+    if (legacy == null) return null;
+    return _metadataFromDocument(legacy);
+  }
+
+  Map<String, dynamic> _metadataFromSplitMeta(Map<String, dynamic> meta) {
+    final project = meta['project'];
+    final snapshot = meta['snapshot'];
+    final revision = meta['revision'];
+    if (project is! Map ||
+        snapshot is! Map ||
+        revision is! String ||
+        revision.isEmpty) {
+      throw const FormatException('Workspace split metadata is invalid.');
+    }
+    return <String, dynamic>{
+      'project': Map<String, dynamic>.from(project),
+      'snapshot': Map<String, dynamic>.from(snapshot),
+      'revision': revision,
+    };
+  }
+
+  Map<String, dynamic> _metadataFromDocument(Map<String, dynamic> document) {
+    final project = document['project'];
+    final rawSnapshot = document['snapshot'];
+    final revision = document['revision'];
+    if (project is! Map ||
+        rawSnapshot is! Map ||
+        revision is! String ||
+        revision.isEmpty) {
+      throw const FormatException('Stored Workspace document is invalid.');
+    }
+    final snapshot = Map<String, dynamic>.from(rawSnapshot)
+      ..remove('entries')
+      ..remove('baseEntries');
+    return <String, dynamic>{
+      'project': Map<String, dynamic>.from(project),
+      'snapshot': snapshot,
+      'revision': revision,
+    };
   }
 
   String _readDocumentRevision(
@@ -652,9 +788,7 @@ class FileWorkspaceStore {
       try {
         await temp.rename(target.path);
       } catch (_) {
-        if (movedPrevious &&
-            !await target.exists() &&
-            await backup.exists()) {
+        if (movedPrevious && !await target.exists() && await backup.exists()) {
           await backup.rename(target.path);
         }
         rethrow;
@@ -707,7 +841,8 @@ class FileWorkspaceStore {
         throw FormatException('Workspace snapshot $label id is invalid.');
       }
       if (!ids.add(id)) {
-        throw FormatException('Workspace snapshot $label contains duplicate id: $id');
+        throw FormatException(
+            'Workspace snapshot $label contains duplicate id: $id');
       }
       rows.add(row);
     }
@@ -721,9 +856,8 @@ class FileWorkspaceStore {
     await directory.create(recursive: true);
     const batchSize = 24;
     for (var start = 0; start < rows.length; start += batchSize) {
-      final end = start + batchSize < rows.length
-          ? start + batchSize
-          : rows.length;
+      final end =
+          start + batchSize < rows.length ? start + batchSize : rows.length;
       await Future.wait(<Future<void>>[
         for (final row in rows.sublist(start, end))
           _writeJson(
@@ -750,9 +884,8 @@ class FileWorkspaceStore {
     const batchSize = 24;
     final rows = <Map<String, dynamic>>[];
     for (var start = 0; start < files.length; start += batchSize) {
-      final end = start + batchSize < files.length
-          ? start + batchSize
-          : files.length;
+      final end =
+          start + batchSize < files.length ? start + batchSize : files.length;
       rows.addAll(
         await Future.wait<Map<String, dynamic>>(<Future<Map<String, dynamic>>>[
           for (final file in files.sublist(start, end))
@@ -770,6 +903,20 @@ class FileWorkspaceStore {
       return aId.compareTo(bId);
     });
     return rows;
+  }
+
+  Future<void> _visitSplitEntryCollection(
+    Directory directory, {
+    required String label,
+    required Future<void> Function(Map<String, dynamic> entry) onEntry,
+  }) async {
+    if (!await directory.exists()) return;
+
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      final entry = await _readJsonObject(entity, 'Workspace $label entry');
+      await onEntry(entry);
+    }
   }
 
   Future<void> _deleteDocument(String userId, String workspaceId) async {
@@ -815,7 +962,8 @@ class FileWorkspaceStore {
     String userId,
     String workspaceId,
   ) =>
-      Directory('${_workspaceDirectory(userId, workspaceId).path}/base-entries');
+      Directory(
+          '${_workspaceDirectory(userId, workspaceId).path}/base-entries');
 
   File _entryFile(Directory directory, String entryId) =>
       File('${directory.path}/${_key(entryId)}.json');
