@@ -80,31 +80,74 @@ class FileWorkspaceStore {
 
   /// Streams a Workspace document without materializing all entry rows.
   ///
-  /// Split Workspace storage writes each entry JSON file directly to [sink].
-  /// Legacy single-file documents are copied as bytes. This keeps large GET
-  /// requests from rebuilding the complete snapshot in the server heap.
+  /// The immutable response is staged to a temporary file while holding the
+  /// user's serialization lock, then streamed to the network after releasing
+  /// that lock. This preserves a consistent Workspace revision without letting
+  /// a slow client block catalog reads or other Workspace requests for minutes.
   Future<bool> writeWorkspaceJson({
     required String userId,
     required String workspaceId,
     required IOSink sink,
-  }) {
-    return _serialized(userId, () async {
-      final meta = await _readSplitMeta(userId, workspaceId);
-      if (meta != null) {
-        await _writeSplitWorkspaceJson(
-          userId: userId,
-          workspaceId: workspaceId,
-          meta: meta,
-          sink: sink,
-        );
-        return true;
-      }
+  }) async {
+    File? stagedFile;
 
-      final legacy = _documentFile(userId, workspaceId);
-      if (!await legacy.exists()) return false;
-      await sink.addStream(legacy.openRead());
+    try {
+      stagedFile = await _serialized<File?>(userId, () async {
+        final meta = await _readSplitMeta(userId, workspaceId);
+        final legacy = meta == null ? _documentFile(userId, workspaceId) : null;
+        if (meta == null && !await legacy!.exists()) return null;
+
+        final file = File(
+          '${Directory.systemTemp.path}/workspace-stream-'
+          '${userId.hashCode}-${workspaceId.hashCode}-'
+          '${DateTime.now().microsecondsSinceEpoch}.json',
+        );
+
+        try {
+          final output = file.openWrite();
+          try {
+            if (meta != null) {
+              await _writeSplitWorkspaceJson(
+                userId: userId,
+                workspaceId: workspaceId,
+                meta: meta,
+                sink: output,
+              );
+            } else {
+              await output.addStream(legacy!.openRead());
+            }
+            await output.flush();
+          } finally {
+            await output.close();
+          }
+          return file;
+        } catch (_) {
+          if (await file.exists()) {
+            await file.delete();
+          }
+          rethrow;
+        }
+      });
+
+      if (stagedFile == null) return false;
+
+      // Network backpressure can be arbitrarily slow, so it must stay outside
+      // the per-user serialization lock.
+      await sink.addStream(stagedFile.openRead());
       return true;
-    });
+    } finally {
+      final file = stagedFile;
+      if (file != null) {
+        try {
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (_) {
+          // A failed temp cleanup must not turn an otherwise valid response
+          // into a request failure.
+        }
+      }
+    }
   }
 
   /// Reads only project/snapshot metadata and revision. Split Workspace entry
