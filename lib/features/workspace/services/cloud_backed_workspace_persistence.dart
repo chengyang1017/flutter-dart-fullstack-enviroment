@@ -6,6 +6,7 @@ import '../models/workspace_remote_models.dart';
 import '../models/workspace_snapshot.dart';
 import '../models/workspace_snapshot_delta.dart';
 import 'workspace_delta_remote_persistence.dart';
+import 'workspace_pending_sync_store.dart';
 import 'workspace_persistence.dart';
 import 'workspace_project_catalog_store.dart';
 import 'workspace_remote_persistence.dart';
@@ -47,7 +48,11 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
   /// deleted just because it is absent from the remote catalog.
   Future<void> hydrateFromRemote() async {
     final cachedProjects = _cache.catalogStore.loadProjects();
+    final cachedById = <String, WorkspaceProject>{
+      for (final project in cachedProjects) project.id: project,
+    };
     final preferredActive = _cache.catalogStore.loadActiveProjectId();
+    final pendingStore = _pendingSyncStore;
     final catalog = await _remote.loadCatalog();
 
     final hydratedProjects = <WorkspaceProject>[];
@@ -72,14 +77,38 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
         );
       }
 
-      hydratedProjects.add(document.project);
+      final cachedProject = cachedById[document.project.id];
+      final recoveryProject = cachedProject ?? document.project;
+      final hasPendingLocal =
+          pendingStore?.isPendingSync(recoveryProject.storageKey) ?? false;
+      final pendingSnapshot = hasPendingLocal
+          ? _cache.snapshotStore.load(recoveryProject.storageKey)
+          : null;
+
+      hydratedProjects.add(
+        pendingSnapshot == null ? document.project : recoveryProject,
+      );
       remoteIds.add(document.project.id);
       _revisions[document.project.id] = document.revision;
       _syncedSnapshots[document.project.id] = document.snapshot;
-      await _cache.snapshotStore.save(
-        document.project.storageKey,
-        document.snapshot,
-      );
+
+      if (pendingSnapshot != null && pendingStore != null) {
+        // A previous tab/browser session saved newer data locally but did not
+        // receive remote confirmation. Replay that local snapshot first. The
+        // remote snapshot is only the delta base and must not overwrite it.
+        await _saveRemoteProject(recoveryProject, pendingSnapshot);
+        await pendingStore.clearPendingSync(recoveryProject.storageKey);
+      } else {
+        await _cache.snapshotStore.save(
+          document.project.storageKey,
+          document.snapshot,
+        );
+        if (hasPendingLocal && pendingStore != null) {
+          // The marker survived but its local snapshot did not. Accept the
+          // authoritative remote snapshot and clear the stale marker.
+          await pendingStore.clearPendingSync(recoveryProject.storageKey);
+        }
+      }
     }
 
     for (final cached in cachedProjects) {
@@ -87,13 +116,16 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
         continue;
       }
 
-      // Keep local-only projects visible. The first later cloud save will use
-      // _saveRemoteProject(), which creates the remote document when no remote
-      // revision exists yet. This avoids destructive startup hydration and also
-      // avoids forcing a potentially huge upload during login.
       final snapshot = _cache.snapshotStore.load(cached.storageKey);
       if (snapshot != null) {
         hydratedProjects.add(cached);
+
+        if (pendingStore?.isPendingSync(cached.storageKey) ?? false) {
+          // The previous session may have been terminated before the initial
+          // cloud create completed. Retry it automatically on the next boot.
+          await _saveRemoteProject(cached, snapshot);
+          await pendingStore!.clearPendingSync(cached.storageKey);
+        }
       }
     }
 
@@ -107,6 +139,14 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
             ? hydratedProjects.first.id
             : _legacyDefaultProjectId;
     await _cache.catalogStore.saveActiveProjectId(activeId);
+  }
+
+  WorkspacePendingSyncStore? get _pendingSyncStore {
+    final store = _cache.snapshotStore;
+    if (store is WorkspacePendingSyncStore) {
+      return store as WorkspacePendingSyncStore;
+    }
+    return null;
   }
 
   WorkspaceProject? _projectForStorageKey(String storageKey) {
@@ -298,9 +338,12 @@ class _CloudSnapshotStore implements WorkspaceSnapshotStore {
     await owner._cache.snapshotStore.save(key, snapshot);
 
     final project = owner._projectForStorageKey(key);
-    if (project != null) {
-      await owner._saveRemoteProject(project, snapshot);
-    }
+    if (project == null || owner._isLocalOnlyProject(project)) return;
+
+    final pendingStore = owner._pendingSyncStore;
+    await pendingStore?.markPendingSync(key);
+    await owner._saveRemoteProject(project, snapshot);
+    await pendingStore?.clearPendingSync(key);
   }
 
   @override
@@ -343,7 +386,10 @@ class _CloudCatalogStore implements WorkspaceProjectCatalogStore {
 
       final snapshot = owner._cache.snapshotStore.load(project.storageKey);
       if (snapshot != null) {
+        final pendingStore = owner._pendingSyncStore;
+        await pendingStore?.markPendingSync(project.storageKey);
         await owner._saveRemoteProject(project, snapshot);
+        await pendingStore?.clearPendingSync(project.storageKey);
       }
     }
   }

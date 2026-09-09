@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
+
 import '../controllers/workspace_controller.dart';
-import '../models/workspace_snapshot.dart';
 import 'workspace_snapshot_store.dart';
 
-class WorkspaceAutosave {
+class WorkspaceAutosave with WidgetsBindingObserver {
   WorkspaceAutosave({
     required this.workspace,
     required this.store,
@@ -16,6 +17,7 @@ class WorkspaceAutosave {
       restoredSnapshot = true;
     }
     workspace.addListener(_handleWorkspaceChanged);
+    WidgetsBinding.instance.addObserver(this);
   }
 
   final WorkspaceController workspace;
@@ -27,6 +29,23 @@ class WorkspaceAutosave {
   bool _saveRequested = false;
   Timer? _debounce;
   Future<void>? _saveLoop;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(_flushForLifecycleExit());
+    }
+  }
+
+  Future<void> _flushForLifecycleExit() async {
+    try {
+      await flush();
+    } catch (_) {
+      // Cloud failures leave a durable pending-sync marker in the local store.
+      // The next cloud bootstrap will retry it automatically.
+    }
+  }
 
   void _handleWorkspaceChanged() {
     requestSave();
@@ -81,6 +100,7 @@ class WorkspaceAutosave {
   void dispose() {
     if (_disposed) return;
     workspace.removeListener(_handleWorkspaceChanged);
+    WidgetsBinding.instance.removeObserver(this);
     _debounce?.cancel();
     _debounce = null;
     _saveRequested = false;

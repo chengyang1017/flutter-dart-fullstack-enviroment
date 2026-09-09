@@ -686,6 +686,11 @@ class FileWorkspaceStore {
     Object? value, {
     required String label,
   }) {
+    // Older Workspace documents treated snapshot payloads as opaque and may
+    // not have the v3 entries/baseEntries fields yet. Split storage keeps
+    // those legacy snapshots valid by treating a missing collection as empty.
+    if (value == null) return <Map<String, dynamic>>[];
+
     if (value is! Iterable) {
       throw FormatException('Workspace snapshot $label is invalid.');
     }
