@@ -23,6 +23,9 @@ void main() {
           column: 3,
           length: 9,
         ),
+        sourceCode: '''void loadPosts() {
+  fetchPosts();
+}''',
       ),
     ],
   );
@@ -85,6 +88,18 @@ void main() {
     expect(find.text('loadPosts'), findsOneWidget);
 
     await tester.tap(find.text('loadPosts'));
+    await tester.pump();
+
+    expect(tapped, isNull);
+    expect(find.text('Workspace 原始源码'), findsOneWidget);
+    expect(
+      find.text('''void loadPosts() {
+  fetchPosts();
+}'''),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('打开源码'));
     await tester.pump();
     expect(tapped?.displayName, 'loadPosts');
   });

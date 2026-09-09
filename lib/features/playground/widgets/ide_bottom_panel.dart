@@ -41,12 +41,14 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
   late final ValueNotifier<double> _panelHeight;
   late final ValueNotifier<double?> _previewPanelHeight;
   late final ValueNotifier<bool> _sashHighlighted;
-  final FocusNode _sashFocusNode = FocusNode(debugLabel: 'IDE bottom panel sash');
+  final FocusNode _sashFocusNode =
+      FocusNode(debugLabel: 'IDE bottom panel sash');
 
   final GlobalKey _splitSurfaceKey = GlobalKey();
 
   int? _activePointerId;
   double _dragPointerOffsetInSash = _sashHeight / 2;
+  double _dragStartPanelHeight = _defaultPanelHeight;
   double _availableHeight = 0;
   bool _dragShieldVisible = false;
   bool _globalPointerRouteInstalled = false;
@@ -70,10 +72,12 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
   }
 
   double _clampPanelHeight(double requested) {
-    final maxHeight = math.max(
-      _collapsedPanelHeight,
-      _availableHeight - _minEditorHeight - _sashHeight,
-    ).toDouble();
+    final maxHeight = math
+        .max(
+          _collapsedPanelHeight,
+          _availableHeight - _minEditorHeight - _sashHeight,
+        )
+        .toDouble();
     final minHeight = math.min(_minPanelHeight, maxHeight).toDouble();
     return requested.clamp(minHeight, maxHeight).toDouble();
   }
@@ -86,10 +90,10 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
     }
 
     _activePointerId = event.pointer;
-    _dragPointerOffsetInSash = event.localPosition.dy
-        .clamp(0.0, _sashHeight)
-        .toDouble();
-    _previewPanelHeight.value = _clampPanelHeight(_panelHeight.value);
+    _dragPointerOffsetInSash =
+        event.localPosition.dy.clamp(0.0, _sashHeight).toDouble();
+    _dragStartPanelHeight = _clampPanelHeight(_panelHeight.value);
+    _previewPanelHeight.value = _dragStartPanelHeight;
     _sashHighlighted.value = true;
     _sashFocusNode.requestFocus();
 
@@ -147,18 +151,15 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
     if (renderObject is! RenderBox || !renderObject.hasSize) return;
 
     final localY = renderObject.globalToLocal(globalPosition).dy;
-    final requested = _availableHeight -
-        localY -
-        _sashHeight +
-        _dragPointerOffsetInSash;
+    final requested =
+        _availableHeight - localY - _sashHeight + _dragPointerOffsetInSash;
     final next = _clampPanelHeight(requested);
 
-    // Do not resize Monaco/WebView on every mouse move. Code Tutor Studio can
-    // resize Monaco live because its editor and terminal share one DOM grid.
-    // Here Monaco lives in a Windows WebView texture, so continuously changing
-    // its viewport is the expensive part of upward dragging. Keep the real
-    // split frozen and move only a lightweight preview sash until pointer-up.
-    if (next != _previewPanelHeight.value) {
+    // Match IDE sash behavior: update only the split layout notifier while the
+    // pointer moves. This relayouts the editor and terminal without rebuilding
+    // Monaco, the terminal widget tree, or the surrounding workbench.
+    if (next != _panelHeight.value) {
+      _panelHeight.value = next;
       _previewPanelHeight.value = next;
     }
   }
@@ -166,11 +167,9 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
   void _finishResize(int pointer, {required bool commit}) {
     if (pointer != _activePointerId) return;
 
-    final preview = _previewPanelHeight.value;
     _previewPanelHeight.value = null;
-    if (commit && preview != null && preview != _panelHeight.value) {
-      // Monaco is resized exactly once, after the drag has finished.
-      _panelHeight.value = _clampPanelHeight(preview);
+    if (!commit) {
+      _panelHeight.value = _clampPanelHeight(_dragStartPanelHeight);
     }
 
     _activePointerId = null;
@@ -292,50 +291,54 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                        const ColoredBox(color: Colors.transparent),
-                        ValueListenableBuilder<double?>(
-                          valueListenable: _previewPanelHeight,
-                          builder: (context, previewHeight, _) {
-                            if (previewHeight == null) {
-                              return const SizedBox.shrink();
-                            }
+                          const ColoredBox(color: Colors.transparent),
+                          ValueListenableBuilder<double?>(
+                            valueListenable: _previewPanelHeight,
+                            builder: (context, previewHeight, _) {
+                              if (previewHeight == null) {
+                                return const SizedBox.shrink();
+                              }
 
-                            final clamped = _clampPanelHeight(previewHeight);
-                            final top = math.max(
-                              0.0,
-                              _availableHeight - clamped - _sashHeight / 2,
-                            ).toDouble();
+                              final clamped = _clampPanelHeight(previewHeight);
+                              final top = math
+                                  .max(
+                                    0.0,
+                                    _availableHeight -
+                                        clamped -
+                                        _sashHeight / 2,
+                                  )
+                                  .toDouble();
 
-                            return Stack(
-                              children: [
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  top: top,
-                                  bottom: 0,
-                                  child: const IgnorePointer(
-                                    child: ColoredBox(
-                                      color: Color(0x0d6a7b94),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  top: top,
-                                  child: const IgnorePointer(
-                                    child: SizedBox(
-                                      height: 2,
+                              return Stack(
+                                children: [
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    top: top,
+                                    bottom: 0,
+                                    child: const IgnorePointer(
                                       child: ColoredBox(
-                                        color: Color(0xff8b9db8),
+                                        color: Color(0x0d6a7b94),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    top: top,
+                                    child: const IgnorePointer(
+                                      child: SizedBox(
+                                        height: 2,
+                                        child: ColoredBox(
+                                          color: Color(0xff8b9db8),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -362,32 +365,38 @@ class _IdeEditorPanelLayoutDelegate extends MultiChildLayoutDelegate {
 
   @override
   void performLayout(Size size) {
-    final sashHeight = panelExpanded
-        ? _IdeEditorPanelSplitState._sashHeight
-        : 0.0;
+    final sashHeight =
+        panelExpanded ? _IdeEditorPanelSplitState._sashHeight : 0.0;
 
-    final maxPanelHeight = math.max(
-      _IdeEditorPanelSplitState._collapsedPanelHeight,
-      size.height - _IdeEditorPanelSplitState._minEditorHeight - sashHeight,
-    ).toDouble();
-    final minPanelHeight = math.min(
-      _IdeEditorPanelSplitState._minPanelHeight,
-      maxPanelHeight,
-    ).toDouble();
-    final expandedHeight = panelHeight.value
-        .clamp(minPanelHeight, maxPanelHeight)
+    final maxPanelHeight = math
+        .max(
+          _IdeEditorPanelSplitState._collapsedPanelHeight,
+          size.height - _IdeEditorPanelSplitState._minEditorHeight - sashHeight,
+        )
         .toDouble();
+    final minPanelHeight = math
+        .min(
+          _IdeEditorPanelSplitState._minPanelHeight,
+          maxPanelHeight,
+        )
+        .toDouble();
+    final expandedHeight =
+        panelHeight.value.clamp(minPanelHeight, maxPanelHeight).toDouble();
     final requestedPanelHeight = panelExpanded
         ? expandedHeight
         : _IdeEditorPanelSplitState._collapsedPanelHeight;
-    final actualPanelHeight = math.min(
-      size.height,
-      requestedPanelHeight,
-    ).toDouble();
-    final editorHeight = math.max(
-      0.0,
-      size.height - actualPanelHeight - sashHeight,
-    ).toDouble();
+    final actualPanelHeight = math
+        .min(
+          size.height,
+          requestedPanelHeight,
+        )
+        .toDouble();
+    final editorHeight = math
+        .max(
+          0.0,
+          size.height - actualPanelHeight - sashHeight,
+        )
+        .toDouble();
 
     if (hasChild(_IdeSplitSlot.editor)) {
       layoutChild(
@@ -519,8 +528,7 @@ class _IdeBottomPanelState extends State<IdeBottomPanel> {
             onSelectView: _selectView,
             onCloseView: _closeView,
             onCreateView: _createView,
-            onToggleExpanded: () =>
-                widget.onExpandedChanged(!widget.expanded),
+            onToggleExpanded: () => widget.onExpandedChanged(!widget.expanded),
           ),
           if (widget.expanded)
             Expanded(
@@ -638,9 +646,8 @@ class _PanelHeader extends StatelessWidget {
           ),
           _PanelIconButton(
             tooltip: expanded ? '收起 Panel' : '展开 Panel',
-            icon: expanded
-                ? Icons.keyboard_arrow_down
-                : Icons.keyboard_arrow_up,
+            icon:
+                expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
             onPressed: onToggleExpanded,
           ),
           const SizedBox(width: 3),
@@ -649,7 +656,6 @@ class _PanelHeader extends StatelessWidget {
     );
   }
 }
-
 
 class _TerminalCommandBar extends StatefulWidget {
   const _TerminalCommandBar({
@@ -815,9 +821,8 @@ class _ConsoleTab extends StatelessWidget {
             border: Border(
               bottom: BorderSide(
                 width: 2,
-                color: active
-                    ? _IdeBottomPanelState.accent
-                    : Colors.transparent,
+                color:
+                    active ? _IdeBottomPanelState.accent : Colors.transparent,
               ),
             ),
           ),

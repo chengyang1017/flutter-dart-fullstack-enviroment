@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:re_editor/re_editor.dart';
 
+import '../controllers/concept_label_controller.dart';
 import '../controllers/playground_controller.dart';
 import '../services/dart_code_flow_analyzer.dart';
 import 'function_call_graph_view.dart';
@@ -11,10 +12,14 @@ class CodeFlowPanel extends StatefulWidget {
   const CodeFlowPanel({
     super.key,
     required this.controller,
+    this.labels,
+    this.labelModeEnabled = false,
     this.onNavigate,
   });
 
   final PlaygroundController controller;
+  final ConceptLabelController? labels;
+  final bool labelModeEnabled;
   final VoidCallback? onNavigate;
 
   @override
@@ -291,6 +296,8 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
             root: root,
             direction: _direction,
             onNodeTap: _openNode,
+            labels: widget.labels,
+            labelModeEnabled: widget.labelModeEnabled,
           ),
         ),
         if (root.children.isEmpty)

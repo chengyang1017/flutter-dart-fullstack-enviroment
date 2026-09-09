@@ -12,6 +12,11 @@ import '../../workspace/services/hive_workspace_persistence.dart';
 import '../../workspace/services/workspace_cloud_runtime.dart';
 import '../../workspace/services/workspace_project_library.dart';
 
+enum _ProjectCardAction {
+  rename,
+  delete,
+}
+
 class ProjectModeScreen extends StatefulWidget {
   const ProjectModeScreen({
     super.key,
@@ -134,19 +139,47 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
     final library = _library;
     if (library == null || !supportsWorkspaceDirectoryPicker) return;
 
+    BuildContext? progressDialogContext;
+
+    void closeProgressDialog() {
+      final dialogContext = progressDialogContext;
+      if (dialogContext == null || !dialogContext.mounted) return;
+      Navigator.of(dialogContext).pop();
+      progressDialogContext = null;
+    }
+
     try {
       final files = await pickWorkspaceDirectory();
       if (files == null || files.isEmpty || !mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            WorkspaceCloudRuntime.enabled
-                ? '正在读取本地项目并保存到云端...'
-                : '正在读取本地项目... 当前未连接云端，将先保存到浏览器。',
-          ),
-        ),
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          progressDialogContext = dialogContext;
+          return const PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: Text('正在打开本地文件夹'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('正在读取项目文件并保存到 Workspace，请稍候…'),
+                    SizedBox(height: 18),
+                    LinearProgressIndicator(),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       );
+
+      // 先让弹窗真正绘制出来，再开始解析项目。
+      await WidgetsBinding.instance.endOfFrame;
 
       final bundle = const FlutterProjectDirectoryImportService().parse(files);
       final project = await library.createImportedFlutter(
@@ -154,6 +187,8 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
         snapshot: bundle.snapshot,
       );
       if (!mounted) return;
+
+      closeProgressDialog();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -167,9 +202,110 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
 
       await _openProject(project);
     } catch (error) {
+      closeProgressDialog();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('打开本地 Flutter 文件夹失败：$error')),
+      );
+    } finally {
+      closeProgressDialog();
+    }
+  }
+
+  Future<void> _renameProject(WorkspaceProject project) async {
+    final library = _library;
+    if (library == null) return;
+
+    final textController = TextEditingController(text: project.name);
+    textController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: project.name.length,
+    );
+
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('重命名项目'),
+        content: TextField(
+          controller: textController,
+          autofocus: true,
+          maxLength: 80,
+          onSubmitted: (value) =>
+              Navigator.of(dialogContext).pop(value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(textController.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+
+    textController.dispose();
+
+    if (name == null || name.trim().isEmpty || !mounted) return;
+
+    try {
+      await library.renameProject(project.id, name.trim());
+      if (!mounted) return;
+      _reloadLibrary();
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('重命名项目失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _deleteProject(WorkspaceProject project) async {
+    final library = _library;
+    if (library == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('删除 ${project.name}？'),
+        content: const Text('这个项目会从 Workspace 中删除。此操作无法撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await library.deleteProject(project.id);
+      if (!mounted) return;
+
+      _reloadLibrary();
+      setState(() {});
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已删除 ${project.name}')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('删除项目失败：$error')),
       );
     }
   }
@@ -275,6 +411,8 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
                                       project: project,
                                       accountUsername: accountUsername,
                                       onTap: () => _openProject(project),
+                                      onRename: () => _renameProject(project),
+                                      onDelete: () => _deleteProject(project),
                                     );
                                   },
                                 ),
@@ -442,11 +580,15 @@ class _ProjectCard extends StatelessWidget {
     required this.project,
     required this.accountUsername,
     required this.onTap,
+    required this.onRename,
+    required this.onDelete,
   });
 
   final WorkspaceProject project;
   final String? accountUsername;
   final VoidCallback onTap;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -459,67 +601,117 @@ class _ProjectCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          child: Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.flutter_dash_rounded,
-                  color: scheme.onPrimaryContainer,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                child: Row(
                   children: [
-                    Text(
-                      project.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      namespace,
-                      key: ValueKey(
-                        'project-mode-project-namespace-${project.id}',
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      child: Icon(
+                        Icons.flutter_dash_rounded,
+                        color: scheme.onPrimaryContainer,
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            project.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
                           ),
+                          const SizedBox(height: 3),
+                          Text(
+                            namespace,
+                            key: ValueKey(
+                              'project-mode-project-namespace-${project.id}',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.labelMedium?.copyWith(
+                                      color: scheme.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 12),
+                    const Icon(Icons.chevron_right_rounded),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              const Icon(Icons.chevron_right_rounded),
+            ),
+          ),
+          PopupMenuButton<_ProjectCardAction>(
+            key: ValueKey('project-mode-project-menu-${project.id}'),
+            tooltip: '项目操作',
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (action) {
+              switch (action) {
+                case _ProjectCardAction.rename:
+                  onRename();
+                  break;
+                case _ProjectCardAction.delete:
+                  onDelete();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: _ProjectCardAction.rename,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.edit_outlined),
+                  title: Text('重命名'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _ProjectCardAction.delete,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.delete_outline_rounded,
+                    color: scheme.error,
+                  ),
+                  title: Text(
+                    '删除项目',
+                    style: TextStyle(color: scheme.error),
+                  ),
+                ),
+              ),
             ],
           ),
-        ),
+          const SizedBox(width: 8),
+        ],
       ),
     );
   }

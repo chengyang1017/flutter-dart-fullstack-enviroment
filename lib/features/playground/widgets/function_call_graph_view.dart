@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+import 'dart:ui' show FontFeature;
+
 import 'package:flutter/material.dart';
 
+import '../controllers/concept_label_controller.dart';
 import '../services/dart_code_flow_analyzer.dart';
 
 enum FunctionCallGraphDirection { outgoing, incoming }
@@ -12,22 +16,184 @@ enum FunctionCallGraphDirection { outgoing, incoming }
 ///
 /// Incoming mode only changes which declaration is used as the visual root;
 /// it does not reverse the meaning of a call.
-class FunctionCallGraphView extends StatelessWidget {
+class FunctionCallGraphView extends StatefulWidget {
   const FunctionCallGraphView({
     super.key,
     required this.root,
     required this.direction,
     required this.onNodeTap,
+    this.labels,
+    this.labelModeEnabled = false,
   });
 
   final CodeFlowNode root;
   final FunctionCallGraphDirection direction;
   final ValueChanged<CodeFlowNode> onNodeTap;
+  final ConceptLabelController? labels;
+  final bool labelModeEnabled;
+
+  @override
+  State<FunctionCallGraphView> createState() => _FunctionCallGraphViewState();
+}
+
+class _FunctionCallGraphViewState extends State<FunctionCallGraphView> {
+  static const double _minScale = 0.20;
+  static const double _maxScale = 4.0;
+  static const double _zoomStep = 1.16;
+
+  final TransformationController _transformController =
+      TransformationController();
+
+  Size _viewportSize = Size.zero;
+  Size _contentSize = Size.zero;
+  bool _fitScheduled = false;
+  bool _didInitialFit = false;
+  final Set<String> _expandedNodeKeys = <String>{};
+  final Set<String> _sourceHoverKeys = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _attachLabels(widget.labels);
+  }
+
+  @override
+  void dispose() {
+    _detachLabels(widget.labels);
+    _transformController.dispose();
+    super.dispose();
+  }
+
+  void _attachLabels(ConceptLabelController? labels) {
+    labels?.addListener(_handleLabelsChanged);
+  }
+
+  void _detachLabels(ConceptLabelController? labels) {
+    labels?.removeListener(_handleLabelsChanged);
+  }
+
+  void _handleLabelsChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant FunctionCallGraphView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (!identical(oldWidget.labels, widget.labels)) {
+      _detachLabels(oldWidget.labels);
+      _attachLabels(widget.labels);
+    }
+
+    final oldLocation = oldWidget.root.location;
+    final newLocation = widget.root.location;
+    final rootChanged = oldLocation.filePath != newLocation.filePath ||
+        oldLocation.line != newLocation.line;
+
+    if (rootChanged || oldWidget.direction != widget.direction) {
+      _expandedNodeKeys.clear();
+      _sourceHoverKeys.clear();
+      _scheduleFit();
+    }
+  }
+
+  void _setSourceHovered(CodeFlowNode node, bool hovered) {
+    final key = _functionNodeIdentity(node);
+    setState(() {
+      if (hovered) {
+        _sourceHoverKeys.add(key);
+      } else {
+        _sourceHoverKeys.remove(key);
+      }
+    });
+  }
+
+  void _scheduleFit() {
+    if (_fitScheduled) return;
+    _fitScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fitScheduled = false;
+      if (!mounted) return;
+      _fitContent();
+    });
+  }
+
+  double get _currentScale => _transformController.value.getMaxScaleOnAxis();
+
+  void _setMatrix(double scale, Offset translation) {
+    final clamped = scale.clamp(_minScale, _maxScale).toDouble();
+    _transformController.value = Matrix4.identity()
+      ..translate(translation.dx, translation.dy)
+      ..scale(clamped);
+  }
+
+  void _setCenteredScale(double scale) {
+    if (_viewportSize.isEmpty || _contentSize.isEmpty) return;
+    final clamped = scale.clamp(_minScale, _maxScale).toDouble();
+    final translation = Offset(
+      (_viewportSize.width - _contentSize.width * clamped) / 2,
+      (_viewportSize.height - _contentSize.height * clamped) / 2,
+    );
+    _setMatrix(clamped, translation);
+  }
+
+  void _fitContent() {
+    if (_viewportSize.isEmpty || _contentSize.isEmpty) return;
+
+    const padding = 32.0;
+    final usableWidth = (_viewportSize.width - padding * 2)
+        .clamp(1.0, double.infinity)
+        .toDouble();
+    final usableHeight = (_viewportSize.height - padding * 2)
+        .clamp(1.0, double.infinity)
+        .toDouble();
+    final fitScale = math
+        .min(
+          usableWidth / _contentSize.width,
+          usableHeight / _contentSize.height,
+        )
+        .toDouble();
+
+    _setCenteredScale(fitScale);
+  }
+
+  void _actualSize() => _setCenteredScale(1.0);
+
+  void _zoomBy(double factor) {
+    if (_viewportSize.isEmpty) return;
+
+    final focal = Offset(
+      _viewportSize.width / 2,
+      _viewportSize.height / 2,
+    );
+    final scenePoint = _transformController.toScene(focal);
+    final nextScale =
+        (_currentScale * factor).clamp(_minScale, _maxScale).toDouble();
+    final translation = Offset(
+      focal.dx - scenePoint.dx * nextScale,
+      focal.dy - scenePoint.dy * nextScale,
+    );
+    _setMatrix(nextScale, translation);
+  }
+
+  void _toggleNode(CodeFlowNode node) {
+    final key = _functionNodeIdentity(node);
+    setState(() {
+      if (!_expandedNodeKeys.add(key)) {
+        _expandedNodeKeys.remove(key);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final layout = _FunctionGraphLayout.build(root);
+    final layout = _FunctionGraphLayout.build(
+      widget.root,
+      expandedNodeKeys: _expandedNodeKeys,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -35,50 +201,210 @@ class FunctionCallGraphView extends StatelessWidget {
         const _CallEdgeLegend(),
         const SizedBox(height: 8),
         Expanded(
-          child: ClipRect(
-            child: InteractiveViewer(
-              key: const ValueKey('function-call-graph-viewport'),
-              constrained: false,
-              boundaryMargin: const EdgeInsets.all(80),
-              minScale: 0.55,
-              maxScale: 2.0,
-              child: SizedBox(
-                width: layout.width,
-                height: layout.height,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    for (final node in layout.nodes)
-                      Positioned.fromRect(
-                        rect: node.rect,
-                        child: _FunctionNodeCard(
-                          key: ValueKey('function-call-node-${node.id}'),
-                          node: node.node,
-                          isRoot: node.id == 0,
-                          onTap: () => onNodeTap(node.node),
-                        ),
-                      ),
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          key: const ValueKey('function-call-edge-layer'),
-                          painter: _FunctionCallEdgePainter(
-                            edges: layout.edges,
-                            direction: direction,
-                            lineColor: theme.colorScheme.primary,
-                            labelColor: theme.colorScheme.onSurfaceVariant,
-                            labelSurface: theme.colorScheme.surface,
-                          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _viewportSize = Size(
+                constraints.maxWidth,
+                constraints.maxHeight,
+              );
+              _contentSize = Size(layout.width, layout.height);
+
+              if (!_didInitialFit &&
+                  !_viewportSize.isEmpty &&
+                  !_contentSize.isEmpty) {
+                _didInitialFit = true;
+                _scheduleFit();
+              }
+
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRect(
+                    child: InteractiveViewer(
+                      key: const ValueKey('function-call-graph-viewport'),
+                      transformationController: _transformController,
+                      constrained: false,
+                      boundaryMargin: const EdgeInsets.all(1200),
+                      minScale: _minScale,
+                      maxScale: _maxScale,
+                      scaleEnabled: _sourceHoverKeys.isEmpty,
+                      scaleFactor: 420,
+                      child: SizedBox(
+                        width: layout.width,
+                        height: layout.height,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            for (final node in layout.nodes)
+                              Positioned.fromRect(
+                                rect: node.rect,
+                                child: _FunctionNodeCard(
+                                  key: ValueKey(
+                                    'function-call-node-${node.id}',
+                                  ),
+                                  node: node.node,
+                                  isRoot: node.id == 0,
+                                  expanded: _expandedNodeKeys.contains(
+                                    _functionNodeIdentity(node.node),
+                                  ),
+                                  onToggle: () => _toggleNode(node.node),
+                                  onOpenSource: () =>
+                                      widget.onNodeTap(node.node),
+                                  labels: widget.labels,
+                                  labelModeEnabled: widget.labelModeEnabled,
+                                  onSourceHoverChanged: (hovered) =>
+                                      _setSourceHovered(node.node, hovered),
+                                ),
+                              ),
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: CustomPaint(
+                                  key: const ValueKey(
+                                    'function-call-edge-layer',
+                                  ),
+                                  painter: _FunctionCallEdgePainter(
+                                    edges: layout.edges,
+                                    direction: widget.direction,
+                                    lineColor: theme.colorScheme.primary,
+                                    labelColor:
+                                        theme.colorScheme.onSurfaceVariant,
+                                    labelSurface: theme.colorScheme.surface,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _GraphZoomToolbar(
+                      controller: _transformController,
+                      onZoomOut: () => _zoomBy(1 / _zoomStep),
+                      onZoomIn: () => _zoomBy(_zoomStep),
+                      onActualSize: _actualSize,
+                      onFit: _fitContent,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ],
+    );
+  }
+}
+
+class _GraphZoomToolbar extends StatelessWidget {
+  const _GraphZoomToolbar({
+    required this.controller,
+    required this.onZoomOut,
+    required this.onZoomIn,
+    required this.onActualSize,
+    required this.onFit,
+  });
+
+  final TransformationController controller;
+  final VoidCallback onZoomOut;
+  final VoidCallback onZoomIn;
+  final VoidCallback onActualSize;
+  final VoidCallback onFit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow.withOpacity(0.96),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: SizedBox(
+        height: 34,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _GraphZoomButton(
+              tooltip: '缩小',
+              icon: Icons.remove_rounded,
+              onPressed: onZoomOut,
+            ),
+            AnimatedBuilder(
+              animation: controller,
+              builder: (context, _) {
+                final percent =
+                    (controller.value.getMaxScaleOnAxis() * 100).round();
+                return SizedBox(
+                  width: 48,
+                  child: Text(
+                    '$percent%',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                );
+              },
+            ),
+            _GraphZoomButton(
+              tooltip: '放大',
+              icon: Icons.add_rounded,
+              onPressed: onZoomIn,
+            ),
+            const SizedBox(
+              height: 18,
+              child: VerticalDivider(width: 1),
+            ),
+            Tooltip(
+              message: '实际大小 100%',
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(42, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: onActualSize,
+                child: const Text('1:1'),
+              ),
+            ),
+            _GraphZoomButton(
+              tooltip: '适合窗口',
+              icon: Icons.fit_screen_rounded,
+              onPressed: onFit,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GraphZoomButton extends StatelessWidget {
+  const _GraphZoomButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 17),
     );
   }
 }
@@ -152,21 +478,140 @@ class _LegendItem extends StatelessWidget {
       );
 }
 
+String _functionNodeIdentity(CodeFlowNode node) =>
+    '${node.location.filePath}:${node.location.line}:${node.location.column}:'
+    '${node.displayName}';
+
+Future<void> _showFunctionNodeNameDialog(
+  BuildContext context,
+  CodeFlowNode node,
+  ConceptLabelController labels,
+) async {
+  final existing = labels.nodeNameRuleFor(
+    path: node.location.filePath,
+    originalName: node.displayName,
+    lineNumber: node.location.line,
+    sourceCode: node.sourceCode,
+  );
+  final nameController = TextEditingController(text: existing?.label ?? '');
+  String? errorText;
+
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('给这个容器取名字'),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '原函数：${node.displayName}',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '名字只属于这个函数容器；函数移动或内部代码变化后会继续智能跟随。',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: '容器名称',
+                      hintText: '例如：获取商品',
+                      errorText: errorText,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              if (existing != null)
+                TextButton(
+                  onPressed: () async {
+                    await labels.removeRule(existing.id);
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop(false);
+                    }
+                  },
+                  child: const Text('恢复原名'),
+                ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (nameController.text.trim().isEmpty) {
+                    setDialogState(() => errorText = '名称不能为空');
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(true);
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+
+  if (saved == true) {
+    await labels.setNodeName(
+      path: node.location.filePath,
+      originalName: node.displayName,
+      lineNumber: node.location.line,
+      sourceCode: node.sourceCode,
+      name: nameController.text,
+    );
+  }
+  nameController.dispose();
+}
+
 class _FunctionNodeCard extends StatelessWidget {
   const _FunctionNodeCard({
     super.key,
     required this.node,
     required this.isRoot,
-    required this.onTap,
+    required this.expanded,
+    required this.onToggle,
+    required this.onOpenSource,
+    required this.labels,
+    required this.labelModeEnabled,
+    required this.onSourceHoverChanged,
   });
 
   final CodeFlowNode node;
   final bool isRoot;
-  final VoidCallback onTap;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final VoidCallback onOpenSource;
+  final ConceptLabelController? labels;
+  final bool labelModeEnabled;
+  final ValueChanged<bool> onSourceHoverChanged;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final customName = labels?.nodeNameFor(
+      path: node.location.filePath,
+      originalName: node.displayName,
+      lineNumber: node.location.line,
+      sourceCode: node.sourceCode,
+    );
+    final visibleName = customName ?? node.displayName;
+
     return Material(
       elevation: isRoot ? 2 : 0,
       color: isRoot
@@ -183,59 +628,660 @@ class _FunctionNodeCard extends StatelessWidget {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    node.isCycle ? Icons.replay_outlined : Icons.functions,
-                    size: 16,
-                    color: node.isCycle
-                        ? theme.colorScheme.tertiary
-                        : theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      node.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                  Row(
+                    children: [
+                      Icon(
+                        node.isCycle ? Icons.replay_outlined : Icons.functions,
+                        size: 16,
+                        color: node.isCycle
+                            ? theme.colorScheme.tertiary
+                            : theme.colorScheme.primary,
                       ),
-                    ),
-                  ),
-                  if (isRoot)
-                    Text(
-                      '当前',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w700,
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Tooltip(
+                          message: customName == null
+                              ? node.displayName
+                              : '原函数：${node.displayName}',
+                          child: Text(
+                            visibleName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      if (labels != null)
+                        IconButton(
+                          tooltip: customName == null ? '给容器取名字' : '修改容器名称',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 28,
+                            height: 28,
+                          ),
+                          onPressed: () => _showFunctionNodeNameDialog(
+                            context,
+                            node,
+                            labels!,
+                          ),
+                          icon: const Icon(Icons.edit_note_rounded, size: 16),
+                        ),
+                      if (isRoot) ...[
+                        Text(
+                          '当前',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Icon(
+                        expanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 20,
+                        color: muted,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '${node.location.filePath}:${node.location.line}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
                 ],
               ),
-              const SizedBox(height: 5),
-              Text(
-                '${node.location.filePath}:${node.location.line}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (expanded) ...[
+            Divider(height: 1, color: theme.colorScheme.outlineVariant),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.code_rounded,
+                        size: 15,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Workspace 原始源码',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: muted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 7),
+                        ),
+                        onPressed: onOpenSource,
+                        icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                        label: const Text('打开源码'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  _FunctionSourceViewport(
+                    node: node,
+                    labels: labels,
+                    labelModeEnabled: labelModeEnabled,
+                    onHoverChanged: onSourceHoverChanged,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FunctionSourceViewport extends StatefulWidget {
+  const _FunctionSourceViewport({
+    required this.node,
+    required this.labels,
+    required this.labelModeEnabled,
+    required this.onHoverChanged,
+  });
+
+  final CodeFlowNode node;
+  final ConceptLabelController? labels;
+  final bool labelModeEnabled;
+  final ValueChanged<bool> onHoverChanged;
+
+  @override
+  State<_FunctionSourceViewport> createState() =>
+      _FunctionSourceViewportState();
+}
+
+class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
+  final ScrollController _verticalController = ScrollController();
+  final ScrollController _horizontalController = ScrollController();
+
+  @override
+  void dispose() {
+    _verticalController.dispose();
+    _horizontalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sourceStyle = TextStyle(
+      color: theme.colorScheme.onSurface,
+      fontFamily: 'monospace',
+      fontSize: 10.5,
+      height: 1.45,
+    );
+
+    return MouseRegion(
+      onEnter: (_) => widget.onHoverChanged(true),
+      onExit: (_) => widget.onHoverChanged(false),
+      child: Container(
+        height: 184,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface.withOpacity(0.72),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Scrollbar(
+          controller: _verticalController,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _verticalController,
+            primary: false,
+            padding: const EdgeInsets.all(10),
+            child: Scrollbar(
+              controller: _horizontalController,
+              notificationPredicate: (notification) =>
+                  notification.metrics.axis == Axis.horizontal,
+              child: SingleChildScrollView(
+                controller: _horizontalController,
+                primary: false,
+                scrollDirection: Axis.horizontal,
+                child: SelectableText.rich(
+                  TextSpan(
+                    style: sourceStyle,
+                    children: _buildDisplayedSourceSpans(
+                      node: widget.node,
+                      labels: widget.labels,
+                      labelModeEnabled: widget.labelModeEnabled,
+                      theme: theme,
+                    ),
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+List<InlineSpan> _buildDisplayedSourceSpans({
+  required CodeFlowNode node,
+  required ConceptLabelController? labels,
+  required bool labelModeEnabled,
+  required ThemeData theme,
+}) {
+  final source = node.sourceCode;
+  final replacements = <_SourceReplacement>[];
+
+  if (labelModeEnabled && labels != null) {
+    final lineStarts = _lineStartOffsets(source);
+    final resolved = labels.resolveLabelsForSource(
+      path: node.location.filePath,
+      sourceText: source,
+      baseLineNumber: node.sourceStartLine,
+    );
+
+    for (final match in resolved) {
+      final localLine = match.lineNumber - node.sourceStartLine;
+      if (localLine < 0 || localLine >= lineStarts.length) continue;
+      final start = lineStarts[localLine] + match.startColumn;
+      final end = lineStarts[localLine] + match.endColumn;
+      if (start < 0 || end <= start || end > source.length) continue;
+      if (source.substring(start, end) != match.source) continue;
+      replacements.add(
+        _SourceReplacement(
+          start: start,
+          end: end,
+          label: match.rule.label,
+          lineScoped: match.lineScoped,
+        ),
+      );
+    }
+  }
+
+  replacements.sort((a, b) {
+    final byStart = a.start.compareTo(b.start);
+    if (byStart != 0) return byStart;
+    return b.end.compareTo(a.end);
+  });
+
+  // Never let overlapping labels hide each other unpredictably. The first
+  // resolved anchor wins; ambiguous anchors were already rejected upstream.
+  final accepted = <_SourceReplacement>[];
+  var occupiedUntil = -1;
+  for (final replacement in replacements) {
+    if (replacement.start < occupiedUntil) continue;
+    accepted.add(replacement);
+    occupiedUntil = replacement.end;
+  }
+
+  return _renderHighlightedDartSource(
+    source: source,
+    replacements: accepted,
+    theme: theme,
+  );
+}
+
+List<int> _lineStartOffsets(String source) {
+  final result = <int>[0];
+  for (var index = 0; index < source.length; index++) {
+    if (source.codeUnitAt(index) == 10) result.add(index + 1);
+  }
+  return result;
+}
+
+List<InlineSpan> _renderHighlightedDartSource({
+  required String source,
+  required List<_SourceReplacement> replacements,
+  required ThemeData theme,
+}) {
+  final tokens = _tokenizeDartSource(source);
+  final spans = <InlineSpan>[];
+  var cursor = 0;
+
+  for (final replacement in replacements) {
+    if (replacement.start > cursor) {
+      spans.addAll(
+        _highlightedRangeSpans(
+          source: source,
+          start: cursor,
+          end: replacement.start,
+          tokens: tokens,
+          theme: theme,
+        ),
+      );
+    }
+    spans.add(
+      _conceptLabelSpan(
+        replacement.label,
+        lineScoped: replacement.lineScoped,
+      ),
+    );
+    cursor = replacement.end;
+  }
+
+  if (cursor < source.length) {
+    spans.addAll(
+      _highlightedRangeSpans(
+        source: source,
+        start: cursor,
+        end: source.length,
+        tokens: tokens,
+        theme: theme,
+      ),
+    );
+  }
+  if (spans.isEmpty) spans.add(const TextSpan(text: ''));
+  return spans;
+}
+
+List<InlineSpan> _highlightedRangeSpans({
+  required String source,
+  required int start,
+  required int end,
+  required List<_DartSyntaxToken> tokens,
+  required ThemeData theme,
+}) {
+  final spans = <InlineSpan>[];
+  var cursor = start;
+
+  for (final token in tokens) {
+    if (token.end <= start) continue;
+    if (token.start >= end) break;
+
+    final tokenStart = math.max(start, token.start);
+    final tokenEnd = math.min(end, token.end);
+    if (tokenStart > cursor) {
+      spans.add(TextSpan(text: source.substring(cursor, tokenStart)));
+    }
+    if (tokenEnd > tokenStart) {
+      spans.add(
+        TextSpan(
+          text: source.substring(tokenStart, tokenEnd),
+          style: TextStyle(color: _syntaxColor(token.kind, theme)),
+        ),
+      );
+      cursor = tokenEnd;
+    }
+  }
+
+  if (cursor < end) {
+    spans.add(TextSpan(text: source.substring(cursor, end)));
+  }
+  return spans;
+}
+
+Color _syntaxColor(_DartSyntaxKind kind, ThemeData theme) {
+  switch (kind) {
+    case _DartSyntaxKind.keyword:
+      return const Color(0xffc792ea);
+    case _DartSyntaxKind.string:
+      return const Color(0xffc3e88d);
+    case _DartSyntaxKind.comment:
+      return theme.colorScheme.onSurfaceVariant.withOpacity(0.74);
+    case _DartSyntaxKind.number:
+      return const Color(0xfff78c6c);
+    case _DartSyntaxKind.type:
+      return const Color(0xffffcb6b);
+  }
+}
+
+List<_DartSyntaxToken> _tokenizeDartSource(String source) {
+  final tokens = <_DartSyntaxToken>[];
+  var index = 0;
+
+  while (index < source.length) {
+    if (source.startsWith('//', index)) {
+      final start = index;
+      final newline = source.indexOf('\n', index + 2);
+      index = newline < 0 ? source.length : newline;
+      tokens.add(
+        _DartSyntaxToken(start, index, _DartSyntaxKind.comment),
+      );
+      continue;
+    }
+
+    if (source.startsWith('/*', index)) {
+      final start = index;
+      var depth = 1;
+      index += 2;
+      while (index < source.length && depth > 0) {
+        if (source.startsWith('/*', index)) {
+          depth++;
+          index += 2;
+        } else if (source.startsWith('*/', index)) {
+          depth--;
+          index += 2;
+        } else {
+          index++;
+        }
+      }
+      tokens.add(
+        _DartSyntaxToken(start, index, _DartSyntaxKind.comment),
+      );
+      continue;
+    }
+
+    final rawString =
+        (source.codeUnitAt(index) == 114 || source.codeUnitAt(index) == 82) &&
+            index + 1 < source.length &&
+            (source.codeUnitAt(index + 1) == 39 ||
+                source.codeUnitAt(index + 1) == 34);
+    final current = source.codeUnitAt(index);
+    if (rawString || current == 39 || current == 34) {
+      final start = index;
+      final raw = rawString;
+      if (raw) index++;
+      final quote = source.codeUnitAt(index);
+      final triple = index + 2 < source.length &&
+          source.codeUnitAt(index + 1) == quote &&
+          source.codeUnitAt(index + 2) == quote;
+      index += triple ? 3 : 1;
+
+      while (index < source.length) {
+        if (triple) {
+          if (index + 2 < source.length &&
+              source.codeUnitAt(index) == quote &&
+              source.codeUnitAt(index + 1) == quote &&
+              source.codeUnitAt(index + 2) == quote) {
+            index += 3;
+            break;
+          }
+        } else if (source.codeUnitAt(index) == quote) {
+          index++;
+          break;
+        }
+
+        if (!raw &&
+            source.codeUnitAt(index) == 92 &&
+            index + 1 < source.length) {
+          index += 2;
+        } else {
+          index++;
+        }
+      }
+
+      tokens.add(
+        _DartSyntaxToken(start, index, _DartSyntaxKind.string),
+      );
+      continue;
+    }
+
+    if (_isDigit(current)) {
+      final start = index;
+      if (current == 48 &&
+          index + 1 < source.length &&
+          (source.codeUnitAt(index + 1) == 120 ||
+              source.codeUnitAt(index + 1) == 88)) {
+        index += 2;
+        while (index < source.length &&
+            _isHexDigitOrUnderscore(source.codeUnitAt(index))) {
+          index++;
+        }
+      } else {
+        index++;
+        while (index < source.length &&
+            _isNumberContinuation(source.codeUnitAt(index))) {
+          index++;
+        }
+      }
+      tokens.add(
+        _DartSyntaxToken(start, index, _DartSyntaxKind.number),
+      );
+      continue;
+    }
+
+    if (_isIdentifierStart(current)) {
+      final start = index++;
+      while (index < source.length &&
+          _isIdentifierPart(source.codeUnitAt(index))) {
+        index++;
+      }
+      final word = source.substring(start, index);
+      if (_dartKeywords.contains(word)) {
+        tokens.add(
+          _DartSyntaxToken(start, index, _DartSyntaxKind.keyword),
+        );
+      } else if (word.isNotEmpty &&
+          word.codeUnitAt(0) >= 65 &&
+          word.codeUnitAt(0) <= 90) {
+        tokens.add(
+          _DartSyntaxToken(start, index, _DartSyntaxKind.type),
+        );
+      }
+      continue;
+    }
+
+    index++;
+  }
+  return tokens;
+}
+
+bool _isDigit(int codeUnit) => codeUnit >= 48 && codeUnit <= 57;
+
+bool _isHexDigitOrUnderscore(int codeUnit) =>
+    _isDigit(codeUnit) ||
+    (codeUnit >= 65 && codeUnit <= 70) ||
+    (codeUnit >= 97 && codeUnit <= 102) ||
+    codeUnit == 95;
+
+bool _isNumberContinuation(int codeUnit) =>
+    _isDigit(codeUnit) ||
+    codeUnit == 95 ||
+    codeUnit == 46 ||
+    codeUnit == 101 ||
+    codeUnit == 69 ||
+    codeUnit == 43 ||
+    codeUnit == 45;
+
+bool _isIdentifierStart(int codeUnit) =>
+    (codeUnit >= 65 && codeUnit <= 90) ||
+    (codeUnit >= 97 && codeUnit <= 122) ||
+    codeUnit == 95 ||
+    codeUnit == 36;
+
+bool _isIdentifierPart(int codeUnit) =>
+    _isIdentifierStart(codeUnit) || _isDigit(codeUnit);
+
+const Set<String> _dartKeywords = <String>{
+  'abstract',
+  'as',
+  'assert',
+  'async',
+  'await',
+  'base',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'covariant',
+  'default',
+  'deferred',
+  'do',
+  'dynamic',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'extension',
+  'external',
+  'factory',
+  'false',
+  'final',
+  'finally',
+  'for',
+  'Function',
+  'get',
+  'hide',
+  'if',
+  'implements',
+  'import',
+  'in',
+  'interface',
+  'is',
+  'late',
+  'library',
+  'mixin',
+  'new',
+  'null',
+  'of',
+  'on',
+  'operator',
+  'part',
+  'required',
+  'rethrow',
+  'return',
+  'sealed',
+  'set',
+  'show',
+  'static',
+  'super',
+  'switch',
+  'sync',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typedef',
+  'var',
+  'void',
+  'when',
+  'while',
+  'with',
+  'yield',
+};
+
+InlineSpan _conceptLabelSpan(
+  String label, {
+  required bool lineScoped,
+}) {
+  final background = lineScoped
+      ? const Color(0xff53398e).withOpacity(0.88)
+      : const Color(0xff1d567e).withOpacity(0.92);
+  final foreground =
+      lineScoped ? const Color(0xffeee7ff) : const Color(0xffdff3ff);
+
+  return TextSpan(
+    text: ' $label ',
+    style: TextStyle(
+      color: foreground,
+      backgroundColor: background,
+      fontWeight: FontWeight.w700,
+      fontFamily: 'monospace',
+      fontSize: 10.5,
+      height: 1.45,
+    ),
+  );
+}
+
+class _SourceReplacement {
+  const _SourceReplacement({
+    required this.start,
+    required this.end,
+    required this.label,
+    required this.lineScoped,
+  });
+
+  final int start;
+  final int end;
+  final String label;
+  final bool lineScoped;
+}
+
+enum _DartSyntaxKind { keyword, string, comment, number, type }
+
+class _DartSyntaxToken {
+  const _DartSyntaxToken(this.start, this.end, this.kind);
+
+  final int start;
+  final int end;
+  final _DartSyntaxKind kind;
 }
 
 class _FunctionGraphLayout {
@@ -246,8 +1292,12 @@ class _FunctionGraphLayout {
     required this.height,
   });
 
-  static const double nodeWidth = 220;
-  static const double nodeHeight = 72;
+  static const double nodeWidth = 340;
+  static const double expandedMinNodeWidth = 420;
+  static const double expandedMaxNodeWidth = 760;
+  static const double collapsedNodeHeight = 76;
+  static const double expandedNodeHeight = 324;
+  static const double nodeHeight = collapsedNodeHeight;
   static const double horizontalGap = 132;
   static const double verticalGap = 34;
   static const double padding = 28;
@@ -257,16 +1307,42 @@ class _FunctionGraphLayout {
   final double width;
   final double height;
 
-  factory _FunctionGraphLayout.build(CodeFlowNode root) {
-    final builder = _FunctionGraphLayoutBuilder();
-    final layoutRoot = builder.layout(root, 0);
+  static double expandedWidthFor(CodeFlowNode node) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: node.sourceCode.replaceAll('\t', '    '),
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 10.5,
+          height: 1.45,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textWidthBasis: TextWidthBasis.longestLine,
+    )..layout();
+
+    // 20 px for the source viewport's own horizontal padding,
+    // 20 px for the expanded card padding, plus a little breathing room.
+    final requested = painter.width + 48;
+    painter.dispose();
+
+    return requested
+        .clamp(expandedMinNodeWidth, expandedMaxNodeWidth)
+        .toDouble();
+  }
+
+  factory _FunctionGraphLayout.build(
+    CodeFlowNode root, {
+    required Set<String> expandedNodeKeys,
+  }) {
+    final builder = _ExpandableFunctionGraphLayoutBuilder(expandedNodeKeys);
+    final measuredRoot = builder.measure(root, 0);
+    final layoutRoot = builder.position(measuredRoot, padding);
     final nodes = <_PositionedFunctionNode>[];
     final edges = <_HierarchyEdge>[];
-    var maxDepth = 0;
 
     void collect(_PositionedFunctionNode node) {
       nodes.add(node);
-      if (node.depth > maxDepth) maxDepth = node.depth;
       for (final child in node.children) {
         edges.add(_HierarchyEdge(parent: node, child: child));
         collect(child);
@@ -275,12 +1351,15 @@ class _FunctionGraphLayout {
 
     collect(layoutRoot);
 
-    final width = padding * 2 +
-        (maxDepth + 1) * nodeWidth +
-        maxDepth * horizontalGap;
+    final contentRight = nodes.fold<double>(
+      0,
+      (current, node) => node.rect.right > current ? node.rect.right : current,
+    );
+    final width = contentRight + padding;
     final contentBottom = nodes.fold<double>(
       0,
-      (current, node) => node.rect.bottom > current ? node.rect.bottom : current,
+      (current, node) =>
+          node.rect.bottom > current ? node.rect.bottom : current,
     );
     final height = contentBottom + padding;
 
@@ -312,8 +1391,7 @@ class _FunctionGraphLayoutBuilder {
     } else {
       final firstCenter = children.first.rect.center.dy;
       final lastCenter = children.last.rect.center.dy;
-      y = (firstCenter + lastCenter) / 2 -
-          _FunctionGraphLayout.nodeHeight / 2;
+      y = (firstCenter + lastCenter) / 2 - _FunctionGraphLayout.nodeHeight / 2;
     }
 
     final x = _FunctionGraphLayout.padding +
@@ -334,6 +1412,116 @@ class _FunctionGraphLayoutBuilder {
       children: children,
     );
   }
+}
+
+class _ExpandableFunctionGraphLayoutBuilder {
+  _ExpandableFunctionGraphLayoutBuilder(this.expandedNodeKeys);
+
+  final Set<String> expandedNodeKeys;
+  final Map<int, double> _columnWidths = <int, double>{};
+  var _nextId = 0;
+
+  _MeasuredFunctionNode measure(CodeFlowNode node, int depth) {
+    final children = node.children
+        .map((child) => measure(child, depth + 1))
+        .toList(growable: false);
+    final expanded = expandedNodeKeys.contains(_functionNodeIdentity(node));
+    final nodeHeight = expanded
+        ? _FunctionGraphLayout.expandedNodeHeight
+        : _FunctionGraphLayout.collapsedNodeHeight;
+    final nodeWidth = expanded
+        ? _FunctionGraphLayout.expandedWidthFor(node)
+        : _FunctionGraphLayout.nodeWidth;
+
+    _columnWidths[depth] = math.max(
+      _columnWidths[depth] ?? _FunctionGraphLayout.nodeWidth,
+      nodeWidth,
+    );
+
+    final childrenHeight = children.isEmpty
+        ? 0.0
+        : children.fold<double>(
+              0,
+              (sum, child) => sum + child.subtreeHeight,
+            ) +
+            _FunctionGraphLayout.verticalGap * (children.length - 1);
+
+    return _MeasuredFunctionNode(
+      node: node,
+      depth: depth,
+      nodeWidth: nodeWidth,
+      nodeHeight: nodeHeight,
+      subtreeHeight: math.max(nodeHeight, childrenHeight).toDouble(),
+      children: children,
+    );
+  }
+
+  _PositionedFunctionNode position(
+    _MeasuredFunctionNode measured,
+    double top,
+  ) {
+    final id = _nextId++;
+    final totalChildrenHeight = measured.children.isEmpty
+        ? 0.0
+        : measured.children.fold<double>(
+              0,
+              (sum, child) => sum + child.subtreeHeight,
+            ) +
+            _FunctionGraphLayout.verticalGap * (measured.children.length - 1);
+    var childTop = top +
+        math
+            .max(0.0, (measured.subtreeHeight - totalChildrenHeight) / 2)
+            .toDouble();
+    final children = <_PositionedFunctionNode>[];
+
+    for (final child in measured.children) {
+      children.add(position(child, childTop));
+      childTop += child.subtreeHeight + _FunctionGraphLayout.verticalGap;
+    }
+
+    final x = _xForDepth(measured.depth);
+    final y = top + (measured.subtreeHeight - measured.nodeHeight) / 2;
+
+    return _PositionedFunctionNode(
+      id: id,
+      node: measured.node,
+      depth: measured.depth,
+      rect: Rect.fromLTWH(
+        x,
+        y,
+        measured.nodeWidth,
+        measured.nodeHeight,
+      ),
+      children: children,
+    );
+  }
+
+  double _xForDepth(int depth) {
+    var x = _FunctionGraphLayout.padding;
+    for (var currentDepth = 0; currentDepth < depth; currentDepth++) {
+      x += (_columnWidths[currentDepth] ?? _FunctionGraphLayout.nodeWidth) +
+          _FunctionGraphLayout.horizontalGap;
+    }
+    return x;
+  }
+}
+
+class _MeasuredFunctionNode {
+  const _MeasuredFunctionNode({
+    required this.node,
+    required this.depth,
+    required this.nodeWidth,
+    required this.nodeHeight,
+    required this.subtreeHeight,
+    required this.children,
+  });
+
+  final CodeFlowNode node;
+  final int depth;
+  final double nodeWidth;
+  final double nodeHeight;
+  final double subtreeHeight;
+  final List<_MeasuredFunctionNode> children;
 }
 
 class _PositionedFunctionNode {
@@ -394,12 +1582,10 @@ class _FunctionCallEdgePainter extends CustomPainter {
           : hierarchyEdge.parent;
 
       final callerIsLeft = caller.rect.center.dx < callee.rect.center.dx;
-      final start = callerIsLeft
-          ? caller.rect.centerRight
-          : caller.rect.centerLeft;
-      final end = callerIsLeft
-          ? callee.rect.centerLeft
-          : callee.rect.centerRight;
+      final start =
+          callerIsLeft ? caller.rect.centerRight : caller.rect.centerLeft;
+      final end =
+          callerIsLeft ? callee.rect.centerLeft : callee.rect.centerRight;
       final controlDistance = (end.dx - start.dx).abs() * 0.48;
       final firstControl = Offset(
         start.dx + (callerIsLeft ? controlDistance : -controlDistance),
@@ -480,12 +1666,8 @@ class _FunctionCallEdgePainter extends CustomPainter {
     )..layout();
 
     final moveRight = isCaller ? callerIsLeft : !callerIsLeft;
-    final dx = moveRight
-        ? anchor.dx + 10
-        : anchor.dx - textPainter.width - 10;
-    final dy = isCaller
-        ? anchor.dy - textPainter.height - 7
-        : anchor.dy + 7;
+    final dx = moveRight ? anchor.dx + 10 : anchor.dx - textPainter.width - 10;
+    final dy = isCaller ? anchor.dy - textPainter.height - 7 : anchor.dy + 7;
     final textOffset = Offset(dx, dy);
     final background = Rect.fromLTWH(
       textOffset.dx - 4,

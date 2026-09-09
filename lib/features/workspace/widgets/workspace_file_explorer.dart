@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/workspace_controller.dart';
@@ -26,7 +29,6 @@ class WorkspaceFileExplorer extends StatelessWidget {
   final WorkspaceController workspace;
   final ValueChanged<String> onOpenFile;
 
-
   static const _panelBackground = _WorkspaceExplorerPalette.background;
   static const _entryTextColor = _WorkspaceExplorerPalette.text;
   static const _mutedIconColor = _WorkspaceExplorerPalette.muted;
@@ -50,10 +52,15 @@ class WorkspaceFileExplorer extends StatelessWidget {
               directory: _activeDirectory(),
               type: WorkspaceEntryType.directory,
             ),
-            onMoveToRoot: (sourcePath) => _runAction(
-              context,
-              () => workspace.moveEntry(sourcePath, ''),
-            ),
+            onMoveToRoot: (sourcePath) {
+              unawaited(
+                _confirmMove(
+                  context,
+                  sourcePath: sourcePath,
+                  targetDirectory: '',
+                ),
+              );
+            },
           ),
           const Divider(
             height: 1,
@@ -87,13 +94,18 @@ class WorkspaceFileExplorer extends StatelessWidget {
     if (entry.isDirectory) {
       final folder = DragTarget<String>(
         onWillAccept: (sourcePath) {
-          if (sourcePath == null || sourcePath == entry.path) return false;
-          return !entry.path.startsWith('$sourcePath/');
+          if (sourcePath == null) return false;
+          return _canMoveToDirectory(sourcePath, entry.path);
         },
-        onAccept: (sourcePath) => _runAction(
-          context,
-          () => workspace.moveEntry(sourcePath, entry.path),
-        ),
+        onAccept: (sourcePath) {
+          unawaited(
+            _confirmMove(
+              context,
+              sourcePath: sourcePath,
+              targetDirectory: entry.path,
+            ),
+          );
+        },
         builder: (context, candidates, rejected) {
           final highlighted = candidates.isNotEmpty;
           return Container(
@@ -216,42 +228,161 @@ class WorkspaceFileExplorer extends StatelessWidget {
             binary: entry.isBinary,
           );
 
-    return Draggable<String>(
-    data: entry.path,
-    feedback: Material(
-      elevation: 6,
-      color: _WorkspaceExplorerPalette.selected,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 8,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              entry.isDirectory ? Icons.folder_outlined : fileVisual!.icon,
-              size: 16,
-              color: entry.isDirectory
-                  ? _WorkspaceExplorerPalette.folder
-                  : fileVisual!.color,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              entry.name,
-              style: const TextStyle(
-                color: Colors.white,
+    Widget buildFeedback() {
+      return Material(
+        elevation: 6,
+        color: _WorkspaceExplorerPalette.selected,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                entry.isDirectory ? Icons.folder_outlined : fileVisual!.icon,
+                size: 16,
+                color: entry.isDirectory
+                    ? _WorkspaceExplorerPalette.folder
+                    : fileVisual!.color,
               ),
-            ),
-          ],
+              const SizedBox(width: 6),
+              Text(
+                entry.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    ),
-    childWhenDragging: Opacity(
+      );
+    }
+
+    final childWhenDragging = Opacity(
       opacity: .35,
       child: child,
-    ),
+    );
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return LongPressDraggable<String>(
+        data: entry.path,
+        delay: const Duration(milliseconds: 450),
+        hapticFeedbackOnStart: true,
+        feedback: buildFeedback(),
+        childWhenDragging: childWhenDragging,
+        child: child,
+      );
+    }
+
+    return Draggable<String>(
+      data: entry.path,
+      feedback: buildFeedback(),
+      childWhenDragging: childWhenDragging,
       child: child,
+    );
+  }
+
+  bool _canMoveToDirectory(String sourcePath, String targetDirectory) {
+    final source = workspace.entryAt(sourcePath);
+    if (source == null) return false;
+
+    if (source.path == targetDirectory ||
+        source.parentPath == targetDirectory) {
+      return false;
+    }
+
+    if (targetDirectory.isNotEmpty) {
+      final target = workspace.entryAt(targetDirectory);
+      if (target == null || !target.isDirectory) return false;
+    }
+
+    if (source.isDirectory && targetDirectory.startsWith('${source.path}/')) {
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _confirmMove(
+    BuildContext context, {
+    required String sourcePath,
+    required String targetDirectory,
+  }) async {
+    if (!_canMoveToDirectory(sourcePath, targetDirectory)) return;
+
+    final entry = workspace.entryAt(sourcePath);
+    if (entry == null) return;
+
+    final targetPath =
+        targetDirectory.isEmpty ? entry.name : '$targetDirectory/${entry.name}';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(entry.isDirectory ? '移动文件夹？' : '移动文件？'),
+        content: Text(
+          '$sourcePath\n'
+          '→ $targetPath\n\n'
+          '确认移动到这个位置吗？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('移动'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Re-check after the dialog in case the tree changed while it was open.
+    if (!_canMoveToDirectory(sourcePath, targetDirectory)) return;
+    final currentEntry = workspace.entryAt(sourcePath);
+    if (currentEntry == null) return;
+
+    final currentTargetPath = targetDirectory.isEmpty
+        ? currentEntry.name
+        : '$targetDirectory/${currentEntry.name}';
+
+    try {
+      workspace.moveEntry(sourcePath, targetDirectory);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final destinationLabel =
+        targetDirectory.isEmpty ? '项目根目录' : targetDirectory;
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('已移动 ${currentEntry.name} 到 $destinationLabel'),
+        action: SnackBarAction(
+          label: '撤销',
+          onPressed: () {
+            try {
+              workspace.relocateEntry(currentTargetPath, sourcePath);
+            } catch (error) {
+              messenger.showSnackBar(
+                SnackBar(content: Text('撤销失败：$error')),
+              );
+            }
+          },
+        ),
+      ),
     );
   }
 
@@ -328,59 +459,59 @@ class WorkspaceFileExplorer extends StatelessWidget {
   }
 
   Future<String?> _askForName(
-  BuildContext context, {
-  required String title,
-  required String hint,
-  String? initialValue,
-}) async {
-  var currentValue = initialValue ?? '';
+    BuildContext context, {
+    required String title,
+    required String hint,
+    String? initialValue,
+  }) async {
+    var currentValue = initialValue ?? '';
 
-  final value = await showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextFormField(
-        initialValue: initialValue,
-        autofocus: true,
-        decoration: InputDecoration(
-          hintText: hint,
-        ),
-        onChanged: (value) {
-          currentValue = value;
-        },
-        onFieldSubmitted: (value) {
-          Navigator.pop(
-            context,
-            value.trim(),
-          );
-        },
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextFormField(
+          initialValue: initialValue,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: hint,
+          ),
+          onChanged: (value) {
+            currentValue = value;
           },
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () {
+          onFieldSubmitted: (value) {
             Navigator.pop(
               context,
-              currentValue.trim(),
+              value.trim(),
             );
           },
-          child: const Text('确定'),
         ),
-      ],
-    ),
-  );
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(
+                context,
+                currentValue.trim(),
+              );
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
 
-  if (value == null || value.isEmpty) {
-    return null;
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+
+    return value;
   }
-
-  return value;
-}
 
   void _runAction(BuildContext context, VoidCallback action) {
     try {
@@ -391,7 +522,6 @@ class WorkspaceFileExplorer extends StatelessWidget {
       );
     }
   }
-
 }
 
 class _ExplorerHeader extends StatelessWidget {

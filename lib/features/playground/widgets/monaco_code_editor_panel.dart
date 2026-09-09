@@ -387,7 +387,7 @@ html, body, #container { background: #111318 !important; }
 
   const state = {
     collection: editor.createDecorationsCollection(),
-    payload: { enabled: false, path: '', reusableRules: [], lineRules: [] },
+    payload: { enabled: false, path: '', anchors: [] },
     revealLine: null,
   };
 
@@ -409,7 +409,6 @@ html, body, #container { background: #111318 !important; }
 
     editor.updateOptions({ readOnly: true });
     const decorations = [];
-    const coveredLines = new Set();
     const occupied = new Map();
 
     const reserve = (line, start, end) => {
@@ -422,65 +421,46 @@ html, body, #container { background: #111318 !important; }
       return true;
     };
 
-    for (const rule of payload.lineRules) {
+    for (const rule of payload.anchors ?? []) {
       const line = Number(rule.lineNumber);
-      if (!Number.isFinite(line) || line < 1 || line > model.getLineCount()) {
+      const startColumn = Number(rule.startColumn);
+      const endColumn = Number(rule.endColumn);
+      if (!Number.isFinite(line) ||
+          !Number.isFinite(startColumn) ||
+          !Number.isFinite(endColumn) ||
+          line < 1 ||
+          line > model.getLineCount() ||
+          startColumn < 1 ||
+          endColumn <= startColumn ||
+          endColumn > model.getLineMaxColumn(line)) {
         continue;
       }
       if (state.revealLine === line) continue;
 
-      const sourceLine = model.getLineContent(line);
-      if (sourceLine !== rule.source) continue;
-
-      const indent = sourceLine.match(/^\\s*/)?.[0].length ?? 0;
-      const startColumn = indent + 1;
-      const endColumn = model.getLineMaxColumn(line);
-      const options = {
-        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-        before: injected(rule.label, 'concept-label-chip-line'),
-      };
-
-      if (endColumn > startColumn) {
-        options.inlineClassName = 'concept-label-hidden-source';
-      }
+      const range = new monaco.Range(
+        line,
+        startColumn,
+        line,
+        endColumn,
+      );
+      const currentSource = model.getValueInRange(range);
+      if (currentSource !== rule.source) continue;
+      if (!reserve(line, startColumn, endColumn)) continue;
 
       decorations.push({
-        range: new monaco.Range(line, startColumn, line, endColumn),
-        options,
+        range,
+        options: {
+          stickiness:
+            monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+          inlineClassName: 'concept-label-hidden-source',
+          before: injected(
+            rule.label,
+            rule.lineScoped
+              ? 'concept-label-chip-line'
+              : 'concept-label-chip-position',
+          ),
+        },
       });
-      coveredLines.add(line);
-      reserve(line, startColumn, Math.max(startColumn + 1, endColumn));
-    }
-
-    const reusableRules = [...payload.reusableRules]
-      .filter((rule) => typeof rule.source === 'string' && rule.source.length > 0)
-      .sort((a, b) => b.source.length - a.source.length);
-
-    for (let line = 1; line <= model.getLineCount(); line += 1) {
-      if (coveredLines.has(line) || state.revealLine === line) continue;
-      const sourceLine = model.getLineContent(line);
-
-      for (const rule of reusableRules) {
-        let from = 0;
-        while (from <= sourceLine.length - rule.source.length) {
-          const index = sourceLine.indexOf(rule.source, from);
-          if (index < 0) break;
-
-          const startColumn = index + 1;
-          const endColumn = startColumn + rule.source.length;
-          if (reserve(line, startColumn, endColumn)) {
-            decorations.push({
-              range: new monaco.Range(line, startColumn, line, endColumn),
-              options: {
-                stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-                inlineClassName: 'concept-label-hidden-source',
-                before: injected(rule.label, 'concept-label-chip-reusable'),
-              },
-            });
-          }
-          from = Math.max(index + rule.source.length, index + 1);
-        }
-      }
     }
 
     state.collection.set(decorations);
@@ -539,40 +519,31 @@ html, body, #container { background: #111318 !important; }
     final path = widget.controller.activeFilePath;
     final enabled = widget.labelModeEnabled && labels != null;
 
-    final reusableRules = enabled
-        ? labels!.reusableRulesForPath(path)
-            .map(
-              (rule) => <String, Object?>{
-                'source': rule.source,
-                'label': rule.label,
-              },
-            )
-            .toList(growable: false)
-        : const <Map<String, Object?>>[];
+    final resolved = enabled
+        ? labels!.resolveLabelsForSource(
+            path: path,
+            sourceText: widget.controller.textController.text,
+          )
+        : const <ResolvedConceptLabel>[];
 
-    final lineRules = enabled
-        ? labels!.rules
-            .where(
-              (rule) =>
-                  rule.scope == ConceptLabelScope.line &&
-                  rule.filePath == path &&
-                  rule.lineNumber != null,
-            )
-            .map(
-              (rule) => <String, Object?>{
-                'source': rule.source,
-                'label': rule.label,
-                'lineNumber': rule.lineNumber,
-              },
-            )
-            .toList(growable: false)
-        : const <Map<String, Object?>>[];
+    final anchors = resolved
+        .map(
+          (match) => <String, Object?>{
+            'id': match.rule.id,
+            'source': match.source,
+            'label': match.rule.label,
+            'lineNumber': match.lineNumber,
+            'startColumn': match.startColumn + 1,
+            'endColumn': match.endColumn + 1,
+            'lineScoped': match.lineScoped,
+          },
+        )
+        .toList(growable: false);
 
     final payload = jsonEncode(<String, Object?>{
       'enabled': enabled,
       'path': path,
-      'reusableRules': reusableRules,
-      'lineRules': lineRules,
+      'anchors': anchors,
     });
 
     if (resetReveal) {
@@ -588,7 +559,8 @@ html, body, #container { background: #111318 !important; }
   Future<void> _pushMirrorSelection(MonacoController monaco) async {
     final selection = widget.controller.textController.selection;
     final base = (line: selection.baseIndex, column: selection.baseOffset);
-    final extent = (line: selection.extentIndex, column: selection.extentOffset);
+    final extent =
+        (line: selection.extentIndex, column: selection.extentOffset);
 
     final baseBeforeExtent = base.line < extent.line ||
         (base.line == extent.line && base.column <= extent.column);
@@ -628,7 +600,9 @@ html, body, #container { background: #111318 !important; }
     }
     if (lower.endsWith('.py')) return MonacoLanguage.python;
     if (lower.endsWith('.c') || lower.endsWith('.h')) return MonacoLanguage.c;
-    if (lower.endsWith('.cpp') || lower.endsWith('.cc') || lower.endsWith('.hpp')) {
+    if (lower.endsWith('.cpp') ||
+        lower.endsWith('.cc') ||
+        lower.endsWith('.hpp')) {
       return MonacoLanguage.cpp;
     }
     if (lower.endsWith('.cs')) return MonacoLanguage.csharp;

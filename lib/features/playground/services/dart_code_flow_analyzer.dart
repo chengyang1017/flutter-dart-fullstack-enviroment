@@ -49,6 +49,8 @@ class CodeFlowNode {
     required this.name,
     required this.displayName,
     required this.location,
+    this.sourceCode = '',
+    this.sourceStartLine = 1,
     this.children = const <CodeFlowNode>[],
     this.isCycle = false,
   });
@@ -56,6 +58,16 @@ class CodeFlowNode {
   final String name;
   final String displayName;
   final CodeFlowLocation location;
+
+  /// Exact declaration text sliced from the Workspace source that produced
+  /// this AST node. This is not generated, summarized, or rewritten.
+  final String sourceCode;
+
+  /// 1-based Workspace line where [sourceCode] starts. This is kept separate
+  /// from [location] because the function name can appear after metadata or
+  /// modifiers on a later line.
+  final int sourceStartLine;
+
   final List<CodeFlowNode> children;
   final bool isCycle;
 }
@@ -219,7 +231,6 @@ class DartCodeFlowAnalyzer {
     required Map<String, List<_FlowDeclaration>> byName,
   }) {
     final edges = <CodeFlowEdge>[];
-    final seen = <String>{};
 
     for (final caller in declarations) {
       for (final call in caller.calls) {
@@ -230,10 +241,6 @@ class DartCodeFlowAnalyzer {
         );
 
         for (final target in targets) {
-          final key = '${caller.key}#'
-              '${call.location.line}:${call.location.column}->${target.key}';
-          if (!seen.add(key)) continue;
-
           edges.add(
             CodeFlowEdge(
               sourceName: caller.displayName,
@@ -400,14 +407,16 @@ class DartCodeFlowAnalyzer {
     final sameFile = candidates
         .where((candidate) => candidate.filePath == caller.filePath)
         .toList(growable: false);
-    if (sameFile.isNotEmpty) return <_FlowDeclaration>[sameFile.first];
+    if (sameFile.length == 1) {
+      return <_FlowDeclaration>[sameFile.single];
+    }
 
     if (candidates.length == 1) return <_FlowDeclaration>[candidates.single];
 
-    // Without resolved types we cannot know which implementation a receiver
-    // uses. Showing at most two candidates is more honest than silently
-    // pretending one arbitrary method is definitely the target.
-    return candidates.take(2).toList(growable: false);
+    // A name-only match is not enough to claim a real call target when more
+    // than one Workspace declaration is possible. Leave ambiguous calls out
+    // of the definite graph until a type-resolved analyzer can identify them.
+    return const <_FlowDeclaration>[];
   }
 }
 
@@ -420,6 +429,8 @@ class _FlowDeclaration {
     required this.startOffset,
     required this.endOffset,
     required this.body,
+    required this.sourceCode,
+    required this.sourceStartLine,
   });
 
   final String name;
@@ -429,6 +440,8 @@ class _FlowDeclaration {
   final int startOffset;
   final int endOffset;
   final FunctionBody body;
+  final String sourceCode;
+  final int sourceStartLine;
   final List<CodeFlowCall> calls = <CodeFlowCall>[];
 
   String get key => '$filePath#$startOffset';
@@ -442,6 +455,8 @@ class _FlowDeclaration {
       name: name,
       displayName: displayName,
       location: location,
+      sourceCode: sourceCode,
+      sourceStartLine: sourceStartLine,
       children: children,
       isCycle: isCycle,
     );
@@ -474,6 +489,13 @@ class _DeclarationCollector extends RecursiveAstVisitor<void> {
         startOffset: node.offset,
         endOffset: node.end,
         body: node.body,
+        sourceCode: source.substring(node.offset, node.end),
+        sourceStartLine: _locationFor(
+          filePath,
+          source,
+          node.offset,
+          0,
+        ).line,
       ),
     );
     super.visitMethodDeclaration(node);
@@ -495,6 +517,13 @@ class _DeclarationCollector extends RecursiveAstVisitor<void> {
         startOffset: node.offset,
         endOffset: node.end,
         body: node.functionExpression.body,
+        sourceCode: source.substring(node.offset, node.end),
+        sourceStartLine: _locationFor(
+          filePath,
+          source,
+          node.offset,
+          0,
+        ).line,
       ),
     );
     super.visitFunctionDeclaration(node);

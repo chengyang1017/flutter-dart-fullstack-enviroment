@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -26,6 +27,7 @@ import '../controllers/playground_controller.dart';
 import '../models/workspace_view_mode.dart';
 import '../widgets/compact_playground_layout.dart';
 import '../widgets/playground_toolbar.dart';
+import '../widgets/tablet_playground_layout.dart';
 import '../widgets/wide_playground_layout.dart';
 
 class PlaygroundScreen extends StatefulWidget {
@@ -598,59 +600,84 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     }
   }
 
-  Future<void> _deleteProject() async {
+  Future<void> _deleteProject([String? projectId]) async {
     final library = _projectLibrary;
 
     if (library == null || library.projects.length <= 1) {
       return;
     }
 
-    final project = library.activeProject;
+    final project = projectId == null
+        ? library.activeProject
+        : library.projectById(projectId);
+    if (project == null) return;
+
+    final deletingActiveProject = project.id == library.activeProjectId;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          '删除 ${project.name}？',
-        ),
-        content: const Text(
-          '这会删除这个浏览器本地练习的 Workspace 快照。Runner 临时环境也会被销毁。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(
-              context,
-              false,
-            ),
-            child: const Text('取消'),
+      builder: (dialogContext) {
+        final scheme = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          icon: Icon(
+            Icons.delete_forever_outlined,
+            color: scheme.error,
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(
-              context,
-              true,
-            ),
-            child: const Text('删除'),
+          title: Text(
+            '删除 ${project.name}？',
           ),
-        ],
-      ),
+          content: const Text(
+            '这会永久删除这个项目的 Workspace 数据和快照。'
+            '如果当前使用云端 Workspace，对应云端数据也会一起删除。'
+            '此操作无法撤销。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                false,
+              ),
+              child: const Text('取消'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+              ),
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                true,
+              ),
+              icon: const Icon(Icons.delete_forever_outlined),
+              label: const Text('永久删除'),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed != true || !mounted) {
       return;
     }
 
-    await controller.flushWorkspacePersistence();
-
-    _activeProjectStore?.disableWrites();
-
-    _disposeControllers();
+    var controllersDisposed = false;
 
     try {
+      if (deletingActiveProject) {
+        await controller.flushWorkspacePersistence();
+
+        _activeProjectStore?.disableWrites();
+        _disposeControllers();
+        controllersDisposed = true;
+      }
+
       await library.deleteProject(
         project.id,
       );
     } catch (error) {
-      _createControllers();
+      if (controllersDisposed) {
+        _createControllers();
+      }
 
       if (mounted) {
         setState(() {});
@@ -669,10 +696,22 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       return;
     }
 
-    _createControllers();
+    if (controllersDisposed) {
+      _createControllers();
+    }
 
     if (mounted) {
       setState(() {});
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已删除 ${project.name}',
+          ),
+        ),
+      );
     }
   }
 
@@ -725,10 +764,8 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     if (message == null || !mounted) return;
 
     final beforeCommit = controller.workspace.createSnapshot();
-    final stagedPaths = staged
-        .map((change) => change.path)
-        .toSet()
-        .toList(growable: false);
+    final stagedPaths =
+        staged.map((change) => change.path).toSet().toList(growable: false);
     final committed = controller.workspace.commitStagedChanges();
     if (!committed) return;
 
@@ -830,7 +867,8 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                             children: [
                               for (final change in changes.take(8))
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 2),
                                   child: Text(
                                     '• ${change.path}',
                                     maxLines: 1,
@@ -1083,7 +1121,73 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
+              final isAndroidTablet = !kIsWeb &&
+                  defaultTargetPlatform == TargetPlatform.android &&
+                  constraints.maxWidth >= 600 &&
+                  constraints.maxHeight >= 600;
               final isCompact = constraints.maxWidth < 700;
+
+              if (isAndroidTablet) {
+                final library = _projectLibrary;
+
+                return TabletPlaygroundLayout(
+                  controller: controller,
+                  runner: runner,
+                  viewMode: _viewMode,
+                  onViewModeChanged: _changeViewMode,
+                  onRun: () => _showRunTargetDialog(context),
+                  projects: library?.projects,
+                  activeProject: library?.activeProject,
+                  onSelectProject: library == null
+                      ? null
+                      : (id) => unawaited(
+                            _switchProject(id),
+                          ),
+                  onCreateProject: library == null
+                      ? null
+                      : () => unawaited(
+                            _createProject(),
+                          ),
+                  onOpenFolder:
+                      library != null && supportsWorkspaceDirectoryPicker
+                          ? () => unawaited(
+                                _openLocalFlutterProjectFolder(),
+                              )
+                          : null,
+                  onImportZip: library != null && supportsWorkspaceImportPicker
+                      ? () => unawaited(
+                            _importExistingFlutterProject(),
+                          )
+                      : null,
+                  onCommit:
+                      library != null && controller.workspace.hasStagedChanges
+                          ? () => unawaited(
+                                _commitWorkspace(),
+                              )
+                          : null,
+                  onShare: library == null
+                      ? null
+                      : () => unawaited(
+                            _shareCurrentProject(),
+                          ),
+                  onKeep: library == null
+                      ? null
+                      : () => unawaited(
+                            _keepProject(),
+                          ),
+                  onRename: library == null
+                      ? null
+                      : () => unawaited(
+                            _renameProject(),
+                          ),
+                  onDeleteProject:
+                      library == null || library.projects.length <= 1
+                          ? null
+                          : (id) => unawaited(
+                                _deleteProject(id),
+                              ),
+                );
+              }
 
               if (isCompact) {
                 return DefaultTabController(

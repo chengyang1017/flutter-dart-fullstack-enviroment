@@ -147,7 +147,6 @@ void second() {
     expect(callerCycle.children, isEmpty);
   });
 
-
   test('records concrete call-site locations for Monaco wire rendering', () {
     const entries = <WorkspaceEntry>[
       WorkspaceEntry(
