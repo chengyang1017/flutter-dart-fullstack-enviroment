@@ -424,8 +424,15 @@ class WorkspaceStorageHttpServer {
       final workspaceId = _readWorkspaceIdFromRoute(segments[1]);
 
       if (request.method == 'GET') {
-        final document = await store.loadWorkspace(userId, workspaceId);
-        if (document == null) {
+        _setCors(request.response);
+        request.response.statusCode = HttpStatus.ok;
+        request.response.headers.contentType = ContentType.json;
+        final found = await store.writeWorkspaceJson(
+          userId: userId,
+          workspaceId: workspaceId,
+          sink: request.response,
+        );
+        if (!found) {
           await _sendError(
             request.response,
             HttpStatus.notFound,
@@ -433,7 +440,7 @@ class WorkspaceStorageHttpServer {
           );
           return;
         }
-        await _sendJson(request.response, HttpStatus.ok, document);
+        await request.response.close();
         return;
       }
 
@@ -486,6 +493,16 @@ class WorkspaceStorageHttpServer {
         request.response,
         HttpStatus.notFound,
         'Route not found.',
+      );
+    } on WorkspaceDeleted catch (error) {
+      await _sendJson(
+        request.response,
+        HttpStatus.conflict,
+        <String, Object?>{
+          'code': 'workspace_deleted',
+          'workspaceId': error.workspaceId,
+          'error': 'Workspace was deleted on another device.',
+        },
       );
     } on WorkspaceRevisionMismatch catch (error) {
       await _sendJson(

@@ -43,9 +43,9 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
   @override
   late final WorkspaceSnapshotStore snapshotStore;
 
-  /// Hydrates remote projects while preserving projects that only exist in the
-  /// browser cache. A project created while cloud was disabled must not be
-  /// deleted just because it is absent from the remote catalog.
+  /// Hydrates remote projects while preserving unsynced local projects.
+  /// Explicit server tombstones win over stale browser/device caches so a
+  /// project deleted on one device cannot be recreated by another device.
   Future<void> hydrateFromRemote() async {
     final cachedProjects = _cache.catalogStore.loadProjects();
     final cachedById = <String, WorkspaceProject>{
@@ -54,6 +54,7 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
     final preferredActive = _cache.catalogStore.loadActiveProjectId();
     final pendingStore = _pendingSyncStore;
     final catalog = await _remote.loadCatalog();
+    final deletedWorkspaceIds = catalog.deletedWorkspaceIds;
 
     final hydratedProjects = <WorkspaceProject>[];
     final remoteIds = <String>{};
@@ -116,17 +117,32 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
         continue;
       }
 
-      final snapshot = _cache.snapshotStore.load(cached.storageKey);
-      if (snapshot != null) {
-        hydratedProjects.add(cached);
+      final hasPendingLocal =
+          pendingStore?.isPendingSync(cached.storageKey) ?? false;
 
-        if (pendingStore?.isPendingSync(cached.storageKey) ?? false) {
-          // The previous session may have been terminated before the initial
-          // cloud create completed. Retry it automatically on the next boot.
-          await _saveRemoteProject(cached, snapshot);
-          await pendingStore!.clearPendingSync(cached.storageKey);
-        }
+      if (deletedWorkspaceIds.contains(cached.id) || !hasPendingLocal) {
+        // The remote catalog is authoritative. A cached project that is no
+        // longer remote is stale unless it has an explicit pending-sync marker.
+        // Tombstones always win, even over a stale pending marker, so another
+        // device cannot resurrect a project that was explicitly deleted.
+        await _cache.snapshotStore.delete(cached.storageKey);
+        await pendingStore?.clearPendingSync(cached.storageKey);
+        continue;
       }
+
+      final snapshot = _cache.snapshotStore.load(cached.storageKey);
+      if (snapshot == null) {
+        // A pending marker without its snapshot cannot be recovered.
+        await pendingStore?.clearPendingSync(cached.storageKey);
+        continue;
+      }
+
+      hydratedProjects.add(cached);
+
+      // The previous session may have been terminated before the initial cloud
+      // create completed. Retry only explicitly pending local projects.
+      await _saveRemoteProject(cached, snapshot);
+      await pendingStore!.clearPendingSync(cached.storageKey);
     }
 
     await _cache.catalogStore.saveProjects(hydratedProjects);
@@ -205,8 +221,7 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
         return;
       }
 
-      final deltaPersistence =
-          deltaRemote as WorkspaceDeltaRemotePersistence;
+      final deltaPersistence = deltaRemote as WorkspaceDeltaRemotePersistence;
       final delta = WorkspaceSnapshotDelta.between(syncedSnapshot, snapshot);
       try {
         final result = await deltaPersistence.patchWorkspace(

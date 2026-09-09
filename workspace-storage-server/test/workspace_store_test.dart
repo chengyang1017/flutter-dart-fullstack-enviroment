@@ -81,7 +81,17 @@ void main() {
     );
     expect(catalog['revision'], 'c3');
     expect(catalog['projects'], isEmpty);
+    expect(catalog['deletedWorkspaceIds'], contains('workspace-a'));
     expect(await store.loadWorkspace('alice', 'workspace-a'), isNull);
+
+    await expectLater(
+      store.createWorkspace(
+        userId: 'alice',
+        project: _project('workspace-a'),
+        snapshot: _snapshot('resurrected'),
+      ),
+      throwsA(isA<WorkspaceDeleted>()),
+    );
   });
 
   test('catalog cleanup removes expired temporary Workspaces only', () async {

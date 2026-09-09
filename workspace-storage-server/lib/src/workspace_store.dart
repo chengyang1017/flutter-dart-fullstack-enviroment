@@ -27,6 +27,15 @@ class WorkspaceDocumentNotFound implements Exception {
   String toString() => 'WorkspaceDocumentNotFound($workspaceId)';
 }
 
+class WorkspaceDeleted implements Exception {
+  const WorkspaceDeleted(this.workspaceId);
+
+  final String workspaceId;
+
+  @override
+  String toString() => 'WorkspaceDeleted($workspaceId)';
+}
+
 class FileWorkspaceStore {
   FileWorkspaceStore(
     this.root, {
@@ -67,6 +76,35 @@ class FileWorkspaceStore {
         includeBaseEntries: includeBaseEntries,
       ),
     );
+  }
+
+  /// Streams a Workspace document without materializing all entry rows.
+  ///
+  /// Split Workspace storage writes each entry JSON file directly to [sink].
+  /// Legacy single-file documents are copied as bytes. This keeps large GET
+  /// requests from rebuilding the complete snapshot in the server heap.
+  Future<bool> writeWorkspaceJson({
+    required String userId,
+    required String workspaceId,
+    required IOSink sink,
+  }) {
+    return _serialized(userId, () async {
+      final meta = await _readSplitMeta(userId, workspaceId);
+      if (meta != null) {
+        await _writeSplitWorkspaceJson(
+          userId: userId,
+          workspaceId: workspaceId,
+          meta: meta,
+          sink: sink,
+        );
+        return true;
+      }
+
+      final legacy = _documentFile(userId, workspaceId);
+      if (!await legacy.exists()) return false;
+      await sink.addStream(legacy.openRead());
+      return true;
+    });
   }
 
   /// Reads only project/snapshot metadata and revision. Split Workspace entry
@@ -143,6 +181,11 @@ class FileWorkspaceStore {
         throw StateError('Workspace already exists: $workspaceId');
       }
 
+      final catalog = await _readCatalog(userId);
+      if (_readDeletedWorkspaceIds(catalog).contains(workspaceId)) {
+        throw WorkspaceDeleted(workspaceId);
+      }
+
       final document = <String, dynamic>{
         'project': project,
         'snapshot': snapshot,
@@ -150,7 +193,6 @@ class FileWorkspaceStore {
       };
       await _writeDocument(userId, workspaceId, document);
 
-      final catalog = await _readCatalog(userId);
       final projects = _readProjects(catalog)
         ..removeWhere((item) => item['id'] == workspaceId)
         ..add(project);
@@ -158,6 +200,7 @@ class FileWorkspaceStore {
         userId,
         <String, dynamic>{
           'projects': projects,
+          'deletedWorkspaceIds': _readDeletedWorkspaceIds(catalog).toList(),
           'revision': _nextRevision(catalog['revision'], 'c'),
         },
       );
@@ -215,6 +258,7 @@ class FileWorkspaceStore {
         userId,
         <String, dynamic>{
           'projects': projects,
+          'deletedWorkspaceIds': _readDeletedWorkspaceIds(catalog).toList(),
           'revision': _nextRevision(catalog['revision'], 'c'),
         },
       );
@@ -320,6 +364,7 @@ class FileWorkspaceStore {
         userId,
         <String, dynamic>{
           'projects': projects,
+          'deletedWorkspaceIds': _readDeletedWorkspaceIds(catalog).toList(),
           'revision': _nextRevision(catalog['revision'], 'c'),
         },
       );
@@ -357,8 +402,11 @@ class FileWorkspaceStore {
       final catalog = await _readCatalog(userId);
       final projects = _readProjects(catalog)
         ..removeWhere((item) => item['id'] == workspaceId);
+      final deletedWorkspaceIds = _readDeletedWorkspaceIds(catalog)
+        ..add(workspaceId);
       final next = <String, dynamic>{
         'projects': projects,
+        'deletedWorkspaceIds': deletedWorkspaceIds.toList(),
         'revision': _nextRevision(catalog['revision'], 'c'),
       };
       await _writeCatalog(userId, next);
@@ -486,8 +534,11 @@ class FileWorkspaceStore {
     }
     projects.removeWhere((project) => expiredIds.contains(project['id']));
 
+    final deletedWorkspaceIds = _readDeletedWorkspaceIds(catalog)
+      ..addAll(expiredIds);
     final next = <String, dynamic>{
       'projects': projects,
+      'deletedWorkspaceIds': deletedWorkspaceIds.toList(),
       'revision': _nextRevision(catalog['revision'], 'c'),
     };
     await _writeCatalog(userId, next);
@@ -519,6 +570,7 @@ class FileWorkspaceStore {
     if (!await file.exists()) {
       return <String, dynamic>{
         'projects': <Map<String, dynamic>>[],
+        'deletedWorkspaceIds': <String>[],
         'revision': 'c0',
       };
     }
@@ -686,6 +738,27 @@ class FileWorkspaceStore {
       }
       return Map<String, dynamic>.from(item);
     }).toList(growable: true);
+  }
+
+  Set<String> _readDeletedWorkspaceIds(Map<String, dynamic> catalog) {
+    final raw = catalog['deletedWorkspaceIds'];
+    if (raw == null) return <String>{};
+    if (raw is! Iterable) {
+      throw const FormatException(
+        'Workspace catalog deletedWorkspaceIds are invalid.',
+      );
+    }
+
+    final result = <String>{};
+    for (final item in raw) {
+      if (item is! String || item.isEmpty) {
+        throw const FormatException(
+          'Workspace catalog deleted Workspace id is invalid.',
+        );
+      }
+      result.add(item);
+    }
+    return result;
   }
 
   String _readWorkspaceId(Map<String, dynamic> project) {
@@ -917,6 +990,82 @@ class FileWorkspaceStore {
       final entry = await _readJsonObject(entity, 'Workspace $label entry');
       await onEntry(entry);
     }
+  }
+
+  Future<void> _writeSplitWorkspaceJson({
+    required String userId,
+    required String workspaceId,
+    required Map<String, dynamic> meta,
+    required IOSink sink,
+  }) async {
+    final rawProject = meta['project'];
+    final rawManifest = meta['snapshot'];
+    final revision = meta['revision'];
+    if (rawProject is! Map ||
+        rawManifest is! Map ||
+        revision is! String ||
+        revision.isEmpty) {
+      throw const FormatException('Workspace split metadata is invalid.');
+    }
+
+    sink.write('{"project":');
+    sink.write(jsonEncode(Map<String, dynamic>.from(rawProject)));
+    sink.write(',"snapshot":{');
+
+    var wroteSnapshotField = false;
+    for (final entry in rawManifest.entries) {
+      final key = entry.key;
+      if (key is! String) {
+        throw const FormatException(
+          'Workspace snapshot manifest key is invalid.',
+        );
+      }
+      if (key == 'entries' || key == 'baseEntries') continue;
+      if (wroteSnapshotField) sink.write(',');
+      sink.write(jsonEncode(key));
+      sink.write(':');
+      sink.write(jsonEncode(entry.value));
+      wroteSnapshotField = true;
+    }
+
+    if (wroteSnapshotField) sink.write(',');
+    sink.write('"entries":');
+    await _writeSplitEntryJsonArray(
+      _workspaceEntriesDirectory(userId, workspaceId),
+      sink,
+    );
+    sink.write(',"baseEntries":');
+    await _writeSplitEntryJsonArray(
+      _workspaceBaseEntriesDirectory(userId, workspaceId),
+      sink,
+    );
+
+    sink.write('},"revision":');
+    sink.write(jsonEncode(revision));
+    sink.write('}');
+  }
+
+  Future<void> _writeSplitEntryJsonArray(
+    Directory directory,
+    IOSink sink,
+  ) async {
+    sink.write('[');
+    if (await directory.exists()) {
+      final files = await directory
+          .list(followLinks: false)
+          .where((entity) => entity is File && entity.path.endsWith('.json'))
+          .cast<File>()
+          .toList();
+      files.sort((a, b) => a.path.compareTo(b.path));
+
+      var first = true;
+      for (final file in files) {
+        if (!first) sink.write(',');
+        await sink.addStream(file.openRead());
+        first = false;
+      }
+    }
+    sink.write(']');
   }
 
   Future<void> _deleteDocument(String userId, String workspaceId) async {

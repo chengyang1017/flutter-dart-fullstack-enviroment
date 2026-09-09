@@ -5,9 +5,11 @@ class WorkspaceRemoteCatalog {
   const WorkspaceRemoteCatalog({
     required this.projects,
     required this.revision,
+    this.deletedWorkspaceIds = const <String>{},
   });
 
   final List<WorkspaceProject> projects;
+  final Set<String> deletedWorkspaceIds;
 
   /// Opaque server revision. Clients compare it but must not interpret it.
   final String revision;
@@ -15,13 +17,19 @@ class WorkspaceRemoteCatalog {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'projects':
             projects.map((project) => project.toJson()).toList(growable: false),
+        'deletedWorkspaceIds': deletedWorkspaceIds.toList(growable: false),
         'revision': revision,
       };
 
   factory WorkspaceRemoteCatalog.fromJson(Map<dynamic, dynamic> json) {
     final rawProjects = json['projects'];
+    final rawDeletedWorkspaceIds = json['deletedWorkspaceIds'];
     final revision = json['revision'];
-    if (rawProjects is! Iterable || revision is! String || revision.isEmpty) {
+    if (rawProjects is! Iterable ||
+        (rawDeletedWorkspaceIds != null &&
+            rawDeletedWorkspaceIds is! Iterable) ||
+        revision is! String ||
+        revision.isEmpty) {
       throw const FormatException('Invalid remote Workspace catalog.');
     }
 
@@ -33,8 +41,19 @@ class WorkspaceRemoteCatalog {
       projects.add(WorkspaceProject.fromJson(item));
     }
 
+    final deletedWorkspaceIds = <String>{};
+    for (final item in rawDeletedWorkspaceIds ?? const <Object?>[]) {
+      if (item is! String || item.isEmpty) {
+        throw const FormatException(
+          'Invalid deleted Workspace id in remote catalog.',
+        );
+      }
+      deletedWorkspaceIds.add(item);
+    }
+
     return WorkspaceRemoteCatalog(
       projects: List<WorkspaceProject>.unmodifiable(projects),
+      deletedWorkspaceIds: Set<String>.unmodifiable(deletedWorkspaceIds),
       revision: revision,
     );
   }
