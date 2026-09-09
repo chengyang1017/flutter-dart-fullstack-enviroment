@@ -3,16 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../runner/controllers/flutter_runner_controller.dart';
-import '../../runner/widgets/runner_console_panel.dart';
 import '../../runner/widgets/runner_preview_panel.dart';
 import '../../workspace/widgets/workspace_editor_tabs.dart';
-import '../../workspace/widgets/workspace_file_explorer.dart';
 import '../controllers/concept_label_controller.dart';
 import '../controllers/playground_controller.dart';
-import 'code_editor_panel.dart';
+import '../models/workspace_view_mode.dart';
+import 'monaco_code_editor_panel.dart';
 import 'code_flow_panel.dart';
-import 'concept_label_editor_layer.dart';
 import 'error_panel.dart';
+import 'ide_bottom_panel.dart';
+import 'unified_workspace_explorer.dart';
+import 'workspace_diff_panel.dart';
 
 class WidePlaygroundLayout extends StatefulWidget {
   const WidePlaygroundLayout({
@@ -20,11 +21,15 @@ class WidePlaygroundLayout extends StatefulWidget {
     required this.controller,
     required this.runner,
     required this.toolbar,
+    required this.viewMode,
+    required this.onViewModeChanged,
   });
 
   final PlaygroundController controller;
   final FlutterRunnerController runner;
   final Widget toolbar;
+  final WorkspaceViewMode viewMode;
+  final ValueChanged<WorkspaceViewMode> onViewModeChanged;
 
   @override
   State<WidePlaygroundLayout> createState() => _WidePlaygroundLayoutState();
@@ -36,13 +41,38 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
   bool _showConsole = true;
   bool _wireModeEnabled = false;
   bool _labelModeEnabled = false;
+  String? _sourceDiffPath;
   late final ConceptLabelController _labels;
+  late Widget _persistentMonacoEditor;
 
   @override
   void initState() {
     super.initState();
     _labels = ConceptLabelController();
+    _persistentMonacoEditor = _buildPersistentMonacoEditor();
     unawaited(_labels.load());
+  }
+
+  Widget _buildPersistentMonacoEditor() {
+    return MonacoCodeEditorPanel(
+      controller: widget.controller,
+      labels: _labels,
+      labelModeEnabled: _labelModeEnabled,
+      wireModeEnabled: _wireModeEnabled,
+    );
+  }
+
+  void _refreshPersistentMonacoEditor() {
+    _persistentMonacoEditor = _buildPersistentMonacoEditor();
+  }
+
+  @override
+  void didUpdateWidget(covariant WidePlaygroundLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      _sourceDiffPath = null;
+      _refreshPersistentMonacoEditor();
+    }
   }
 
   @override
@@ -53,7 +83,10 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
 
   Future<void> _openAddLabelDialog() async {
     if (_labelModeEnabled) {
-      setState(() => _labelModeEnabled = false);
+      setState(() {
+        _labelModeEnabled = false;
+        _refreshPersistentMonacoEditor();
+      });
       await Future<void>.delayed(Duration.zero);
     }
 
@@ -247,6 +280,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
     return ColoredBox(
       color: scheme.surface,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           widget.toolbar,
           Expanded(
@@ -254,18 +288,29 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
               children: [
                 if (_showExplorer)
                   SizedBox(
-                    width: 230,
-                    child: WorkspaceFileExplorer(
-                      workspace: widget.controller.workspace,
-                      onOpenFile: widget.controller.selectWorkspaceFile,
+                    width: 264,
+                    child: UnifiedWorkspaceExplorer(
+                      controller: widget.controller,
+                      runner: widget.runner,
+                      viewMode: widget.viewMode,
+                      onViewModeChanged: widget.onViewModeChanged,
+                      onShowDiff: (path) {
+                        setState(() => _sourceDiffPath = path);
+                      },
                     ),
                   ),
-                if (_showExplorer) const VerticalDivider(width: 1),
+                if (_showExplorer)
+                  const VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: Color(0xff272d36),
+                  ),
                 Expanded(
                   child: _EditorArea(
                     controller: widget.controller,
                     labels: _labels,
                     runner: widget.runner,
+                    viewMode: widget.viewMode,
                     showConsole: _showConsole,
                     wireModeEnabled: _wireModeEnabled,
                     labelModeEnabled: _labelModeEnabled,
@@ -279,15 +324,26 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                       setState(() => _showPreview = !_showPreview);
                     },
                     onToggleWireMode: () {
-                      setState(() => _wireModeEnabled = !_wireModeEnabled);
+                      setState(() {
+                        _wireModeEnabled = !_wireModeEnabled;
+                        _refreshPersistentMonacoEditor();
+                      });
                     },
                     onToggleLabelMode: () {
-                      setState(() => _labelModeEnabled = !_labelModeEnabled);
+                      setState(() {
+                        _labelModeEnabled = !_labelModeEnabled;
+                        _refreshPersistentMonacoEditor();
+                      });
                     },
                     onAddLabel: _openAddLabelDialog,
                     onManageLabels: _openManageLabelsDialog,
                     explorerVisible: _showExplorer,
                     previewVisible: _showPreview,
+                    persistentMonacoEditor: _persistentMonacoEditor,
+                    sourceDiffPath: _sourceDiffPath,
+                    onCloseSourceDiff: () {
+                      setState(() => _sourceDiffPath = null);
+                    },
                   ),
                 ),
                 if (_wireModeEnabled) ...[
@@ -332,7 +388,10 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                                   tooltip: 'å…³é—­ç”µçº¿æ¨¡å¼',
                                   visualDensity: VisualDensity.compact,
                                   onPressed: () {
-                                    setState(() => _wireModeEnabled = false);
+                                    setState(() {
+                                      _wireModeEnabled = false;
+                                      _refreshPersistentMonacoEditor();
+                                    });
                                   },
                                   icon: const Icon(Icons.close, size: 18),
                                 ),
@@ -348,7 +407,12 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                     ),
                   ),
                 ],
-                if (_showPreview) const VerticalDivider(width: 1),
+                if (_showPreview)
+                  const VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: Color(0xff272d36),
+                  ),
                 if (_showPreview)
                   SizedBox(
                     width: 330,
@@ -374,6 +438,7 @@ class _EditorArea extends StatelessWidget {
     required this.controller,
     required this.labels,
     required this.runner,
+    required this.viewMode,
     required this.showConsole,
     required this.wireModeEnabled,
     required this.labelModeEnabled,
@@ -386,16 +451,23 @@ class _EditorArea extends StatelessWidget {
     required this.onManageLabels,
     required this.explorerVisible,
     required this.previewVisible,
+    required this.persistentMonacoEditor,
+    required this.sourceDiffPath,
+    required this.onCloseSourceDiff,
   });
 
   final PlaygroundController controller;
   final ConceptLabelController labels;
   final FlutterRunnerController runner;
+  final WorkspaceViewMode viewMode;
   final bool showConsole;
   final bool wireModeEnabled;
   final bool labelModeEnabled;
   final bool explorerVisible;
   final bool previewVisible;
+  final Widget persistentMonacoEditor;
+  final String? sourceDiffPath;
+  final VoidCallback onCloseSourceDiff;
   final VoidCallback onToggleConsole;
   final VoidCallback onToggleExplorer;
   final VoidCallback onTogglePreview;
@@ -425,24 +497,31 @@ class _EditorArea extends StatelessWidget {
           workspace: controller.workspace,
           onSelect: controller.selectWorkspaceFile,
           onClose: controller.closeWorkspaceFile,
+          pathFilter: viewMode.isConcept
+              ? (path) => viewMode.allowsPath(path)
+              : null,
         ),
         Expanded(
-          child: ConceptLabelEditorLayer(
-            controller: controller,
-            labels: labels,
-            enabled: labelModeEnabled,
-            child: CodeEditorPanel(
-              controller: controller,
-              wireModeEnabled: wireModeEnabled,
+          child: IdeEditorPanelSplit(
+            panelExpanded: showConsole,
+            editor: viewMode.isSourceControl && sourceDiffPath != null
+                ? WorkspaceDiffPanel(
+                    workspace: controller.workspace,
+                    path: sourceDiffPath!,
+                    onClose: onCloseSourceDiff,
+                  )
+                : Column(
+                    children: [
+                      Expanded(child: persistentMonacoEditor),
+                      ErrorPanel(controller: controller, maxHeight: 110),
+                    ],
+                  ),
+            panel: IdeBottomPanel(
+              runner: runner,
+              expanded: showConsole,
+              onExpandedChanged: (_) => onToggleConsole(),
             ),
           ),
-        ),
-        ErrorPanel(controller: controller, maxHeight: 110),
-        _ConsoleBar(expanded: showConsole, onPressed: onToggleConsole),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          height: showConsole ? 135 : 0,
-          child: showConsole ? RunnerConsolePanel(runner: runner) : null,
         ),
       ],
     );
@@ -476,127 +555,111 @@ class _EditorCommandBar extends StatelessWidget {
   final VoidCallback onAddLabel;
   final VoidCallback onManageLabels;
 
+  static const _background = Color(0xff111318);
+  static const _border = Color(0xff272d36);
+  static const _muted = Color(0xff8f98a8);
+  static const _text = Color(0xffcbd3df);
+  static const _accent = Color(0xff82aaff);
+  static const _selected = Color(0xff22324a);
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Container(
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      color: scheme.surface,
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      decoration: const BoxDecoration(
+        color: _background,
+        border: Border(
+          bottom: BorderSide(color: _border),
+        ),
+      ),
       child: Row(
         children: [
-          IconButton(
-            tooltip: explorerVisible ? 'æ”¶èµ·æ–‡ä»¶æ ‘' : 'å±•å¼€æ–‡ä»¶æ ‘',
-            visualDensity: VisualDensity.compact,
+          _EditorBarIconButton(
+            tooltip: explorerVisible ? '收起文件树' : '展开文件树',
+            icon: explorerVisible
+                ? Icons.menu_open_rounded
+                : Icons.menu_rounded,
             onPressed: onToggleExplorer,
-            icon: Icon(
-              explorerVisible ? Icons.chevron_left : Icons.chevron_right,
-              size: 18,
-            ),
           ),
-          const SizedBox(width: 3),
+          const SizedBox(width: 4),
           Expanded(
-            child: Text(
-              controller.activeFilePath,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    controller.activeFilePath,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _text,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (controller.workspace.isDirty)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 7),
+                    child: Icon(
+                      Icons.circle,
+                      size: 6,
+                      color: _accent,
+                    ),
+                  ),
+              ],
             ),
           ),
-          if (controller.workspace.isDirty)
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                color: scheme.primary,
-                shape: BoxShape.circle,
-              ),
-            ),
           const SizedBox(width: 8),
-          IconButton(
+          const SizedBox(
+            height: 20,
+            child: VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: _border,
+            ),
+          ),
+          const SizedBox(width: 5),
+          _EditorBarIconButton(
             key: const ValueKey('add-concept-label'),
-            tooltip: '给选中代码 / 当前行添加自己的标签',
-            visualDensity: VisualDensity.compact,
+            tooltip: '给选中代码 / 当前行添加标签',
+            icon: Icons.new_label_outlined,
             onPressed: onAddLabel,
-            icon: const Icon(Icons.new_label_outlined, size: 18),
           ),
-          IconButton(
+          _EditorBarIconButton(
             key: const ValueKey('manage-concept-labels'),
-            tooltip: '管理我的标签',
-            visualDensity: VisualDensity.compact,
+            tooltip: '管理标签',
+            icon: Icons.label_important_outline,
             onPressed: onManageLabels,
-            icon: const Icon(Icons.label_important_outline, size: 18),
           ),
-          if (labelModeEnabled)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Text(
-                '标签 ON',
-                key: const ValueKey('label-mode-active-label'),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: scheme.tertiary,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ),
-          IconButton(
+          _EditorBarIconButton(
             key: const ValueKey('label-mode-toggle'),
-            tooltip: labelModeEnabled ? '切回原代码视角' : '显示我自己创建的标签',
-            visualDensity: VisualDensity.compact,
-            style: IconButton.styleFrom(
-              backgroundColor: labelModeEnabled
-                  ? scheme.tertiaryContainer
-                  : Colors.transparent,
-              foregroundColor: labelModeEnabled
-                  ? scheme.onTertiaryContainer
-                  : scheme.onSurfaceVariant,
-            ),
+            tooltip: labelModeEnabled ? '切回原代码视角' : '显示标签视角',
+            icon: labelModeEnabled ? Icons.label : Icons.label_outline,
+            selected: labelModeEnabled,
             onPressed: onToggleLabelMode,
-            icon: Icon(
-              labelModeEnabled ? Icons.label : Icons.label_outline,
-              size: 18,
+          ),
+          const SizedBox(width: 4),
+          const SizedBox(
+            height: 20,
+            child: VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: _border,
             ),
           ),
-          if (wireModeEnabled)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Text(
-                '电线 ON',
-                key: const ValueKey('wire-mode-active-label'),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ),
-          IconButton(
+          const SizedBox(width: 5),
+          _EditorBarIconButton(
             key: const ValueKey('wire-mode-toggle'),
-            tooltip:
-                wireModeEnabled ? 'å…³é—­ç”µçº¿æ¨¡å¼' : 'æ‰“å¼€ç”µçº¿æ¨¡å¼',
-            visualDensity: VisualDensity.compact,
-            style: IconButton.styleFrom(
-              backgroundColor: wireModeEnabled
-                  ? scheme.primaryContainer
-                  : Colors.transparent,
-              foregroundColor: wireModeEnabled
-                  ? scheme.onPrimaryContainer
-                  : scheme.onSurfaceVariant,
-            ),
+            tooltip: wireModeEnabled ? '关闭电线模式' : '打开电线模式',
+            icon: wireModeEnabled ? Icons.cable : Icons.cable_outlined,
+            selected: wireModeEnabled,
             onPressed: onToggleWireMode,
-            icon: Icon(
-              wireModeEnabled ? Icons.cable : Icons.cable_outlined,
-              size: 18,
-            ),
           ),
-          IconButton(
-            tooltip:
-                previewVisible ? 'æ”¶èµ·è®¾å¤‡é¢„è§ˆ' : 'å±•å¼€è®¾å¤‡é¢„è§ˆ',
-            visualDensity: VisualDensity.compact,
+          _EditorBarIconButton(
+            tooltip: previewVisible ? '收起设备预览' : '展开设备预览',
+            icon: Icons.phone_android_outlined,
+            selected: previewVisible,
             onPressed: onTogglePreview,
-            icon: Icon(
-              previewVisible ? Icons.chevron_right : Icons.chevron_left,
-              size: 18,
-            ),
           ),
         ],
       ),
@@ -604,50 +667,39 @@ class _EditorCommandBar extends StatelessWidget {
   }
 }
 
-class _ConsoleBar extends StatelessWidget {
-  const _ConsoleBar({
-    required this.expanded,
+class _EditorBarIconButton extends StatelessWidget {
+  const _EditorBarIconButton({
+    super.key,
+    required this.tooltip,
+    required this.icon,
     required this.onPressed,
+    this.selected = false,
   });
 
-  final bool expanded;
+  final String tooltip;
+  final IconData icon;
   final VoidCallback onPressed;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Material(
-      color: scheme.surfaceContainerLow,
-      child: InkWell(
-        onTap: onPressed,
-        child: SizedBox(
-          height: 30,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.terminal_outlined, size: 15),
-                const SizedBox(width: 7),
-                const Text(
-                  'Console',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                Icon(
-                  expanded
-                      ? Icons.keyboard_arrow_down
-                      : Icons.keyboard_arrow_up,
-                  size: 18,
-                ),
-              ],
-            ),
-          ),
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(31, 30),
+        maximumSize: const Size(31, 30),
+        padding: EdgeInsets.zero,
+        foregroundColor:
+            selected ? _EditorCommandBar._accent : _EditorCommandBar._muted,
+        backgroundColor:
+            selected ? _EditorCommandBar._selected : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(5),
         ),
       ),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 17),
     );
   }
 }
@@ -663,47 +715,86 @@ class _PreviewArea extends StatelessWidget {
   final FlutterRunnerController runner;
   final VoidCallback onClose;
 
+  static const _background = Color(0xff111318);
+  static const _surface = Color(0xff15191f);
+  static const _border = Color(0xff272d36);
+  static const _muted = Color(0xff8f98a8);
+  static const _text = Color(0xffcbd3df);
+  static const _accent = Color(0xff82aaff);
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return ColoredBox(
-      color: scheme.surfaceContainerLowest,
+      color: _background,
       child: Column(
         children: [
-          SizedBox(
-            height: 38,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 12, right: 4),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.phone_android_outlined,
-                    size: 16,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 7),
-                  const Text(
-                    'Device Preview',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'æ”¶èµ·',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: onClose,
-                    icon: const Icon(Icons.chevron_right, size: 19),
-                  ),
-                ],
+          Container(
+            height: 40,
+            padding: const EdgeInsets.only(left: 10, right: 4),
+            decoration: const BoxDecoration(
+              color: _background,
+              border: Border(
+                bottom: BorderSide(color: _border),
               ),
             ),
-          ),
-          Divider(
-            height: 1,
-            color: scheme.outlineVariant.withValues(alpha: .45),
+            child: Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _border),
+                  ),
+                  child: const Icon(
+                    Icons.phone_android_outlined,
+                    size: 15,
+                    color: _accent,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Device Preview',
+                        style: TextStyle(
+                          color: _text,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Flutter runtime',
+                        style: TextStyle(
+                          color: _muted,
+                          fontSize: 9.5,
+                          height: 1.05,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: '收起设备预览',
+                  visualDensity: VisualDensity.compact,
+                  style: IconButton.styleFrom(
+                    foregroundColor: _muted,
+                    minimumSize: const Size(30, 30),
+                    maximumSize: const Size(30, 30),
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                  ),
+                  onPressed: onClose,
+                  icon: const Icon(Icons.chevron_right_rounded, size: 19),
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: RunnerPreviewPanel(

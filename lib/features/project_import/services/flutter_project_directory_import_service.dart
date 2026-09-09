@@ -51,13 +51,18 @@ class FlutterProjectDirectoryImportService {
       throw const FormatException('Selected folder contains no readable files.');
     }
 
-    final rootName = _selectedRootName(normalized.map((file) => file.path));
+    final projectRoot = _detectFlutterProjectRoot(normalized);
+    final rootName = _projectRootName(projectRoot);
     final retained = <String, Uint8List>{};
     var ignoredFileCount = 0;
     var importedBytes = 0;
 
     for (final file in normalized) {
-      final relative = _relativeToSelectedRoot(file.path, rootName);
+      final relative = _relativeToProjectRoot(file.path, projectRoot);
+      if (relative == null) {
+        ignoredFileCount += 1;
+        continue;
+      }
       if (relative.isEmpty) continue;
       if (_shouldIgnore(relative)) {
         ignoredFileCount += 1;
@@ -89,7 +94,7 @@ class FlutterProjectDirectoryImportService {
     final pubspecBytes = retained['pubspec.yaml'];
     if (pubspecBytes == null) {
       throw const FormatException(
-        'Choose the Flutter project root containing pubspec.yaml.',
+        'Flutter pubspec.yaml was detected, but could not be imported.',
       );
     }
     final pubspec = _decodeRequiredText('pubspec.yaml', pubspecBytes);
@@ -195,25 +200,62 @@ class FlutterProjectDirectoryImportService {
     );
   }
 
-  String _selectedRootName(Iterable<String> paths) {
-    String? root;
-    for (final path in paths) {
-      final slash = path.indexOf('/');
-      if (slash <= 0) return '';
-      final first = path.substring(0, slash);
-      if (root == null) {
-        root = first;
-      } else if (root != first) {
-        return '';
+  String _detectFlutterProjectRoot(
+    List<({String path, Uint8List bytes})> files,
+  ) {
+    final candidates = <String>[];
+
+    for (final file in files) {
+      if (file.path != 'pubspec.yaml' && !file.path.endsWith('/pubspec.yaml')) {
+        continue;
       }
+
+      final pubspec = _tryDecodeText(file.bytes);
+      if (pubspec == null || !_looksLikeFlutterPubspec(pubspec)) continue;
+
+      final slash = file.path.lastIndexOf('/');
+      candidates.add(slash == -1 ? '' : file.path.substring(0, slash));
     }
-    return root ?? '';
+
+    if (candidates.isEmpty) {
+      throw const FormatException(
+        'No Flutter pubspec.yaml was found in the selected folder.',
+      );
+    }
+
+    candidates.sort((a, b) {
+      final depth = _depth(a).compareTo(_depth(b));
+      return depth != 0 ? depth : a.length.compareTo(b.length);
+    });
+
+    final shallowestDepth = _depth(candidates.first);
+    final shallowest = candidates
+        .where((candidate) => _depth(candidate) == shallowestDepth)
+        .toList(growable: false);
+
+    if (shallowest.length > 1) {
+      throw FormatException(
+        'Multiple Flutter projects were found: '
+        '${shallowest.map((path) => path.isEmpty ? '.' : path).join(', ')}',
+      );
+    }
+
+    return shallowest.single;
   }
 
-  String _relativeToSelectedRoot(String path, String rootName) {
-    if (rootName.isEmpty) return path;
-    final prefix = '$rootName/';
-    return path.startsWith(prefix) ? path.substring(prefix.length) : path;
+  String _projectRootName(String projectRoot) {
+    if (projectRoot.isEmpty) return '';
+    final slash = projectRoot.lastIndexOf('/');
+    return slash == -1 ? projectRoot : projectRoot.substring(slash + 1);
+  }
+
+  String? _relativeToProjectRoot(String path, String projectRoot) {
+    if (projectRoot.isEmpty) return path;
+    if (path == projectRoot) return '';
+
+    final prefix = '$projectRoot/';
+    if (!path.startsWith(prefix)) return null;
+    return path.substring(prefix.length);
   }
 
   bool _shouldIgnore(String relativePath) {

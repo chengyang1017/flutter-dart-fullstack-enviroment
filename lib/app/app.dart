@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/navigation/monaco_route_observer.dart';
 import '../features/auth/screens/workspace_auth_screen.dart';
 import '../features/auth/widgets/claim_existing_account_dialog.dart';
 import '../features/home/screens/home_screen.dart';
@@ -77,6 +78,7 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
 
     return MaterialApp(
       navigatorKey: _navigatorKey,
+      navigatorObservers: [monacoRouteObserver],
       title: 'Flutter UI Playground',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

@@ -2,6 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../controllers/workspace_controller.dart';
 import '../models/workspace_entry.dart';
+import 'workspace_file_visuals.dart';
+
+abstract final class _WorkspaceExplorerPalette {
+  static const background = Color(0xff111318);
+  static const section = Color(0xff15191f);
+  static const border = Color(0xff272d36);
+  static const text = Color(0xffd7dce5);
+  static const muted = Color(0xff8b93a1);
+  static const accent = Color(0xff82aaff);
+  static const selected = Color(0xff202733);
+  static const hover = Color(0xff191e26);
+  static const folder = Color(0xffd7aa5c);
+}
 
 class WorkspaceFileExplorer extends StatelessWidget {
   const WorkspaceFileExplorer({
@@ -13,9 +26,10 @@ class WorkspaceFileExplorer extends StatelessWidget {
   final WorkspaceController workspace;
   final ValueChanged<String> onOpenFile;
 
-  static const _panelBackground = Color(0xff15171b);
-  static const _entryTextColor = Color(0xffd6deeb);
-  static const _mutedIconColor = Color(0xff9da5b4);
+
+  static const _panelBackground = _WorkspaceExplorerPalette.background;
+  static const _entryTextColor = _WorkspaceExplorerPalette.text;
+  static const _mutedIconColor = _WorkspaceExplorerPalette.muted;
 
   @override
   Widget build(BuildContext context) {
@@ -41,10 +55,14 @@ class WorkspaceFileExplorer extends StatelessWidget {
               () => workspace.moveEntry(sourcePath, ''),
             ),
           ),
-          const Divider(height: 1, color: Color(0xff2c313c)),
+          const Divider(
+            height: 1,
+            thickness: 1,
+            color: _WorkspaceExplorerPalette.border,
+          ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 2),
               children: workspace
                   .childrenOf('')
                   .map((entry) => _buildEntry(context, entry, 0))
@@ -79,7 +97,7 @@ class WorkspaceFileExplorer extends StatelessWidget {
         builder: (context, candidates, rejected) {
           final highlighted = candidates.isNotEmpty;
           return Container(
-            color: highlighted ? const Color(0xff202938) : null,
+            color: highlighted ? _WorkspaceExplorerPalette.selected : null,
             child: ExpansionTile(
               key: PageStorageKey('workspace-${entry.id}'),
               initiallyExpanded: workspace.isDirectoryExpanded(entry.path),
@@ -100,7 +118,7 @@ class WorkspaceFileExplorer extends StatelessWidget {
               leading: const Icon(
                 Icons.folder_outlined,
                 size: 18,
-                color: Color(0xffdcb67a),
+                color: _WorkspaceExplorerPalette.folder,
               ),
               title: _EntryLabel(
                 entry: entry,
@@ -140,14 +158,19 @@ class WorkspaceFileExplorer extends StatelessWidget {
         right: 2,
       ),
       selected: !entry.isBinary && workspace.activePath == entry.path,
-      selectedTileColor: const Color(0xff242832),
+      selectedTileColor: _WorkspaceExplorerPalette.selected,
+      hoverColor: _WorkspaceExplorerPalette.hover,
       iconColor: _mutedIconColor,
       selectedColor: _entryTextColor,
       textColor: _entryTextColor,
-      leading: Icon(
-        entry.isBinary ? Icons.image_outlined : _fileIcon(entry.name),
-        size: 17,
-        color: _mutedIconColor,
+      leading: Builder(
+        builder: (context) {
+          final visual = WorkspaceFileVisual.forName(
+            entry.name,
+            binary: entry.isBinary,
+          );
+          return Icon(visual.icon, size: 17, color: visual.color);
+        },
       ),
       title: _EntryLabel(
         entry: entry,
@@ -186,11 +209,18 @@ class WorkspaceFileExplorer extends StatelessWidget {
   }
 
   Widget _draggable(WorkspaceEntry entry, Widget child) {
-  return Draggable<String>(
+    final fileVisual = entry.isDirectory
+        ? null
+        : WorkspaceFileVisual.forName(
+            entry.name,
+            binary: entry.isBinary,
+          );
+
+    return Draggable<String>(
     data: entry.path,
     feedback: Material(
       elevation: 6,
-      color: const Color(0xff242832),
+      color: _WorkspaceExplorerPalette.selected,
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: 12,
@@ -200,13 +230,11 @@ class WorkspaceFileExplorer extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              entry.isDirectory
-                  ? Icons.folder_outlined
-                  : entry.isBinary
-                      ? Icons.image_outlined
-                      : _fileIcon(entry.name),
+              entry.isDirectory ? Icons.folder_outlined : fileVisual!.icon,
               size: 16,
-              color: Colors.white70,
+              color: entry.isDirectory
+                  ? _WorkspaceExplorerPalette.folder
+                  : fileVisual!.color,
             ),
             const SizedBox(width: 6),
             Text(
@@ -223,9 +251,9 @@ class WorkspaceFileExplorer extends StatelessWidget {
       opacity: .35,
       child: child,
     ),
-    child: child,
-  );
-}
+      child: child,
+    );
+  }
 
   bool _hasDirtyDescendant(String directory) {
     return workspace.entries.any(
@@ -364,12 +392,6 @@ class WorkspaceFileExplorer extends StatelessWidget {
     }
   }
 
-  IconData _fileIcon(String name) {
-    if (name.endsWith('.dart')) return Icons.code;
-    if (name.endsWith('.yaml') || name.endsWith('.yml')) return Icons.tune;
-    if (name.endsWith('.json')) return Icons.data_object;
-    return Icons.description_outlined;
-  }
 }
 
 class _ExplorerHeader extends StatelessWidget {
@@ -395,56 +417,87 @@ class _ExplorerHeader extends StatelessWidget {
       },
       onAccept: onMoveToRoot,
       builder: (context, candidates, rejected) {
+        final highlighted = candidates.isNotEmpty;
+
         return Container(
-          height: 40,
-          color: candidates.isNotEmpty ? const Color(0xff202938) : null,
-          padding: const EdgeInsets.only(left: 12, right: 4),
+          height: 38,
+          color: highlighted
+              ? _WorkspaceExplorerPalette.selected
+              : _WorkspaceExplorerPalette.section,
+          padding: const EdgeInsets.only(left: 10, right: 4),
           child: Row(
             children: [
+              const Icon(
+                Icons.folder_open_outlined,
+                size: 15,
+                color: _WorkspaceExplorerPalette.folder,
+              ),
+              const SizedBox(width: 7),
               const Expanded(
                 child: Text(
-                  'PROJECT',
+                  'PROJECT FILES',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: .8,
-                    color: Color(0xffc5ccda),
+                    letterSpacing: .7,
+                    color: _WorkspaceExplorerPalette.text,
                   ),
                 ),
               ),
               if (workspace.isDirty)
                 Tooltip(
                   message: '${workspace.changes.length} 个 Workspace 修改',
-                  child: const Icon(
-                    Icons.circle,
-                    size: 8,
-                    color: Color(0xff82aaff),
+                  child: const Padding(
+                    padding: EdgeInsets.only(right: 5),
+                    child: Icon(
+                      Icons.circle,
+                      size: 7,
+                      color: _WorkspaceExplorerPalette.accent,
+                    ),
                   ),
                 ),
-              IconButton(
+              _HeaderAction(
                 tooltip: '新建文件',
-                visualDensity: VisualDensity.compact,
+                icon: Icons.note_add_outlined,
                 onPressed: onCreateFile,
-                icon: const Icon(
-                  Icons.note_add_outlined,
-                  size: 18,
-                  color: Color(0xffaab2bf),
-                ),
               ),
-              IconButton(
+              _HeaderAction(
                 tooltip: '新建文件夹',
-                visualDensity: VisualDensity.compact,
+                icon: Icons.create_new_folder_outlined,
                 onPressed: onCreateDirectory,
-                icon: const Icon(
-                  Icons.create_new_folder_outlined,
-                  size: 18,
-                  color: Color(0xffaab2bf),
-                ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _HeaderAction extends StatelessWidget {
+  const _HeaderAction({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 29, height: 29),
+      splashRadius: 15,
+      icon: Icon(
+        icon,
+        size: 16,
+        color: _WorkspaceExplorerPalette.muted,
+      ),
     );
   }
 }
@@ -466,7 +519,7 @@ class _EntryLabel extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 12.5,
-              color: Color(0xffd6deeb),
+              color: _WorkspaceExplorerPalette.text,
             ),
           ),
         ),
@@ -476,7 +529,7 @@ class _EntryLabel extends StatelessWidget {
             child: Icon(
               Icons.circle,
               size: 7,
-              color: Color(0xff82aaff),
+              color: _WorkspaceExplorerPalette.accent,
             ),
           ),
       ],
@@ -505,7 +558,7 @@ class _EntryMenu extends StatelessWidget {
       iconSize: 17,
       icon: const Icon(
         Icons.more_vert,
-        color: Color(0xff8f98a8),
+        color: _WorkspaceExplorerPalette.muted,
       ),
       onSelected: (value) {
         switch (value) {

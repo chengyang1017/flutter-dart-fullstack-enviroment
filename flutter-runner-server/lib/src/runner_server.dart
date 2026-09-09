@@ -177,6 +177,19 @@ class RunnerServer {
               result,
             );
             return;
+          case 'command':
+            final body = await _readJsonObject(request);
+            final command = _readTerminalCommand(body['command']);
+            final exitCode = await _runTerminalCommand(session, command);
+            await _sendJson(
+              request.response,
+              HttpStatus.ok,
+              <String, Object?>{
+                'session': session.toJson(),
+                'exitCode': exitCode,
+              },
+            );
+            return;
           case 'run':
             await manager.run(session);
             await _sendAccepted(request.response, session);
@@ -216,6 +229,84 @@ class RunnerServer {
         error.toString(),
       );
     }
+  }
+
+  Future<int> _runTerminalCommand(
+    RunnerSession session,
+    String command,
+  ) async {
+    session.touch();
+
+    final Process process;
+    if (manager.executionBackend.name == 'docker') {
+      await manager.executionBackend.prepareSession(session);
+      final runtimeId = session.runtimeId;
+      if (runtimeId == null || runtimeId.isEmpty) {
+        throw StateError('Docker Runner terminal is not ready.');
+      }
+      process = await Process.start(
+        'docker',
+        <String>[
+          'exec',
+          '--interactive',
+          '--workdir',
+          '/workspace',
+          runtimeId,
+          'sh',
+          '-lc',
+          command,
+        ],
+        runInShell: false,
+      );
+    } else if (Platform.isWindows) {
+      const utf8Preamble =
+          r'[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); ';
+      process = await Process.start(
+        'powershell.exe',
+        <String>[
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          '$utf8Preamble$command',
+        ],
+        workingDirectory: session.directory.path,
+        runInShell: false,
+      );
+    } else {
+      process = await Process.start(
+        '/bin/sh',
+        <String>['-lc', command],
+        workingDirectory: session.directory.path,
+        runInShell: false,
+      );
+    }
+
+    final stdoutDone = process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .forEach(session.addLog);
+    final stderrDone = process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .forEach((line) => session.addLog('[terminal stderr] $line'));
+    final exitCode = await process.exitCode;
+    await Future.wait(<Future<void>>[stdoutDone, stderrDone]);
+    return exitCode;
+  }
+
+  String _readTerminalCommand(Object? value) {
+    if (value is! String) {
+      throw const FormatException('command must be a string.');
+    }
+    final command = value.trim();
+    if (command.isEmpty) {
+      throw const FormatException('command cannot be empty.');
+    }
+    if (command.length > 4096) {
+      throw const FormatException('command is too long.');
+    }
+    return command;
   }
 
   Future<Map<String, Object?>> _runPubGet(

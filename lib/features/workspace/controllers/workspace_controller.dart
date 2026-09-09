@@ -101,6 +101,7 @@ flutter:
   final List<String> _openFiles;
   final Set<String> _expandedDirectoryIds;
   final Map<String, WorkspaceEditorState> _editorStates;
+  final Set<String> _stagedPaths = <String>{};
 
   Timer? _contentNotificationDebounce;
   int _nextId;
@@ -131,6 +132,93 @@ flutter:
   WorkspaceEntry? entryById(String id) => _entries[id];
 
   bool get isDirty => changes.isNotEmpty;
+
+  List<WorkspaceChange> get stagedChanges => List.unmodifiable(
+        changes.where((change) => _stagedPaths.contains(change.path)),
+      );
+
+  List<WorkspaceChange> get unstagedChanges => List.unmodifiable(
+        changes.where((change) => !_stagedPaths.contains(change.path)),
+      );
+
+  bool get hasStagedChanges => stagedChanges.isNotEmpty;
+
+  bool isPathStaged(String path) =>
+      changes.any((change) => change.path == path) && _stagedPaths.contains(path);
+
+  WorkspaceChange? changeForPath(String path) {
+    for (final change in changes) {
+      if (change.path == path) return change;
+    }
+    return null;
+  }
+
+  WorkspaceEntry? baseEntryForChange(WorkspaceChange change) {
+    final sourcePath = change.previousPath ?? change.path;
+    for (final entry in _baseEntries.values) {
+      if (entry.path == sourcePath) return entry;
+    }
+    return null;
+  }
+
+  String? baseContentForChange(WorkspaceChange change) {
+    final entry = baseEntryForChange(change);
+    return entry != null && entry.isFile ? entry.content : null;
+  }
+
+  String? currentContentForChange(WorkspaceChange change) {
+    final entry = entryAt(change.path);
+    return entry != null && entry.isFile ? entry.content : null;
+  }
+
+  void stagePath(String path) {
+    if (!changes.any((change) => change.path == path)) return;
+    if (_stagedPaths.add(path)) notifyListeners();
+  }
+
+  void unstagePath(String path) {
+    if (_stagedPaths.remove(path)) notifyListeners();
+  }
+
+  void stageAll() {
+    final next = changes.map((change) => change.path).toSet();
+    if (next.difference(_stagedPaths).isEmpty &&
+        _stagedPaths.difference(next).isEmpty) {
+      return;
+    }
+    _stagedPaths
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+  }
+
+  void unstageAll() {
+    if (_stagedPaths.isEmpty) return;
+    _stagedPaths.clear();
+    notifyListeners();
+  }
+
+  bool commitStagedChanges() {
+    final staged = stagedChanges;
+    if (staged.isEmpty) return false;
+
+    for (final change in staged) {
+      if (change.type == WorkspaceChangeType.deleted) {
+        final base = baseEntryForChange(change);
+        if (base != null) _baseEntries.remove(base.id);
+        continue;
+      }
+
+      final current = entryAt(change.path);
+      if (current != null) {
+        _baseEntries[current.id] = current;
+      }
+    }
+
+    _stagedPaths.removeAll(staged.map((change) => change.path));
+    notifyListeners();
+    return true;
+  }
 
   bool isFileDirty(String path) {
     final current = entryAt(path);
@@ -250,6 +338,7 @@ flutter:
 
     _contentNotificationDebounce?.cancel();
     _contentNotificationDebounce = null;
+    _stagedPaths.clear();
 
     _entries
       ..clear()
@@ -519,8 +608,24 @@ flutter:
             .map((entry) => entry.id),
       );
     _editorStates.clear();
+    _stagedPaths.clear();
     activePath = 'lib/main.dart';
     notifyListeners();
+  }
+
+  bool commitChanges() {
+    if (!isDirty) return false;
+
+    _baseEntries
+      ..clear()
+      ..addEntries(
+        _entries.entries.map(
+          (entry) => MapEntry(entry.key, entry.value),
+        ),
+      );
+    _stagedPaths.clear();
+    notifyListeners();
+    return true;
   }
 
   bool _replaceFileContent(String path, String content) {
@@ -529,6 +634,7 @@ flutter:
       return false;
     }
 
+    _stagedPaths.remove(path);
     _entries[entry.id] = entry.copyWith(content: content);
     return true;
   }

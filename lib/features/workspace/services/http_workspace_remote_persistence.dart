@@ -6,6 +6,8 @@ import '../models/workspace_identity.dart';
 import '../models/workspace_project.dart';
 import '../models/workspace_remote_models.dart';
 import '../models/workspace_snapshot.dart';
+import '../models/workspace_snapshot_delta.dart';
+import 'workspace_delta_remote_persistence.dart';
 import 'workspace_remote_persistence.dart';
 
 class WorkspaceRemoteRequestException implements Exception {
@@ -22,7 +24,8 @@ class WorkspaceRemoteRequestException implements Exception {
       'WorkspaceRemoteRequestException(statusCode: $statusCode, message: $message)';
 }
 
-class HttpWorkspaceRemotePersistence implements WorkspaceRemotePersistence {
+class HttpWorkspaceRemotePersistence
+    implements WorkspaceRemotePersistence, WorkspaceDeltaRemotePersistence {
   HttpWorkspaceRemotePersistence({
     required this.identity,
     required this.baseUri,
@@ -95,6 +98,26 @@ class HttpWorkspaceRemotePersistence implements WorkspaceRemotePersistence {
     final body = _decodeObject(response);
     _ensureSuccess(response, body);
     return WorkspaceRemoteDocument.fromJson(body);
+  }
+
+  @override
+  Future<WorkspaceRemoteMutationResult> patchWorkspace({
+    required WorkspaceProject project,
+    required WorkspaceSnapshotDelta delta,
+    required String expectedRevision,
+  }) async {
+    final response = await _client.patch(
+      _uri(<String>['workspaces', project.id]),
+      headers: _headers(json: true),
+      body: jsonEncode(<String, dynamic>{
+        'project': project.toJson(),
+        'delta': delta.toJson(),
+        'expectedRevision': expectedRevision,
+      }),
+    );
+    final body = _decodeObject(response);
+    _ensureSuccess(response, body);
+    return WorkspaceRemoteMutationResult.fromJson(body);
   }
 
   @override

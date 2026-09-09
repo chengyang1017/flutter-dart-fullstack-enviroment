@@ -16,6 +16,11 @@ enum _BackendChoice {
   serverpod,
 }
 
+enum _TransferAction {
+  importApplyKit,
+  exportApplyKit,
+}
+
 enum _MoreAction {
   clear,
   resetExample,
@@ -28,6 +33,7 @@ class PlaygroundToolbar extends StatelessWidget {
     required this.controller,
     required this.runner,
     this.compact = false,
+    this.projectControls,
     this.onRun,
     this.onQuickPreview,
   });
@@ -35,277 +41,177 @@ class PlaygroundToolbar extends StatelessWidget {
   final PlaygroundController controller;
   final FlutterRunnerController runner;
   final bool compact;
+  final Widget? projectControls;
   final VoidCallback? onRun;
   final VoidCallback? onQuickPreview;
 
+  static const _background = Color(0xff111318);
+  static const _surface = Color(0xff15191f);
+  static const _surfaceSelected = Color(0xff22324a);
+  static const _border = Color(0xff2b333e);
+  static const _divider = Color(0xff272d36);
+  static const _text = Color(0xffd7dde8);
+  static const _muted = Color(0xff8f98a8);
+  static const _accent = Color(0xff82aaff);
+  static const _run = Color(0xff356a9c);
+  static const _menuTextStyle = TextStyle(
+    color: _text,
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+  );
+  static const _menuSubtextStyle = TextStyle(
+    color: _muted,
+    fontSize: 11.5,
+  );
+
   @override
   Widget build(BuildContext context) {
-    final density = compact
-        ? VisualDensity.compact
-        : VisualDensity.standard;
-
     final canExport =
-        controller.workspace.isDirty &&
-        supportsWorkspaceExportDownload;
+        controller.workspace.isDirty && supportsWorkspaceExportDownload;
 
-    const dartFrog =
-        DartFrogWorkspaceService();
+    const dartFrog = DartFrogWorkspaceService();
+    const serverpod = ServerpodWorkspaceService();
 
-    const serverpod =
-        ServerpodWorkspaceService();
-
-    final dartFrogEnabled =
-        dartFrog.isEnabled(
-      controller.workspace,
-    );
-
-    final serverpodEnabled =
-        serverpod.isEnabled(
-      controller.workspace,
-    );
-
-    final backendUrl =
-        runner.session?.backendUrl;
-
+    final dartFrogEnabled = dartFrog.isEnabled(controller.workspace);
+    final serverpodEnabled = serverpod.isEnabled(controller.workspace);
+    final backendUrl = runner.session?.backendUrl;
     final apiLabUrl =
-        dartFrogEnabled &&
-                runner.canHotReload
-            ? backendUrl
-            : null;
+        dartFrogEnabled && runner.canHotReload ? backendUrl : null;
 
-    return Material(
-      color: Theme.of(context)
-          .colorScheme
-          .surface,
-      child: Container(
-        height: compact ? 58 : 62,
-        padding:
-            const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 8,
+    final workbenchTheme = Theme.of(context).copyWith(
+      popupMenuTheme: PopupMenuThemeData(
+        color: _surface,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.black.withValues(alpha: .45),
+        textStyle: const TextStyle(
+          color: _text,
+          fontSize: 13,
         ),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Theme.of(context)
-                  .colorScheme
-                  .outlineVariant
-                  .withValues(
-                    alpha: 0.55,
-                  ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: _border),
+        ),
+      ),
+      listTileTheme: const ListTileThemeData(
+        textColor: _text,
+        iconColor: _muted,
+      ),
+      dividerTheme: const DividerThemeData(
+        color: _border,
+        space: 1,
+        thickness: 1,
+      ),
+    );
+
+    return Theme(
+      data: workbenchTheme,
+      child: Material(
+        color: _background,
+        child: Container(
+          height: 50,
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: _divider),
             ),
           ),
-        ),
-        child: SingleChildScrollView(
-          key: const ValueKey(
-            'playground-toolbar-scroll',
-          ),
-          scrollDirection:
-              Axis.horizontal,
+          child: SingleChildScrollView(
+          key: const ValueKey('playground-toolbar-scroll'),
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(
             children: [
-              FilledButton.icon(
-                style:
-                    FilledButton.styleFrom(
-                  visualDensity: density,
-                  minimumSize:
-                      const Size(92, 40),
-                ),
-                onPressed: runner.canRun
-                    ? (onRun ?? runner.run)
-                    : null,
-                icon: const Icon(
-                  Icons.play_arrow_rounded,
-                ),
-                label: Text(
-                  runner.isMock
-                      ? 'Run Mock'
-                      : 'Run',
-                ),
+              if (projectControls != null) ...[
+                projectControls!,
+                const SizedBox(width: 10),
+                const _TopDivider(),
+                const SizedBox(width: 10),
+              ],
+              _RunButton(
+                enabled: runner.canRun,
+                label: runner.isMock ? 'Run Mock' : 'Run',
+                onPressed: runner.canRun ? (onRun ?? runner.run) : null,
               ),
-
-              const SizedBox(width: 8),
-
+              const SizedBox(width: 6),
               _buildBackendButton(
                 context,
-                density: density,
                 dartFrog: dartFrog,
                 serverpod: serverpod,
-                dartFrogEnabled:
-                    dartFrogEnabled,
-                serverpodEnabled:
-                    serverpodEnabled,
+                dartFrogEnabled: dartFrogEnabled,
+                serverpodEnabled: serverpodEnabled,
               ),
-
               if (dartFrogEnabled) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  key: const ValueKey(
-                    'dart-frog-api-lab-button',
-                  ),
-                  style:
-                      OutlinedButton.styleFrom(
-                    visualDensity: density,
-                    minimumSize:
-                        const Size(0, 40),
-                  ),
-                  onPressed:
-                      apiLabUrl != null
-                          ? () {
-                              showDialog<void>(
-                                context:
-                                    context,
-                                builder: (_) =>
-                                    DartFrogApiLabDialog(
-                                  baseUrl:
-                                      apiLabUrl,
-                                ),
-                              );
-                            }
-                          : null,
-                  icon: const Icon(
-                    Icons.http_rounded,
-                    size: 19,
-                  ),
-                  label:
-                      const Text(
-                    'API',
-                  ),
+                const SizedBox(width: 4),
+                _ToolbarTextAction(
+                  tooltip: 'Dart Frog API Lab',
+                  icon: Icons.http_rounded,
+                  label: 'API',
+                  onPressed: apiLabUrl != null
+                      ? () {
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => DartFrogApiLabDialog(
+                              baseUrl: apiLabUrl,
+                            ),
+                          );
+                        }
+                      : null,
                 ),
               ],
-
-              const SizedBox(width: 12),
-
-              _ToolbarGroup(
-                children: [
-                  _ToolbarIconButton(
-                    tooltip: '快速预览',
-                    icon:
-                        Icons.bolt_rounded,
-                    onPressed:
-                        onQuickPreview ??
-                            controller
-                                .runCode,
-                  ),
-                  _ToolbarIconButton(
-                    tooltip: 'Hot Reload',
-                    icon:
-                        Icons.refresh_rounded,
-                    onPressed:
-                        runner.canHotReload
-                            ? runner
-                                .hotReload
-                            : null,
-                  ),
-                  _ToolbarIconButton(
-                    tooltip:
-                        'Hot Restart',
-                    icon: Icons
-                        .restart_alt_rounded,
-                    onPressed:
-                        runner.canHotRestart
-                            ? runner
-                                .hotRestart
-                            : null,
-                  ),
-                  _ToolbarIconButton(
-                    tooltip: 'Stop',
-                    icon:
-                        Icons.stop_rounded,
-                    onPressed:
-                        runner.canStop
-                            ? runner.stop
-                            : null,
-                  ),
-                ],
+              const SizedBox(width: 10),
+              const _TopDivider(),
+              const SizedBox(width: 6),
+              _ToolbarIconAction(
+                tooltip: '快速预览',
+                icon: Icons.bolt_rounded,
+                onPressed: onQuickPreview ?? controller.runCode,
               ),
-
-              const SizedBox(width: 12),
-
-              _ToolbarGroup(
-                children: [
-                  _ToolbarTextButton(
-                    icon: Icons
-                        .upload_file_outlined,
-                    label: '导入',
-                    tooltip:
-                        '导入 ApplyKit',
-                    onPressed:
-                        supportsWorkspaceImportPicker
-                            ? () =>
-                                _importWorkspace(
-                                  context,
-                                )
-                            : null,
-                  ),
-                  _ToolbarTextButton(
-                    icon: Icons
-                        .download_outlined,
-                    label: '导出',
-                    tooltip:
-                        '导出 Workspace 修改',
-                    onPressed: canExport
-                        ? () =>
-                            _exportWorkspace(
-                              context,
-                            )
-                        : null,
-                  ),
-                ],
+              _ToolbarIconAction(
+                tooltip: 'Hot Reload',
+                icon: Icons.refresh_rounded,
+                onPressed: runner.canHotReload ? runner.hotReload : null,
               ),
-
-              const SizedBox(width: 12),
-
-              _ToolbarGroup(
-                children: [
-                  _ToolbarIconButton(
-                    tooltip:
-                        controller.autoRun
-                            ? '关闭自动预览'
-                            : '开启自动预览',
-                    icon:
-                        controller.autoRun
-                            ? Icons
-                                .flash_on_rounded
-                            : Icons
-                                .flash_off_rounded,
-                    selected:
-                        controller.autoRun,
-                    onPressed:
-                        controller
-                            .toggleAutoRun,
-                  ),
-                  _ToolbarIconButton(
-                    tooltip:
-                        controller
-                                .darkPreview
-                            ? '切换浅色预览'
-                            : '切换深色预览',
-                    icon: controller
-                            .darkPreview
-                        ? Icons
-                            .dark_mode_rounded
-                        : Icons
-                            .light_mode_rounded,
-                    selected:
-                        controller
-                            .darkPreview,
-                    onPressed:
-                        controller
-                            .togglePreviewTheme,
-                  ),
-                  _buildDeviceButton(
-                    context,
-                  ),
-                ],
+              _ToolbarIconAction(
+                tooltip: 'Hot Restart',
+                icon: Icons.restart_alt_rounded,
+                onPressed: runner.canHotRestart ? runner.hotRestart : null,
               ),
-
-              const SizedBox(width: 8),
-
-              _buildMoreButton(
+              _ToolbarIconAction(
+                tooltip: 'Stop',
+                icon: Icons.stop_rounded,
+                onPressed: runner.canStop ? runner.stop : null,
+              ),
+              const SizedBox(width: 6),
+              const _TopDivider(),
+              const SizedBox(width: 6),
+              _buildTransferButton(
                 context,
+                canExport: canExport,
               ),
+              const SizedBox(width: 6),
+              const _TopDivider(),
+              const SizedBox(width: 6),
+              _ToolbarIconAction(
+                tooltip: controller.autoRun ? '关闭自动预览' : '开启自动预览',
+                icon: controller.autoRun
+                    ? Icons.flash_on_rounded
+                    : Icons.flash_off_rounded,
+                selected: controller.autoRun,
+                onPressed: controller.toggleAutoRun,
+              ),
+              _ToolbarIconAction(
+                tooltip:
+                    controller.darkPreview ? '切换浅色预览' : '切换深色预览',
+                icon: controller.darkPreview
+                    ? Icons.dark_mode_rounded
+                    : Icons.light_mode_rounded,
+                selected: controller.darkPreview,
+                onPressed: controller.togglePreviewTheme,
+              ),
+              _buildDeviceButton(context),
+              const SizedBox(width: 2),
+              _buildMoreButton(context),
             ],
+            ),
           ),
         ),
       ),
@@ -314,11 +220,8 @@ class PlaygroundToolbar extends StatelessWidget {
 
   Widget _buildBackendButton(
     BuildContext context, {
-    required VisualDensity density,
-    required DartFrogWorkspaceService
-        dartFrog,
-    required ServerpodWorkspaceService
-        serverpod,
+    required DartFrogWorkspaceService dartFrog,
+    required ServerpodWorkspaceService serverpod,
     required bool dartFrogEnabled,
     required bool serverpodEnabled,
   }) {
@@ -333,15 +236,11 @@ class PlaygroundToolbar extends StatelessWidget {
       icon = Icons.hub_outlined;
     } else {
       label = '后端';
-      icon = Icons
-          .account_tree_outlined;
+      icon = Icons.account_tree_outlined;
     }
 
-    return PopupMenuButton<
-        _BackendChoice>(
-      key: const ValueKey(
-        'backend-workspace-menu',
-      ),
+    return PopupMenuButton<_BackendChoice>(
+      key: const ValueKey('backend-workspace-menu'),
       enabled: runner.canRun,
       tooltip: '选择后端环境',
       onSelected: (choice) {
@@ -350,48 +249,39 @@ class PlaygroundToolbar extends StatelessWidget {
             _enableDartFrog(
               context,
               dartFrog,
-              serverpodEnabled:
-                  serverpodEnabled,
+              serverpodEnabled: serverpodEnabled,
             );
             break;
-
           case _BackendChoice.serverpod:
             _enableServerpod(
               context,
               serverpod,
-              dartFrogEnabled:
-                  dartFrogEnabled,
+              dartFrogEnabled: dartFrogEnabled,
             );
             break;
         }
       },
       itemBuilder: (context) => [
         PopupMenuItem(
-          value:
-              _BackendChoice.dartFrog,
+          value: _BackendChoice.dartFrog,
           child: _BackendMenuItem(
             icon: Icons.api_rounded,
             title: 'Dart Frog',
-            subtitle:
-                '轻量 Dart API 后端',
-            selected:
-                dartFrogEnabled,
+            subtitle: '轻量 Dart API 后端',
+            selected: dartFrogEnabled,
           ),
         ),
         PopupMenuItem(
-          value:
-              _BackendChoice.serverpod,
+          value: _BackendChoice.serverpod,
           child: _BackendMenuItem(
             icon: Icons.hub_outlined,
             title: 'Serverpod',
-            subtitle:
-                'Flutter 全栈后端',
-            selected:
-                serverpodEnabled,
+            subtitle: 'Flutter 全栈后端',
+            selected: serverpodEnabled,
           ),
         ),
       ],
-      child: _PopupButtonSurface(
+      child: _ToolbarPopupSurface(
         enabled: runner.canRun,
         icon: icon,
         label: label,
@@ -399,16 +289,65 @@ class PlaygroundToolbar extends StatelessWidget {
     );
   }
 
-  Widget _buildDeviceButton(
-    BuildContext context,
-  ) {
-    return PopupMenuButton<
-        PreviewDevice>(
+  Widget _buildTransferButton(
+    BuildContext context, {
+    required bool canExport,
+  }) {
+    final canImport = supportsWorkspaceImportPicker;
+    return PopupMenuButton<_TransferAction>(
+      tooltip: 'ApplyKit 导入 / 导出',
+      enabled: canImport || canExport,
+      onSelected: (action) {
+        switch (action) {
+          case _TransferAction.importApplyKit:
+            _importWorkspace(context);
+            break;
+          case _TransferAction.exportApplyKit:
+            _exportWorkspace(context);
+            break;
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: _TransferAction.importApplyKit,
+          enabled: canImport,
+          child: const ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            iconColor: _muted,
+            textColor: _text,
+            leading: Icon(Icons.upload_file_outlined),
+            title: Text('导入 ApplyKit', style: _menuTextStyle),
+            subtitle: Text('应用一组 Workspace 修改', style: _menuSubtextStyle),
+          ),
+        ),
+        PopupMenuItem(
+          value: _TransferAction.exportApplyKit,
+          enabled: canExport,
+          child: const ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            iconColor: _muted,
+            textColor: _text,
+            leading: Icon(Icons.download_outlined),
+            title: Text('导出 ApplyKit', style: _menuTextStyle),
+            subtitle: Text('导出当前 Workspace 修改', style: _menuSubtextStyle),
+          ),
+        ),
+      ],
+      child: _ToolbarPopupSurface(
+        enabled: canImport || canExport,
+        icon: Icons.sync_alt_rounded,
+        label: 'ApplyKit',
+      ),
+    );
+  }
+
+  Widget _buildDeviceButton(BuildContext context) {
+    return PopupMenuButton<PreviewDevice>(
       tooltip: '预览设备',
-      initialValue:
-          controller.device,
-      onSelected:
-          controller.changeDevice,
+      initialValue: controller.device,
+      onSelected: controller.changeDevice,
       itemBuilder: (context) => [
         _deviceItem(
           PreviewDevice.androidPhone,
@@ -431,25 +370,19 @@ class PlaygroundToolbar extends StatelessWidget {
           'Responsive',
         ),
       ],
-      child:
-          _ToolbarIconSurface(
-        icon:
-            _deviceIcon(
-          controller.device,
-        ),
+      child: _ToolbarIconSurface(
+        icon: _deviceIcon(controller.device),
         tooltip: '设备',
       ),
     );
   }
 
-  PopupMenuItem<PreviewDevice>
-      _deviceItem(
+  PopupMenuItem<PreviewDevice> _deviceItem(
     PreviewDevice value,
     IconData icon,
     String label,
   ) {
-    final selected =
-        controller.device == value;
+    final selected = controller.device == value;
 
     return PopupMenuItem(
       value: value,
@@ -458,24 +391,27 @@ class PlaygroundToolbar extends StatelessWidget {
           Icon(
             icon,
             size: 19,
+            color: selected ? _accent : _muted,
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(label),
+            child: Text(
+              label,
+              style: _menuTextStyle,
+            ),
           ),
           if (selected)
             const Icon(
               Icons.check_rounded,
               size: 18,
+              color: _accent,
             ),
         ],
       ),
     );
   }
 
-  IconData _deviceIcon(
-    PreviewDevice value,
-  ) {
+  IconData _deviceIcon(PreviewDevice value) {
     switch (value) {
       case PreviewDevice.androidPhone:
         return Icons.phone_android;
@@ -488,9 +424,7 @@ class PlaygroundToolbar extends StatelessWidget {
     }
   }
 
-  Widget _buildMoreButton(
-    BuildContext context,
-  ) {
+  Widget _buildMoreButton(BuildContext context) {
     return PopupMenuButton<_MoreAction>(
       tooltip: '更多操作',
       onSelected: (action) {
@@ -498,65 +432,58 @@ class PlaygroundToolbar extends StatelessWidget {
           case _MoreAction.clear:
             controller.clearCode();
             break;
-
           case _MoreAction.resetExample:
             controller.resetExample();
             break;
-
           case _MoreAction.supportedWidgets:
             showDialog<void>(
               context: context,
-              builder: (_) =>
-                  const SupportedWidgetsDialog(),
+              builder: (_) => const SupportedWidgetsDialog(),
             );
             break;
         }
       },
-      itemBuilder: (context) =>
-          const [
+      itemBuilder: (context) => const [
         PopupMenuItem(
           value: _MoreAction.clear,
           child: ListTile(
             dense: true,
-            contentPadding:
-                EdgeInsets.zero,
-            leading:
-                Icon(Icons.clear),
-            title: Text('清空代码'),
+            contentPadding: EdgeInsets.zero,
+            iconColor: _muted,
+            textColor: _text,
+            leading: Icon(Icons.clear),
+            title: Text('清空代码', style: _menuTextStyle),
           ),
         ),
         PopupMenuItem(
-          value:
-              _MoreAction.resetExample,
+          value: _MoreAction.resetExample,
           child: ListTile(
             dense: true,
-            contentPadding:
-                EdgeInsets.zero,
-            leading:
-                Icon(Icons.restore),
-            title: Text('恢复示例'),
+            contentPadding: EdgeInsets.zero,
+            iconColor: _muted,
+            textColor: _text,
+            leading: Icon(Icons.restore),
+            title: Text('恢复示例', style: _menuTextStyle),
           ),
         ),
         PopupMenuDivider(),
         PopupMenuItem(
-          value: _MoreAction
-              .supportedWidgets,
+          value: _MoreAction.supportedWidgets,
           child: ListTile(
             dense: true,
-            contentPadding:
-                EdgeInsets.zero,
-            leading: Icon(
-              Icons.help_outline,
-            ),
+            contentPadding: EdgeInsets.zero,
+            iconColor: _muted,
+            textColor: _text,
+            leading: Icon(Icons.help_outline),
             title: Text(
               'Quick Preview 支持组件',
+              style: _menuTextStyle,
             ),
           ),
         ),
       ],
       child: const _ToolbarIconSurface(
-        icon:
-            Icons.more_horiz_rounded,
+        icon: Icons.more_horiz_rounded,
         tooltip: '更多',
       ),
     );
@@ -577,19 +504,10 @@ class PlaygroundToolbar extends StatelessWidget {
     }
 
     try {
-      service.ensureEnabled(
-        controller.workspace,
-      );
-
-      controller.selectWorkspaceFile(
-        DartFrogWorkspaceService
-            .backendRoutePath,
-      );
+      service.ensureEnabled(controller.workspace);
+      controller.selectWorkspaceFile(DartFrogWorkspaceService.backendRoutePath);
     } catch (error) {
-      _showFrameworkError(
-        context,
-        error,
-      );
+      _showFrameworkError(context, error);
     }
   }
 
@@ -608,19 +526,10 @@ class PlaygroundToolbar extends StatelessWidget {
     }
 
     try {
-      service.ensureEnabled(
-        controller.workspace,
-      );
-
-      controller.selectWorkspaceFile(
-        ServerpodWorkspaceService
-            .greetingEndpointPath,
-      );
+      service.ensureEnabled(controller.workspace);
+      controller.selectWorkspaceFile(ServerpodWorkspaceService.greetingEndpointPath);
     } catch (error) {
-      _showFrameworkError(
-        context,
-        error,
-      );
+      _showFrameworkError(context, error);
     }
   }
 
@@ -629,8 +538,7 @@ class PlaygroundToolbar extends StatelessWidget {
     required String current,
     required String requested,
   }) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           '当前 Workspace 已启用 $current。'
@@ -640,79 +548,47 @@ class PlaygroundToolbar extends StatelessWidget {
     );
   }
 
-  void _showFrameworkError(
-    BuildContext context,
-    Object error,
-  ) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
-      SnackBar(
-        content: Text(
-          '全栈环境创建失败：$error',
-        ),
-      ),
+  void _showFrameworkError(BuildContext context, Object error) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('全栈环境创建失败：$error')),
     );
   }
 
-  Future<void> _importWorkspace(
-    BuildContext context,
-  ) async {
+  Future<void> _importWorkspace(BuildContext context) async {
     if (controller.workspace.isDirty) {
-      final confirmed =
-          await showDialog<bool>(
+      final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) =>
-            AlertDialog(
-          title:
-              const Text(
-            '导入新的 ApplyKit？',
-          ),
-          content:
-              const Text(
+        builder: (context) => AlertDialog(
+          title: const Text('导入新的 ApplyKit？'),
+          content: const Text(
             '当前 Workspace 有未导出的修改。'
             '导入会恢复基线后应用 ApplyKit 中的修改。',
           ),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-                false,
-              ),
-              child:
-                  const Text('取消'),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-                true,
-              ),
-              child:
-                  const Text('继续导入'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('继续导入'),
             ),
           ],
         ),
       );
 
-      if (confirmed != true ||
-          !context.mounted) {
+      if (confirmed != true || !context.mounted) {
         return;
       }
     }
 
     try {
-      final bytes =
-          await pickWorkspaceImport();
-
-      if (bytes == null ||
-          !context.mounted) {
+      final bytes = await pickWorkspaceImport();
+      if (bytes == null || !context.mounted) {
         return;
       }
 
-      final manifest =
-          const WorkspaceImportService()
-              .apply(
+      final manifest = const WorkspaceImportService().apply(
         bytes,
         controller.workspace,
       );
@@ -723,8 +599,7 @@ class PlaygroundToolbar extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             '已导入 ${manifest.changes.length} 个 Workspace 修改。',
@@ -736,25 +611,15 @@ class PlaygroundToolbar extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        SnackBar(
-          content:
-              Text('导入失败：$error'),
-        ),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导入失败：$error')),
       );
     }
   }
 
-  Future<void> _exportWorkspace(
-    BuildContext context,
-  ) async {
+  Future<void> _exportWorkspace(BuildContext context) async {
     try {
-      final bundle =
-          const WorkspaceExportService()
-              .build(
-        controller.workspace,
-      );
+      final bundle = const WorkspaceExportService().build(controller.workspace);
 
       await downloadWorkspaceExport(
         bundle.bytes,
@@ -765,8 +630,7 @@ class PlaygroundToolbar extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             '已导出 ${bundle.manifest.changes.length} 个修改：'
@@ -779,60 +643,53 @@ class PlaygroundToolbar extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        SnackBar(
-          content:
-              Text('导出失败：$error'),
-        ),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出失败：$error')),
       );
     }
   }
 }
 
-class _ToolbarGroup
-    extends StatelessWidget {
-  const _ToolbarGroup({
-    required this.children,
+class _RunButton extends StatelessWidget {
+  const _RunButton({
+    required this.enabled,
+    required this.label,
+    required this.onPressed,
   });
 
-  final List<Widget> children;
+  final bool enabled;
+  final String label;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 40,
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 3,
-      ),
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerLow,
-        borderRadius:
-            BorderRadius.circular(10),
-        border: Border.all(
-          color: Theme.of(context)
-              .colorScheme
-              .outlineVariant
-              .withValues(
-                alpha: 0.55,
-              ),
+    return SizedBox(
+      height: 36,
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: PlaygroundToolbar._run,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: PlaygroundToolbar._surface,
+          disabledForegroundColor:
+              PlaygroundToolbar._muted.withValues(alpha: .42),
+          padding: const EdgeInsets.symmetric(horizontal: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(7),
+          ),
         ),
-      ),
-      child: Row(
-        mainAxisSize:
-            MainAxisSize.min,
-        children: children,
+        onPressed: enabled ? onPressed : null,
+        icon: const Icon(Icons.play_arrow_rounded, size: 18),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
       ),
     );
   }
 }
 
-class _ToolbarIconButton
-    extends StatelessWidget {
-  const _ToolbarIconButton({
+class _ToolbarIconAction extends StatelessWidget {
+  const _ToolbarIconAction({
     required this.tooltip,
     required this.icon,
     required this.onPressed,
@@ -846,73 +703,127 @@ class _ToolbarIconButton
 
   @override
   Widget build(BuildContext context) {
-    if (selected &&
-        onPressed != null) {
-      return IconButton.filledTonal(
-        tooltip: tooltip,
-        visualDensity:
-            VisualDensity.compact,
-        onPressed: onPressed,
-        icon: Icon(
-          icon,
-          size: 20,
+    final enabled = onPressed != null;
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        visualDensity: VisualDensity.compact,
+        style: IconButton.styleFrom(
+          minimumSize: const Size(34, 34),
+          maximumSize: const Size(34, 34),
+          padding: EdgeInsets.zero,
+          backgroundColor:
+              selected && enabled ? PlaygroundToolbar._surfaceSelected : null,
+          foregroundColor: selected && enabled
+              ? PlaygroundToolbar._accent
+              : enabled
+                  ? PlaygroundToolbar._muted
+                  : PlaygroundToolbar._muted.withValues(alpha: .32),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+          ),
         ),
-      );
-    }
-
-    return IconButton(
-      tooltip: tooltip,
-      visualDensity:
-          VisualDensity.compact,
-      onPressed: onPressed,
-      icon: Icon(
-        icon,
-        size: 20,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
       ),
     );
   }
 }
 
-class _ToolbarTextButton
-    extends StatelessWidget {
-  const _ToolbarTextButton({
+class _ToolbarTextAction extends StatelessWidget {
+  const _ToolbarTextAction({
+    required this.tooltip,
     required this.icon,
     required this.label,
-    required this.tooltip,
     required this.onPressed,
   });
 
+  final String tooltip;
   final IconData icon;
   final String label;
-  final String tooltip;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: TextButton.icon(
-        style: TextButton.styleFrom(
-          visualDensity:
-              VisualDensity.compact,
-          padding:
-              const EdgeInsets.symmetric(
-            horizontal: 10,
+      child: SizedBox(
+        height: 36,
+        child: TextButton.icon(
+          style: TextButton.styleFrom(
+            foregroundColor: onPressed == null
+                ? PlaygroundToolbar._muted.withValues(alpha: .32)
+                : PlaygroundToolbar._text,
+            backgroundColor: PlaygroundToolbar._surface,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(7),
+              side: const BorderSide(color: PlaygroundToolbar._border),
+            ),
+          ),
+          onPressed: onPressed,
+          icon: Icon(icon, size: 16),
+          label: Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ),
-        onPressed: onPressed,
-        icon: Icon(
-          icon,
-          size: 19,
-        ),
-        label: Text(label),
       ),
     );
   }
 }
 
-class _ToolbarIconSurface
-    extends StatelessWidget {
+class _ToolbarPopupSurface extends StatelessWidget {
+  const _ToolbarPopupSurface({
+    required this.enabled,
+    required this.icon,
+    required this.label,
+  });
+
+  final bool enabled;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = enabled
+        ? PlaygroundToolbar._text
+        : PlaygroundToolbar._muted.withValues(alpha: .34);
+
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: PlaygroundToolbar._surface,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: PlaygroundToolbar._border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: foreground),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 16,
+            color: foreground,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolbarIconSurface extends StatelessWidget {
   const _ToolbarIconSurface({
     required this.icon,
     required this.tooltip,
@@ -926,12 +837,13 @@ class _ToolbarIconSurface
     return Tooltip(
       message: tooltip,
       child: SizedBox(
-        width: 38,
-        height: 36,
+        width: 34,
+        height: 34,
         child: Center(
           child: Icon(
             icon,
-            size: 20,
+            size: 18,
+            color: PlaygroundToolbar._muted,
           ),
         ),
       ),
@@ -939,78 +851,23 @@ class _ToolbarIconSurface
   }
 }
 
-class _PopupButtonSurface
-    extends StatelessWidget {
-  const _PopupButtonSurface({
-    required this.enabled,
-    required this.icon,
-    required this.label,
-  });
-
-  final bool enabled;
-  final IconData icon;
-  final String label;
+class _TopDivider extends StatelessWidget {
+  const _TopDivider();
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme.of(context)
-            .colorScheme;
-
-    final foreground = enabled
-        ? colorScheme.onSurface
-        : colorScheme.onSurface
-            .withValues(
-              alpha: 0.38,
-            );
-
-    return Container(
-      height: 40,
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 12,
-      ),
-      decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(20),
-        border: Border.all(
-          color: enabled
-              ? colorScheme.outline
-              : colorScheme
-                  .outlineVariant,
-        ),
-      ),
-      child: Row(
-        mainAxisSize:
-            MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 19,
-            color: foreground,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(
-              color: foreground,
-            ),
-          ),
-          const SizedBox(width: 5),
-          Icon(
-            Icons
-                .keyboard_arrow_down_rounded,
-            size: 18,
-            color: foreground,
-          ),
-        ],
+    return const SizedBox(
+      height: 24,
+      child: VerticalDivider(
+        width: 1,
+        thickness: 1,
+        color: PlaygroundToolbar._divider,
       ),
     );
   }
 }
 
-class _BackendMenuItem
-    extends StatelessWidget {
+class _BackendMenuItem extends StatelessWidget {
   const _BackendMenuItem({
     required this.icon,
     required this.title,
@@ -1026,48 +883,37 @@ class _BackendMenuItem
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 250,
+      width: 240,
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest,
-              borderRadius:
-                  BorderRadius.circular(
-                10,
-              ),
-            ),
-            child: Icon(
-              icon,
-              size: 20,
-            ),
+          Icon(
+            icon,
+            size: 19,
+            color: selected
+                ? PlaygroundToolbar._accent
+                : PlaygroundToolbar._muted,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              mainAxisSize:
-                  MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   title,
-                  style:
-                      const TextStyle(
-                    fontWeight:
-                        FontWeight.w600,
+                  style: const TextStyle(
+                    color: PlaygroundToolbar._text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall,
+                  style: const TextStyle(
+                    color: PlaygroundToolbar._muted,
+                    fontSize: 11.5,
+                  ),
                 ),
               ],
             ),
@@ -1075,7 +921,8 @@ class _BackendMenuItem
           if (selected)
             const Icon(
               Icons.check_rounded,
-              size: 19,
+              size: 18,
+              color: PlaygroundToolbar._accent,
             ),
         ],
       ),

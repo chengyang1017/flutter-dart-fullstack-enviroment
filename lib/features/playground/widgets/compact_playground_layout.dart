@@ -4,11 +4,12 @@ import '../../runner/controllers/flutter_runner_controller.dart';
 import '../../runner/widgets/runner_console_panel.dart';
 import '../../runner/widgets/runner_preview_panel.dart';
 import '../../workspace/widgets/workspace_editor_tabs.dart';
-import '../../workspace/widgets/workspace_file_explorer.dart';
 import '../controllers/playground_controller.dart';
-import 'code_editor_panel.dart';
+import '../models/workspace_view_mode.dart';
+import 'monaco_code_editor_panel.dart';
 import 'code_flow_panel.dart';
 import 'error_panel.dart';
+import 'unified_workspace_explorer.dart';
 
 class CompactPlaygroundLayout extends StatelessWidget {
   const CompactPlaygroundLayout({
@@ -16,11 +17,15 @@ class CompactPlaygroundLayout extends StatelessWidget {
     required this.controller,
     required this.runner,
     required this.toolbar,
+    required this.viewMode,
+    required this.onViewModeChanged,
   });
 
   final PlaygroundController controller;
   final FlutterRunnerController runner;
   final Widget toolbar;
+  final WorkspaceViewMode viewMode;
+  final ValueChanged<WorkspaceViewMode> onViewModeChanged;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -39,12 +44,20 @@ class CompactPlaygroundLayout extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: [
-                _EditorWithErrors(controller: controller),
+                _EditorWithErrors(
+                  controller: controller,
+                  viewMode: viewMode,
+                ),
                 RunnerPreviewPanel(
                   playground: controller,
                   runner: runner,
                 ),
-                _FilesAndWireMode(controller: controller),
+                _FilesAndWireMode(
+                  controller: controller,
+                  runner: runner,
+                  viewMode: viewMode,
+                  onViewModeChanged: onViewModeChanged,
+                ),
                 RunnerConsolePanel(runner: runner),
               ],
             ),
@@ -54,8 +67,13 @@ class CompactPlaygroundLayout extends StatelessWidget {
 }
 
 class _EditorWithErrors extends StatelessWidget {
-  const _EditorWithErrors({required this.controller});
+  const _EditorWithErrors({
+    required this.controller,
+    required this.viewMode,
+  });
+
   final PlaygroundController controller;
+  final WorkspaceViewMode viewMode;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -65,8 +83,11 @@ class _EditorWithErrors extends StatelessWidget {
               workspace: controller.workspace,
               onSelect: controller.selectWorkspaceFile,
               onClose: controller.closeWorkspaceFile,
+              pathFilter: viewMode.isConcept
+                  ? (path) => viewMode.allowsPath(path)
+                  : null,
             ),
-            Expanded(child: CodeEditorPanel(controller: controller)),
+            Expanded(child: MonacoCodeEditorPanel(controller: controller)),
             ErrorPanel(
               controller: controller,
               maxHeight: constraints.maxHeight * .3,
@@ -77,9 +98,17 @@ class _EditorWithErrors extends StatelessWidget {
 }
 
 class _FilesAndWireMode extends StatelessWidget {
-  const _FilesAndWireMode({required this.controller});
+  const _FilesAndWireMode({
+    required this.controller,
+    required this.runner,
+    required this.viewMode,
+    required this.onViewModeChanged,
+  });
 
   final PlaygroundController controller;
+  final FlutterRunnerController runner;
+  final WorkspaceViewMode viewMode;
+  final ValueChanged<WorkspaceViewMode> onViewModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -98,9 +127,11 @@ class _FilesAndWireMode extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: [
-                WorkspaceFileExplorer(
-                  workspace: controller.workspace,
-                  onOpenFile: controller.selectWorkspaceFile,
+                UnifiedWorkspaceExplorer(
+                  controller: controller,
+                  runner: runner,
+                  viewMode: viewMode,
+                  onViewModeChanged: onViewModeChanged,
                 ),
                 CodeFlowPanel(
                   controller: controller,

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import '../../workspace/controllers/workspace_controller.dart';
 import '../models/run_session.dart';
@@ -9,6 +11,7 @@ import '../models/runner_preview_target.dart';
 import '../models/runner_pub_get_result.dart';
 import '../models/workspace_runner_source.dart';
 import '../services/flutter_runner_client.dart';
+import '../services/http_flutter_runner_client.dart';
 import '../services/workspace_runner_source_provider.dart';
 
 class FlutterRunnerController extends ChangeNotifier {
@@ -68,6 +71,8 @@ class FlutterRunnerController extends ChangeNotifier {
       session != null &&
       status != RunnerStatus.idle &&
       status != RunnerStatus.stopped;
+  bool get canRunTerminalCommand =>
+      client is HttpFlutterRunnerClient && !isBusy;
 
   bool get isPubGetVerifiedForCurrentPubspec {
     final current = _currentPubspecContent();
@@ -190,6 +195,66 @@ class FlutterRunnerController extends ChangeNotifier {
     if (logs.isEmpty) return;
     logs.clear();
     notifyListeners();
+  }
+
+  Future<void> runTerminalCommand(String command) async {
+    final normalized = command.trim();
+    if (normalized.isEmpty) return;
+
+    final terminalClient = client;
+    if (terminalClient is! HttpFlutterRunnerClient) {
+      throw StateError('当前 Runner 不支持终端命令。');
+    }
+
+    _appendLog('> $normalized');
+
+    try {
+      var currentSession = session;
+      if (currentSession == null) {
+        final source = await sourceProvider.prepare();
+        currentSession = await _ensureSession(source);
+        await _syncSource(currentSession.id, source);
+      } else if (status != RunnerStatus.running) {
+        final source = await sourceProvider.prepare();
+        await _syncSource(currentSession.id, source);
+      }
+
+      final response = await http.post(
+        Uri.parse(
+          '${terminalClient.baseUrl}/sessions/${currentSession.id}/command',
+        ),
+        headers: <String, String>{
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          if (terminalClient.accessToken.trim().isNotEmpty)
+            'authorization': 'Bearer ${terminalClient.accessToken.trim()}',
+        },
+        body: jsonEncode(<String, Object?>{'command': normalized}),
+      );
+
+      if (response.statusCode != 200) {
+        var detail = response.body;
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map && decoded['error'] is String) {
+            detail = decoded['error'] as String;
+          }
+        } catch (_) {}
+        throw StateError('Terminal command failed: $detail');
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map || decoded['exitCode'] is! num) {
+        throw const FormatException(
+          'Runner terminal response is missing exitCode.',
+        );
+      }
+      final exitCode = (decoded['exitCode'] as num).toInt();
+      _appendLog('[terminal] exited with code $exitCode');
+    } catch (error) {
+      _appendLog('[terminal] command failed: $error');
+      rethrow;
+    }
   }
 
   Future<RunSession> _ensureSession(WorkspaceRunnerSource source) async {

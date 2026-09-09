@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
+
+import '../services/concept_label_cloud_service.dart';
 
 enum ConceptLabelScope {
   language,
@@ -71,18 +75,42 @@ class ConceptLabelRule {
 }
 
 class ConceptLabelController extends ChangeNotifier {
+  ConceptLabelController({
+    ConceptLabelCloudService? cloudService,
+  })  : _cloudService = cloudService ?? ConceptLabelCloudService(),
+        _ownsCloudService = cloudService == null;
+
   static const boxName = 'concept_label_rules';
 
   final List<ConceptLabelRule> _rules = <ConceptLabelRule>[];
+  final ConceptLabelCloudService _cloudService;
+  final bool _ownsCloudService;
+
   Box<dynamic>? _box;
   bool _loaded = false;
+  bool _cloudSynced = false;
+  String? _cloudSyncError;
 
   bool get loaded => _loaded;
+  bool get cloudAvailable => _cloudService.available;
+  bool get cloudSynced => _cloudSynced;
+  String? get cloudSyncError => _cloudSyncError;
   List<ConceptLabelRule> get rules => List.unmodifiable(_rules);
 
   Future<void> load() async {
     if (_loaded) return;
 
+    await _loadLocal();
+    _loaded = true;
+    notifyListeners();
+
+    if (_cloudService.available) {
+      await _loadCloud();
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadLocal() async {
     try {
       _box = Hive.isBoxOpen(boxName)
           ? Hive.box<dynamic>(boxName)
@@ -100,16 +128,40 @@ class ConceptLabelController extends ChangeNotifier {
       // initializing Hive. In that case labels still work in memory.
       _box = null;
     }
+  }
 
-    _loaded = true;
-    notifyListeners();
+  Future<void> _loadCloud() async {
+    try {
+      final payload = await _cloudService.loadPayload();
+
+      if (payload == null) {
+        // First cloud run: migrate whatever the user already had in Hive,
+        // including an empty list, so cloud becomes authoritative afterwards.
+        await _cloudService.savePayload(_encodeRules());
+      } else {
+        final cloudRules = _decodeRules(payload);
+        _rules
+          ..clear()
+          ..addAll(cloudRules);
+        await _replaceLocalCache();
+      }
+
+      _cloudSynced = true;
+      _cloudSyncError = null;
+    } catch (error) {
+      // Keep the offline cache usable. A later add/remove operation will retry
+      // a full cloud snapshot save automatically.
+      _cloudSynced = false;
+      _cloudSyncError = error.toString();
+    }
   }
 
   List<ConceptLabelRule> reusableRulesForPath(String path) {
     final language = languageForPath(path);
     return _rules
         .where(
-          (rule) => rule.scope == ConceptLabelScope.language &&
+          (rule) =>
+              rule.scope == ConceptLabelScope.language &&
               rule.language == language,
         )
         .toList(growable: false);
@@ -142,7 +194,8 @@ class ConceptLabelController extends ChangeNotifier {
 
     final language = languageForPath(path);
     final existingIndex = _rules.indexWhere(
-      (rule) => rule.scope == ConceptLabelScope.language &&
+      (rule) =>
+          rule.scope == ConceptLabelScope.language &&
           rule.language == language &&
           rule.source == normalizedSource,
     );
@@ -163,7 +216,10 @@ class ConceptLabelController extends ChangeNotifier {
       _rules.add(rule);
     }
 
-    await _persist(rule);
+    await _persistLocal(rule);
+    notifyListeners();
+
+    await _syncCloud();
     notifyListeners();
   }
 
@@ -178,7 +234,8 @@ class ConceptLabelController extends ChangeNotifier {
 
     final language = languageForPath(path);
     final existingIndex = _rules.indexWhere(
-      (rule) => rule.scope == ConceptLabelScope.line &&
+      (rule) =>
+          rule.scope == ConceptLabelScope.line &&
           rule.filePath == path &&
           rule.lineNumber == lineNumber,
     );
@@ -201,22 +258,81 @@ class ConceptLabelController extends ChangeNotifier {
       _rules.add(rule);
     }
 
-    await _persist(rule);
+    await _persistLocal(rule);
+    notifyListeners();
+
+    await _syncCloud();
     notifyListeners();
   }
 
   Future<void> removeRule(String id) async {
     _rules.removeWhere((rule) => rule.id == id);
-    await _box?.delete(id);
+
+    try {
+      await _box?.delete(id);
+    } catch (_) {
+      // The in-memory state is still authoritative for this session.
+    }
+
+    notifyListeners();
+
+    await _syncCloud();
     notifyListeners();
   }
 
-  Future<void> _persist(ConceptLabelRule rule) async {
+  Future<void> _persistLocal(ConceptLabelRule rule) async {
     try {
       await _box?.put(rule.id, rule.toJson());
     } catch (_) {
       // Keep the current session usable even if local persistence is unavailable.
     }
+  }
+
+  Future<void> _replaceLocalCache() async {
+    final box = _box;
+    if (box == null) return;
+
+    try {
+      await box.clear();
+      for (final rule in _rules) {
+        await box.put(rule.id, rule.toJson());
+      }
+    } catch (_) {
+      // Cloud remains authoritative; local cache failure should not drop labels.
+    }
+  }
+
+  Future<void> _syncCloud() async {
+    if (!_cloudService.available) {
+      _cloudSynced = false;
+      _cloudSyncError = null;
+      return;
+    }
+
+    try {
+      await _cloudService.savePayload(_encodeRules());
+      _cloudSynced = true;
+      _cloudSyncError = null;
+    } catch (error) {
+      _cloudSynced = false;
+      _cloudSyncError = error.toString();
+    }
+  }
+
+  String _encodeRules() => jsonEncode(
+        _rules.map((rule) => rule.toJson()).toList(growable: false),
+      );
+
+  List<ConceptLabelRule> _decodeRules(String source) {
+    final decoded = jsonDecode(source);
+    if (decoded is! Iterable) {
+      throw const FormatException('Cloud concept labels must be a JSON array.');
+    }
+
+    return decoded
+        .map(ConceptLabelRule.fromJson)
+        .whereType<ConceptLabelRule>()
+        .toList(growable: false);
   }
 
   static String languageForPath(String path) {
@@ -226,6 +342,14 @@ class ConceptLabelController extends ChangeNotifier {
     if (lower.endsWith('.java')) return 'java';
     if (lower.endsWith('.py')) return 'python';
     return 'plain';
+  }
+
+  @override
+  void dispose() {
+    if (_ownsCloudService) {
+      _cloudService.dispose();
+    }
+    super.dispose();
   }
 }
 

@@ -19,7 +19,7 @@ $RunnerApiToken = if ($env:RUNNER_API_TOKEN) {
 $WorkspaceStorageApiUrl = if ($env:WORKSPACE_STORAGE_API_URL) {
     $env:WORKSPACE_STORAGE_API_URL
 } else {
-    ''
+    'https://workspace-storage-production.up.railway.app'
 }
 
 # Optional development auto-login token. Leave empty to use the real

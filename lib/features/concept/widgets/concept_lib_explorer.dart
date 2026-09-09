@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../workspace/controllers/workspace_controller.dart';
 import '../../workspace/models/workspace_entry.dart';
+import '../../workspace/widgets/workspace_file_visuals.dart';
 
 class ConceptLibExplorer extends StatelessWidget {
   const ConceptLibExplorer({
@@ -15,9 +16,9 @@ class ConceptLibExplorer extends StatelessWidget {
   final WorkspaceController workspace;
   final ValueChanged<String> onOpenFile;
 
-  static const _background = Color(0xff15171b);
-  static const _textColor = Color(0xffd6deeb);
-  static const _mutedColor = Color(0xff9da5b4);
+  static const _background = _ConceptExplorerPalette.background;
+  static const _textColor = _ConceptExplorerPalette.text;
+  static const _mutedColor = _ConceptExplorerPalette.muted;
 
   @override
   Widget build(BuildContext context) {
@@ -40,10 +41,14 @@ class ConceptLibExplorer extends StatelessWidget {
               type: WorkspaceEntryType.directory,
             ),
           ),
-          const Divider(height: 1, color: Color(0xff2c313c)),
+          const Divider(
+            height: 1,
+            thickness: 1,
+            color: _ConceptExplorerPalette.border,
+          ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 2),
               children: workspace
                   .childrenOf(rootPath)
                   .map((entry) => _buildEntry(context, entry, 0))
@@ -89,7 +94,7 @@ class ConceptLibExplorer extends StatelessWidget {
         leading: const Icon(
           Icons.folder_outlined,
           size: 18,
-          color: Color(0xffdcb67a),
+          color: _ConceptExplorerPalette.folder,
         ),
         title: _EntryLabel(
           name: entry.name,
@@ -125,13 +130,18 @@ class ConceptLibExplorer extends StatelessWidget {
         right: 2,
       ),
       selected: !entry.isBinary && workspace.activePath == entry.path,
-      selectedTileColor: const Color(0xff242832),
+      selectedTileColor: _ConceptExplorerPalette.selected,
+      hoverColor: _ConceptExplorerPalette.hover,
       textColor: _textColor,
       selectedColor: _textColor,
-      leading: Icon(
-        entry.isBinary ? Icons.image_outlined : Icons.code,
-        size: 17,
-        color: _mutedColor,
+      leading: Builder(
+        builder: (context) {
+          final visual = WorkspaceFileVisual.forName(
+            entry.name,
+            binary: entry.isBinary,
+          );
+          return Icon(visual.icon, size: 17, color: visual.color);
+        },
       ),
       title: _EntryLabel(
         name: entry.name,
@@ -288,60 +298,77 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 12, right: 4),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.folder_special_outlined,
-              size: 17,
-              color: Color(0xffdcb67a),
-            ),
-            const SizedBox(width: 7),
-            const Expanded(
-              child: Text(
-                'LIB',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .8,
-                  color: Color(0xffc5ccda),
-                ),
+    return Container(
+      height: 38,
+      color: _ConceptExplorerPalette.section,
+      padding: const EdgeInsets.only(left: 10, right: 4),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.folder_special_outlined,
+            size: 15,
+            color: _ConceptExplorerPalette.folder,
+          ),
+          const SizedBox(width: 7),
+          const Expanded(
+            child: Text(
+              'LIB FILES',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: .7,
+                color: _ConceptExplorerPalette.text,
               ),
             ),
-            if (dirty)
-              const Padding(
-                padding: EdgeInsets.only(right: 5),
-                child: Icon(
-                  Icons.circle,
-                  size: 8,
-                  color: Color(0xff82aaff),
-                ),
-              ),
-            IconButton(
-              tooltip: '在 lib/ 新建文件',
-              visualDensity: VisualDensity.compact,
-              onPressed: onCreateFile,
-              icon: const Icon(
-                Icons.note_add_outlined,
-                size: 18,
-                color: Color(0xffaab2bf),
+          ),
+          if (dirty)
+            const Padding(
+              padding: EdgeInsets.only(right: 5),
+              child: Icon(
+                Icons.circle,
+                size: 7,
+                color: _ConceptExplorerPalette.accent,
               ),
             ),
-            IconButton(
-              tooltip: '在 lib/ 新建文件夹',
-              visualDensity: VisualDensity.compact,
-              onPressed: onCreateDirectory,
-              icon: const Icon(
-                Icons.create_new_folder_outlined,
-                size: 18,
-                color: Color(0xffaab2bf),
-              ),
-            ),
-          ],
-        ),
+          _HeaderAction(
+            tooltip: '在 lib/ 新建文件',
+            icon: Icons.note_add_outlined,
+            onPressed: onCreateFile,
+          ),
+          _HeaderAction(
+            tooltip: '在 lib/ 新建文件夹',
+            icon: Icons.create_new_folder_outlined,
+            onPressed: onCreateDirectory,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderAction extends StatelessWidget {
+  const _HeaderAction({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 29, height: 29),
+      splashRadius: 15,
+      icon: Icon(
+        icon,
+        size: 16,
+        color: _ConceptExplorerPalette.muted,
       ),
     );
   }
@@ -377,7 +404,7 @@ class _EntryLabel extends StatelessWidget {
             child: Icon(
               Icons.circle,
               size: 7,
-              color: Color(0xff82aaff),
+              color: _ConceptExplorerPalette.accent,
             ),
           ),
       ],
@@ -404,7 +431,10 @@ class _EntryMenu extends StatelessWidget {
       tooltip: '更多',
       padding: EdgeInsets.zero,
       iconSize: 17,
-      icon: const Icon(Icons.more_vert, color: Color(0xff8f98a8)),
+      icon: const Icon(
+        Icons.more_vert,
+        color: _ConceptExplorerPalette.muted,
+      ),
       onSelected: (value) {
         switch (value) {
           case 'file':
@@ -434,5 +464,13 @@ class _EntryMenu extends StatelessWidget {
 }
 
 abstract final class _ConceptExplorerPalette {
-  static const text = Color(0xffd6deeb);
+  static const background = Color(0xff111318);
+  static const section = Color(0xff15191f);
+  static const border = Color(0xff272d36);
+  static const text = Color(0xffd7dce5);
+  static const muted = Color(0xff8b93a1);
+  static const accent = Color(0xff82aaff);
+  static const selected = Color(0xff202733);
+  static const hover = Color(0xff191e26);
+  static const folder = Color(0xffd7aa5c);
 }

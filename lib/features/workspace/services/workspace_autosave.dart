@@ -33,7 +33,7 @@ class WorkspaceAutosave {
   }
 
   void requestSave({
-    Duration delay = const Duration(milliseconds: 250),
+    Duration delay = const Duration(milliseconds: 1200),
   }) {
     if (_disposed) return;
     _saveRequested = true;

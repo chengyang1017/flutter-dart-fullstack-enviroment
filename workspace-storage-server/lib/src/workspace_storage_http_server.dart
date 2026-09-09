@@ -8,6 +8,70 @@ import 'workspace_git_remote_checker.dart';
 import 'workspace_secret_store.dart';
 import 'workspace_store.dart';
 
+
+Future<Map<String, Object?>> _readStorageStatus(Directory root) async {
+  await root.create(recursive: true);
+
+  if (Platform.isWindows) {
+    return <String, Object?>{
+      'available': false,
+      'rootPath': root.path,
+      'reason': 'filesystem_capacity_not_supported_on_windows',
+    };
+  }
+
+  try {
+    final result = await Process.run('df', <String>['-Pk', root.path]);
+    if (result.exitCode != 0) {
+      return <String, Object?>{
+        'available': false,
+        'rootPath': root.path,
+        'reason': 'df_failed',
+      };
+    }
+
+    final lines = result.stdout
+        .toString()
+        .trim()
+        .split(RegExp(r'\r?\n'))
+        .where((line) => line.trim().isNotEmpty)
+        .toList(growable: false);
+    if (lines.length < 2) {
+      throw const FormatException('Unexpected df output.');
+    }
+
+    final columns = lines.last.trim().split(RegExp(r'\s+'));
+    if (columns.length < 6) {
+      throw const FormatException('Unexpected df columns.');
+    }
+
+    int kibibytesToBytes(String value) {
+      final kib = int.parse(value);
+      return kib * 1024;
+    }
+
+    final totalBytes = kibibytesToBytes(columns[1]);
+    final usedBytes = kibibytesToBytes(columns[2]);
+    final availableBytes = kibibytesToBytes(columns[3]);
+
+    return <String, Object?>{
+      'available': true,
+      'rootPath': root.path,
+      'mountPath': columns.sublist(5).join(' '),
+      'totalBytes': totalBytes,
+      'usedBytes': usedBytes,
+      'availableBytes': availableBytes,
+      'usagePercent': totalBytes == 0 ? 0 : usedBytes * 100 / totalBytes,
+    };
+  } catch (error) {
+    return <String, Object?>{
+      'available': false,
+      'rootPath': root.path,
+      'reason': error.toString(),
+    };
+  }
+}
+
 class WorkspaceStorageHttpServer {
   WorkspaceStorageHttpServer({
     required FileWorkspaceStore store,
@@ -86,6 +150,25 @@ class WorkspaceStorageHttpServer {
             'username': principal.username,
           },
         );
+        return;
+      }
+
+
+      if (request.method == 'GET' &&
+          segments.length == 2 &&
+          segments[0] == 'storage' &&
+          segments[1] == 'status') {
+        final userId = await authenticator.authenticate(request);
+        if (userId == null) {
+          await _sendError(
+            request.response,
+            HttpStatus.unauthorized,
+            'Authentication required.',
+          );
+          return;
+        }
+        final status = await _readStorageStatus(store.root);
+        await _sendJson(request.response, HttpStatus.ok, status);
         return;
       }
 
@@ -293,6 +376,19 @@ class WorkspaceStorageHttpServer {
         return;
       }
 
+      if (request.method == 'PATCH') {
+        final body = await _readJsonObject(request);
+        final result = await store.patchWorkspace(
+          userId: userId,
+          workspaceId: workspaceId,
+          project: _readObject(body, 'project'),
+          delta: _readObject(body, 'delta'),
+          expectedRevision: _readRevision(body),
+        );
+        await _sendJson(request.response, HttpStatus.ok, result);
+        return;
+      }
+
       if (request.method == 'DELETE') {
         final body = await _readJsonObject(request);
         final catalog = await store.deleteWorkspace(
@@ -491,7 +587,7 @@ class WorkspaceStorageHttpServer {
     response.headers.set('access-control-allow-origin', allowedOrigin);
     response.headers.set(
       'access-control-allow-methods',
-      'GET, POST, PUT, DELETE, OPTIONS',
+      'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     );
     response.headers.set(
       'access-control-allow-headers',

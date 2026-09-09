@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../concept/screens/concept_mode_screen.dart';
 import '../../lessons/screens/lesson_list_screen.dart';
 import '../../project_mode/screens/project_mode_screen.dart';
 
@@ -78,30 +77,16 @@ class HomeScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            '用项目模式处理完整 Flutter 工程，用概念模式专注理解 lib/ 中的代码结构。',
+                            '打开一个真实 Flutter 项目，然后在项目视角和概念视角之间自由切换。',
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 40),
                           _EntryCard(
-                            key: const ValueKey('home-concept-mode-entry'),
-                            icon: Icons.hub_outlined,
-                            title: '概念模式',
+                            key: const ValueKey('home-start-project-entry'),
+                            icon: Icons.rocket_launch_outlined,
+                            title: '开始项目',
                             description:
-                                '只直接操作 lib/。依赖、调用关系和状态流通过可视化工具管理。',
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute<void>(
-                                builder: (_) => const ConceptModeScreen(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _EntryCard(
-                            key: const ValueKey('home-project-mode-entry'),
-                            icon: Icons.code,
-                            title: '项目模式',
-                            description:
-                                '先选择、创建或导入项目，再进入完整 Flutter Workspace。',
+                                '创建、打开或导入 Flutter 项目。进入 Workspace 后再切换项目视角或概念视角。',
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute<void>(

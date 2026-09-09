@@ -207,7 +207,7 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
     return Scaffold(
       key: const ValueKey('project-mode-screen'),
       appBar: AppBar(
-        title: const Text('项目模式'),
+        title: const Text('开始项目'),
       ),
       body: SafeArea(
         child: Center(
@@ -315,14 +315,14 @@ class _ProjectModeHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '选择一个项目开始开发',
+                '选择一个项目开始',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
               ),
               const SizedBox(height: 6),
               const Text(
-                '像普通 IDE 一样打开本地 Flutter 根目录；打开后会建立 Workspace，并在云端连接可用时自动同步。',
+                '创建、打开或导入 Flutter 项目。进入 Workspace 后可随时在项目视角和概念视角之间切换。',
               ),
               if (accountUsername != null) ...[
                 const SizedBox(height: 10),

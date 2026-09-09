@@ -4,6 +4,8 @@ import 'dart:convert';
 import '../models/workspace_project.dart';
 import '../models/workspace_remote_models.dart';
 import '../models/workspace_snapshot.dart';
+import '../models/workspace_snapshot_delta.dart';
+import 'workspace_delta_remote_persistence.dart';
 import 'workspace_persistence.dart';
 import 'workspace_project_catalog_store.dart';
 import 'workspace_remote_persistence.dart';
@@ -30,6 +32,8 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
   final WorkspacePersistence _cache;
   final WorkspaceRemotePersistence _remote;
   final Map<String, String> _revisions = <String, String>{};
+  final Map<String, WorkspaceSnapshot> _syncedSnapshots =
+      <String, WorkspaceSnapshot>{};
   Future<void> _remoteTail = Future<void>.value();
 
   @override
@@ -38,8 +42,9 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
   @override
   late final WorkspaceSnapshotStore snapshotStore;
 
-  /// Replaces the browser cache with the current remote catalog and snapshots.
-  /// This makes the cloud copy the source of truth on every app start.
+  /// Hydrates remote projects while preserving projects that only exist in the
+  /// browser cache. A project created while cloud was disabled must not be
+  /// deleted just because it is absent from the remote catalog.
   Future<void> hydrateFromRemote() async {
     final cachedProjects = _cache.catalogStore.loadProjects();
     final preferredActive = _cache.catalogStore.loadActiveProjectId();
@@ -48,6 +53,7 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
     final hydratedProjects = <WorkspaceProject>[];
     final remoteIds = <String>{};
     _revisions.clear();
+    _syncedSnapshots.clear();
 
     for (final catalogProject in catalog.projects) {
       if (_isLocalOnlyProject(catalogProject)) continue;
@@ -69,6 +75,7 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
       hydratedProjects.add(document.project);
       remoteIds.add(document.project.id);
       _revisions[document.project.id] = document.revision;
+      _syncedSnapshots[document.project.id] = document.snapshot;
       await _cache.snapshotStore.save(
         document.project.storageKey,
         document.snapshot,
@@ -79,7 +86,15 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
       if (_isLocalOnlyProject(cached) || remoteIds.contains(cached.id)) {
         continue;
       }
-      await _cache.snapshotStore.delete(cached.storageKey);
+
+      // Keep local-only projects visible. The first later cloud save will use
+      // _saveRemoteProject(), which creates the remote document when no remote
+      // revision exists yet. This avoids destructive startup hydration and also
+      // avoids forcing a potentially huge upload during login.
+      final snapshot = _cache.snapshotStore.load(cached.storageKey);
+      if (snapshot != null) {
+        hydratedProjects.add(cached);
+      }
     }
 
     await _cache.catalogStore.saveProjects(hydratedProjects);
@@ -116,32 +131,75 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
     if (_isLocalOnlyProject(project)) return Future<void>.value();
 
     return _serializeRemote(() async {
-      WorkspaceRemoteDocument document;
-      final knownRevision = _revisions[project.id];
+      var knownRevision = _revisions[project.id];
+      var syncedSnapshot = _syncedSnapshots[project.id];
 
       if (knownRevision == null) {
         final existing = await _remote.loadWorkspace(project.id);
         if (existing == null) {
-          document = await _remote.createWorkspace(
+          final created = await _remote.createWorkspace(
             project: project,
             snapshot: snapshot,
           );
-        } else {
-          document = await _saveWithConflictRefresh(
-            project: project,
-            snapshot: snapshot,
-            expectedRevision: existing.revision,
-          );
+          _revisions[project.id] = created.revision;
+          _syncedSnapshots[project.id] = snapshot;
+          return;
         }
-      } else {
-        document = await _saveWithConflictRefresh(
+
+        knownRevision = existing.revision;
+        syncedSnapshot = existing.snapshot;
+        _revisions[project.id] = knownRevision;
+        _syncedSnapshots[project.id] = syncedSnapshot;
+      }
+
+      final deltaRemote = _remote;
+      if (syncedSnapshot == null ||
+          deltaRemote is! WorkspaceDeltaRemotePersistence) {
+        final saved = await _saveWithConflictRefresh(
           project: project,
           snapshot: snapshot,
           expectedRevision: knownRevision,
         );
+        _revisions[project.id] = saved.revision;
+        _syncedSnapshots[project.id] = snapshot;
+        return;
       }
 
-      _revisions[project.id] = document.revision;
+      final deltaPersistence =
+          deltaRemote as WorkspaceDeltaRemotePersistence;
+      final delta = WorkspaceSnapshotDelta.between(syncedSnapshot, snapshot);
+      try {
+        final result = await deltaPersistence.patchWorkspace(
+          project: project,
+          delta: delta,
+          expectedRevision: knownRevision,
+        );
+        _revisions[project.id] = result.revision;
+        _syncedSnapshots[project.id] = snapshot;
+      } on WorkspaceRevisionConflict {
+        final latest = await _remote.loadWorkspace(project.id);
+        if (latest == null) {
+          final created = await _remote.createWorkspace(
+            project: project,
+            snapshot: snapshot,
+          );
+          _revisions[project.id] = created.revision;
+          _syncedSnapshots[project.id] = snapshot;
+          return;
+        }
+
+        final retryDelta = WorkspaceSnapshotDelta.between(
+          latest.snapshot,
+          snapshot,
+        );
+        final result = await deltaPersistence.patchWorkspace(
+          project: project,
+          delta: retryDelta,
+          expectedRevision: latest.revision,
+        );
+        _revisions[project.id] = result.revision;
+        _syncedSnapshots[project.id] = snapshot;
+      }
     });
   }
 
@@ -201,6 +259,7 @@ class CloudBackedWorkspacePersistence implements WorkspacePersistence {
         }
       }
       _revisions.remove(project.id);
+      _syncedSnapshots.remove(project.id);
     });
   }
 

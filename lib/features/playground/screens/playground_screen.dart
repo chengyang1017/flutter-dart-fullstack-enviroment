@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../export/services/workspace_import_picker.dart';
 import '../../project_creation/services/flutter_project_scaffold_service.dart';
 import '../../project_creation/widgets/create_flutter_project_dialog.dart';
+import '../../project_import/services/flutter_project_directory_import_service.dart';
 import '../../project_import/services/flutter_project_zip_import_service.dart';
 import '../../runner/controllers/flutter_runner_controller.dart';
 import '../../runner/models/run_session.dart';
@@ -20,6 +21,7 @@ import '../../workspace/services/workspace_project_library.dart';
 import '../../workspace/services/workspace_snapshot_store.dart';
 import '../../workspace/widgets/workspace_project_bar.dart';
 import '../controllers/playground_controller.dart';
+import '../models/workspace_view_mode.dart';
 import '../widgets/compact_playground_layout.dart';
 import '../widgets/playground_toolbar.dart';
 import '../widgets/wide_playground_layout.dart';
@@ -43,6 +45,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   WorkspaceProjectLibrary? _projectLibrary;
   KeyedWorkspaceSnapshotStore? _activeProjectStore;
   RunnerPreviewTabHandle? _pendingWebPreviewTab;
+  WorkspaceViewMode _viewMode = WorkspaceViewMode.project;
 
   @override
   void initState() {
@@ -94,6 +97,10 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
               baseUrl: _runnerApiUrl,
             ),
     )..addListener(_refresh);
+
+    if (_viewMode.isConcept) {
+      _ensureConceptActiveFile();
+    }
   }
 
   void _disposeControllers() {
@@ -142,6 +149,42 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   void _closePendingWebPreviewTab() {
     _pendingWebPreviewTab?.close();
     _pendingWebPreviewTab = null;
+  }
+
+  void _changeViewMode(WorkspaceViewMode mode) {
+    if (_viewMode == mode) return;
+
+    _viewMode = mode;
+
+    if (mode.isConcept) {
+      _ensureConceptActiveFile();
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _ensureConceptActiveFile() {
+    final activePath = controller.activeFilePath;
+
+    if (WorkspaceViewMode.concept.allowsPath(activePath)) {
+      return;
+    }
+
+    final mainFile = controller.workspace.entryAt('lib/main.dart');
+    if (mainFile != null && mainFile.isFile) {
+      controller.selectWorkspaceFile('lib/main.dart');
+      return;
+    }
+
+    for (final entry in controller.workspace.entries) {
+      if (!entry.isFile) continue;
+      if (!WorkspaceViewMode.concept.allowsPath(entry.path)) continue;
+
+      controller.selectWorkspaceFile(entry.path);
+      return;
+    }
   }
 
   void _showRunTargetDialog(
@@ -346,6 +389,68 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       );
     } finally {
       scaffoldService.close();
+    }
+  }
+
+  Future<void> _openLocalFlutterProjectFolder() async {
+    final library = _projectLibrary;
+
+    if (library == null || !supportsWorkspaceDirectoryPicker) {
+      return;
+    }
+
+    try {
+      final files = await pickWorkspaceDirectory();
+
+      if (files == null || files.isEmpty || !mounted) {
+        return;
+      }
+
+      final bundle = const FlutterProjectDirectoryImportService().parse(files);
+
+      await controller.flushWorkspacePersistence();
+
+      await library.touchProject(
+        library.activeProjectId,
+      );
+
+      await library.createImportedFlutter(
+        name: bundle.projectName,
+        snapshot: bundle.snapshot,
+      );
+
+      _disposeControllers();
+      _createControllers();
+
+      if (!mounted) return;
+
+      setState(() {});
+
+      final ignored = bundle.ignoredFileCount == 0
+          ? ''
+          : '，忽略 ${bundle.ignoredFileCount} 个生成/缓存文件';
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已打开 ${bundle.projectName}：${bundle.importedFileCount} 个文件$ignored。',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            '打开 Flutter 项目文件夹失败：$error',
+          ),
+        ),
+      );
     }
   }
 
@@ -569,6 +674,262 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     }
   }
 
+  Future<void> _commitWorkspace() async {
+    final staged = controller.workspace.stagedChanges;
+    if (staged.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('先在 Git 视角 Stage 至少一个修改。'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final message = await _askCommitMessage();
+    if (message == null || !mounted) return;
+
+    final beforeCommit = controller.workspace.createSnapshot();
+    final stagedPaths = staged
+        .map((change) => change.path)
+        .toSet()
+        .toList(growable: false);
+    final committed = controller.workspace.commitStagedChanges();
+    if (!committed) return;
+
+    try {
+      await controller.flushWorkspacePersistence();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已 Commit ${stagedPaths.length} 个文件 · $message'),
+        ),
+      );
+    } catch (error) {
+      controller.workspace.restoreSnapshot(beforeCommit);
+      for (final path in stagedPaths) {
+        controller.workspace.stagePath(path);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Commit 失败：$error'),
+        ),
+      );
+    }
+  }
+
+  Future<String?> _askCommitMessage() async {
+    final changes = controller.workspace.stagedChanges;
+    if (changes.isEmpty) return null;
+
+    final messageController = TextEditingController();
+    var canCommit = false;
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xff15191f),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: Color(0xff2b333e)),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.commit_rounded,
+                            size: 19,
+                            color: Color(0xff82aaff),
+                          ),
+                          SizedBox(width: 9),
+                          Text(
+                            'Commit Workspace',
+                            style: TextStyle(
+                              color: Color(0xffd7dde8),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        '${changes.length} 个已 Stage 修改将写入云端 Workspace 版本基线。不会执行 Push。',
+                        style: const TextStyle(
+                          color: Color(0xff8f98a8),
+                          fontSize: 12,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 13),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 126),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xff111318),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                            color: const Color(0xff272d36),
+                          ),
+                        ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final change in changes.take(8))
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Text(
+                                    '• ${change.path}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xffb8c0cc),
+                                      fontSize: 11.5,
+                                    ),
+                                  ),
+                                ),
+                              if (changes.length > 8)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 3),
+                                  child: Text(
+                                    '还有 ${changes.length - 8} 个修改…',
+                                    style: const TextStyle(
+                                      color: Color(0xff707988),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 13),
+                      TextField(
+                        controller: messageController,
+                        autofocus: true,
+                        minLines: 1,
+                        maxLines: 3,
+                        maxLength: 240,
+                        style: const TextStyle(
+                          color: Color(0xffd7dde8),
+                          fontSize: 13,
+                        ),
+                        cursorColor: const Color(0xff82aaff),
+                        decoration: InputDecoration(
+                          labelText: 'Commit message',
+                          hintText: '例如：完成商城结账流程',
+                          labelStyle: const TextStyle(
+                            color: Color(0xff9da5b4),
+                          ),
+                          hintStyle: const TextStyle(
+                            color: Color(0xff66707f),
+                          ),
+                          counterStyle: const TextStyle(
+                            color: Color(0xff66707f),
+                            fontSize: 10.5,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xff111318),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(7),
+                            borderSide: const BorderSide(
+                              color: Color(0xff2b333e),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(7),
+                            borderSide: const BorderSide(
+                              color: Color(0xff2b333e),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(7),
+                            borderSide: const BorderSide(
+                              color: Color(0xff82aaff),
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          final next = value.trim().isNotEmpty;
+                          if (next == canCommit) return;
+                          setDialogState(() => canCommit = next);
+                        },
+                        onSubmitted: (_) {
+                          if (!canCommit) return;
+                          Navigator.pop(
+                            dialogContext,
+                            messageController.text.trim(),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xffaab2bf),
+                            ),
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('取消'),
+                          ),
+                          const SizedBox(width: 7),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xff3f74a6),
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: const Color(0xff25303b),
+                              disabledForegroundColor: const Color(0xff66707f),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                            ),
+                            onPressed: canCommit
+                                ? () => Navigator.pop(
+                                      dialogContext,
+                                      messageController.text.trim(),
+                                    )
+                                : null,
+                            icon: const Icon(Icons.commit_rounded, size: 17),
+                            label: const Text('Commit'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    messageController.dispose();
+    if (result == null || result.trim().isEmpty) return null;
+    return result.trim();
+  }
+
   Future<String?> _askProjectName({
     required String title,
     required String initialValue,
@@ -627,49 +988,52 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     VoidCallback? onRun,
     VoidCallback? onQuickPreview,
   }) {
-    final toolbar = PlaygroundToolbar(
+    final library = _projectLibrary;
+
+    final projectControls = library == null
+        ? null
+        : WorkspaceProjectBar(
+            projects: library.projects,
+            activeProject: library.activeProject,
+            onSelect: (id) => unawaited(
+              _switchProject(id),
+            ),
+            onCreate: () => unawaited(
+              _createProject(),
+            ),
+            onOpenFolder: supportsWorkspaceDirectoryPicker
+                ? () => unawaited(
+                      _openLocalFlutterProjectFolder(),
+                    )
+                : null,
+            onImportZip: supportsWorkspaceImportPicker
+                ? () => unawaited(
+                      _importExistingFlutterProject(),
+                    )
+                : null,
+            onCommit: controller.workspace.hasStagedChanges
+                ? () => unawaited(
+                      _commitWorkspace(),
+                    )
+                : null,
+            onKeep: () => unawaited(
+              _keepProject(),
+            ),
+            onRename: () => unawaited(
+              _renameProject(),
+            ),
+            onDelete: () => unawaited(
+              _deleteProject(),
+            ),
+          );
+
+    return PlaygroundToolbar(
       controller: controller,
       runner: runner,
       compact: compact,
+      projectControls: projectControls,
       onRun: onRun,
       onQuickPreview: onQuickPreview,
-    );
-
-    final library = _projectLibrary;
-
-    if (library == null) {
-      return toolbar;
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        WorkspaceProjectBar(
-          projects: library.projects,
-          activeProject: library.activeProject,
-          onSelect: (id) => unawaited(
-            _switchProject(id),
-          ),
-          onCreate: () => unawaited(
-            _createProject(),
-          ),
-          onImport: supportsWorkspaceImportPicker
-              ? () => unawaited(
-                    _importExistingFlutterProject(),
-                  )
-              : null,
-          onKeep: () => unawaited(
-            _keepProject(),
-          ),
-          onRename: () => unawaited(
-            _renameProject(),
-          ),
-          onDelete: () => unawaited(
-            _deleteProject(),
-          ),
-        ),
-        toolbar,
-      ],
     );
   }
 
@@ -696,6 +1060,8 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                       return CompactPlaygroundLayout(
                         controller: controller,
                         runner: runner,
+                        viewMode: _viewMode,
+                        onViewModeChanged: _changeViewMode,
                         toolbar: _buildToolbar(
                           compact: true,
                           onRun: () => _showRunTargetDialog(
@@ -719,6 +1085,8 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
               return WidePlaygroundLayout(
                 controller: controller,
                 runner: runner,
+                viewMode: _viewMode,
+                onViewModeChanged: _changeViewMode,
                 toolbar: _buildToolbar(
                   compact: false,
                   onRun: () => _showRunTargetDialog(
