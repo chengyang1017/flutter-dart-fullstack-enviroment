@@ -6,12 +6,8 @@ import '../runner_session.dart';
 import 'execution_backend.dart';
 import 'fly_machine_exec_execution_backend.dart';
 
-/// Fly backend with a real Flutter Web preview tunnel.
-///
-/// The Flutter process runs inside the session Machine on port 8080. A local
-/// `fly proxy` process opens a WireGuard tunnel to that exact Machine using its
-/// machine-scoped `.internal` hostname. The existing Runner HTTP gateway can
-/// then continue proxying to a loopback port exactly as it does for Docker.
+/// Fly backend with a Flutter Web process inside the session Machine and a
+/// machine-specific WireGuard tunnel exposed only on Runner loopback.
 class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
   FlyPreviewExecutionBackend({
     required super.appName,
@@ -34,7 +30,6 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
 
   final int remotePreviewPort;
   final Duration previewStartupTimeout;
-
   final Map<String, Process> _previewProxyProcesses = <String, Process>{};
 
   @override
@@ -43,7 +38,6 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
     Map<String, String> dartDefines = const <String, String>{},
   }) async {
     final machineId = _requireMachineId(session);
-
     await _stopTrackedProxy(session.id);
     await _stopRemoteFlutter(session, ignoreFailure: true);
 
@@ -86,7 +80,6 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
 
     final localPort = await _reserveLoopbackPort();
     final remoteHost = '$machineId.vm.$appName.internal';
-
     final proxy = await Process.start(
       flyctlExecutable,
       <String>[
@@ -118,26 +111,15 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
       final remoteLog = await _readRemotePreviewLog(session);
       await _stopTrackedProxy(session.id);
       await _stopRemoteFlutter(session, ignoreFailure: true);
-      if (remoteLog.isNotEmpty) {
-        for (final line in const LineSplitter().convert(remoteLog)) {
-          session.addLog('[flutter remote] $line');
-        }
-      }
+      _appendRemoteLog(session, remoteLog);
       throw StateError('Fly Flutter preview failed to become ready: $error');
     }
 
-    final remoteLog = await _readRemotePreviewLog(session);
-    if (remoteLog.isNotEmpty) {
-      for (final line in const LineSplitter().convert(remoteLog)) {
-        session.addLog('[flutter remote] $line');
-      }
-    }
-
+    _appendRemoteLog(session, await _readRemotePreviewLog(session));
     session.addLog(
       '[runner] Fly preview tunnel ready: '
       '127.0.0.1:$localPort -> $remoteHost:$remotePreviewPort.',
     );
-
     session.setStatus('running');
 
     return RunnerProcessLaunch(
@@ -152,16 +134,8 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
   @override
   Future<void> forceStop(RunnerSession session, Process process) async {
     await _stopRemoteFlutter(session, ignoreFailure: true);
-
     final tracked = _previewProxyProcesses.remove(session.id);
-    final proxy = tracked ?? process;
-    if (proxy.kill(ProcessSignal.sigterm)) {
-      try {
-        await proxy.exitCode.timeout(const Duration(seconds: 2));
-      } on TimeoutException {
-        proxy.kill(ProcessSignal.sigkill);
-      }
-    }
+    await _terminateLocalProcess(tracked ?? process);
   }
 
   @override
@@ -173,8 +147,10 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
 
   Future<void> _stopTrackedProxy(String sessionId) async {
     final process = _previewProxyProcesses.remove(sessionId);
-    if (process == null) return;
+    if (process != null) await _terminateLocalProcess(process);
+  }
 
+  Future<void> _terminateLocalProcess(Process process) async {
     process.kill(ProcessSignal.sigterm);
     try {
       await process.exitCode.timeout(const Duration(seconds: 2));
@@ -189,19 +165,14 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
   }) async {
     if (session.runtimeId == null || session.runtimeId!.isEmpty) return;
 
-    final command = <String>[
-      'if [ -f /tmp/flutter-preview.pid ]; then',
-      r'pid="$(cat /tmp/flutter-preview.pid 2>/dev/null || true)"',
-      r'if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi',
-      'fi',
-      'rm -f /tmp/flutter-preview.pid',
-    ].join(' ')
-      ..replaceAll(r'\"', '"');
-
     try {
       final result = await _machineExec(
         session,
-        '/bin/sh -lc ${_shellQuote(command)}',
+        _asSandboxShell(
+          "pkill -f '/opt/flutter/bin/flutter run -d web-server' "
+          '>/dev/null 2>&1 || true; '
+          'rm -f /tmp/flutter-preview.pid',
+        ),
       );
       if (!ignoreFailure && result.exitCode != 0) {
         throw StateError(
@@ -210,6 +181,13 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
       }
     } catch (_) {
       if (!ignoreFailure) rethrow;
+    }
+  }
+
+  void _appendRemoteLog(RunnerSession session, String remoteLog) {
+    if (remoteLog.isEmpty) return;
+    for (final line in const LineSplitter().convert(remoteLog)) {
+      session.addLog('[flutter remote] $line');
     }
   }
 
@@ -258,18 +236,13 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
 
     final raw = '${processResult.stdout}'.trim();
     if (raw.isEmpty) {
-      return const _MachineExecResult(
-        exitCode: 0,
-        stdout: '',
-        stderr: '',
-      );
+      return const _MachineExecResult(exitCode: 0, stdout: '', stderr: '');
     }
 
     final decoded = jsonDecode(raw);
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('fly machine exec returned non-object JSON.');
     }
-
     final rawExitCode = decoded['exit_code'];
     final remoteExitCode = switch (rawExitCode) {
       int value => value,
@@ -278,7 +251,6 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
       null => 0,
       _ => 1,
     };
-
     return _MachineExecResult(
       exitCode: remoteExitCode,
       stdout: decoded['stdout']?.toString() ?? '',
@@ -286,12 +258,10 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
     );
   }
 
-  Map<String, String> _flyEnvironment() {
-    return <String, String>{
-      'FLY_API_TOKEN': apiToken,
-      'FLY_APP': appName,
-    };
-  }
+  Map<String, String> _flyEnvironment() => <String, String>{
+        'FLY_API_TOKEN': apiToken,
+        'FLY_APP': appName,
+      };
 
   String _asSandboxShell(String command) {
     final quoted = _shellQuote(command);
@@ -327,22 +297,18 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
   }) async {
     final deadline = DateTime.now().add(timeout);
     Object? lastError;
-
     while (DateTime.now().isBefore(deadline)) {
       final proxyCode = proxyExitCode();
       if (proxyCode != null) {
         throw StateError('fly proxy exited early with code $proxyCode');
       }
-
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 2);
       try {
         final request = await client.getUrl(
           Uri.parse('http://127.0.0.1:$localPort/'),
         );
-        final response = await request.close().timeout(
-              const Duration(seconds: 5),
-            );
+        final response = await request.close().timeout(const Duration(seconds: 5));
         await response.drain<void>();
         if (response.statusCode == HttpStatus.ok) return;
         lastError = 'HTTP ${response.statusCode}';
@@ -351,10 +317,8 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
       } finally {
         client.close(force: true);
       }
-
       await Future<void>.delayed(const Duration(seconds: 1));
     }
-
     throw TimeoutException(
       'Flutter preview did not become reachable. Last error: $lastError',
       timeout,
