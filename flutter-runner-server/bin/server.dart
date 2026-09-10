@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_practice_runner_server/src/execution/docker_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/execution/execution_backend.dart';
+import 'package:flutter_practice_runner_server/src/execution/fly_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/execution/local_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/runner_authenticator.dart';
 import 'package:flutter_practice_runner_server/src/runner_server.dart';
@@ -141,10 +142,11 @@ Future<void> main() async {
 
   if (publicWorkspaceRunner &&
       executionBackend.name != 'docker' &&
+      executionBackend.name != 'fly' &&
       !allowLocalPublicExecution) {
     stderr.writeln(
       'Refusing public Workspace Runner startup with '
-      '${executionBackend.name} execution. Set RUNNER_EXECUTION_MODE=docker. '
+      '${executionBackend.name} execution. Set RUNNER_EXECUTION_MODE=docker or fly. '
       'RUNNER_ALLOW_LOCAL_PUBLIC_EXECUTION=true is an explicit unsafe override.',
     );
     exitCode = 64;
@@ -278,11 +280,25 @@ RunnerExecutionBackend _createExecutionBackend(
         runnerOwnership:
             environment['RUNNER_DOCKER_RUNNER_OWNERSHIP'] ?? '10001:10001',
       );
+    case 'fly':
+      return FlyExecutionBackend(
+        appName: environment['FLY_RUNTIME_APP'] ?? '',
+        apiToken: environment['FLY_API_TOKEN'] ?? '',
+        image: environment['FLY_RUNTIME_IMAGE'] ??
+            'docker.io/chengyang1017/flutter-sandbox-runner:cloudflare-20260910155454',
+        region: environment['FLY_RUNTIME_REGION'] ?? 'sin',
+        flyctlExecutable: environment['FLYCTL_EXECUTABLE'] ?? 'flyctl',
+        tarExecutable: environment['TAR_EXECUTABLE'] ?? 'tar',
+        cpuKind: environment['FLY_RUNTIME_CPU_KIND'] ?? 'shared',
+        cpus: int.tryParse(environment['FLY_RUNTIME_CPUS'] ?? '') ?? 1,
+        memoryMb:
+            int.tryParse(environment['FLY_RUNTIME_MEMORY_MB'] ?? '') ?? 2048,
+      );
     default:
       throw ArgumentError.value(
         mode,
         'RUNNER_EXECUTION_MODE',
-        'Expected local or docker.',
+        'Expected local, docker, or fly.',
       );
   }
 }
