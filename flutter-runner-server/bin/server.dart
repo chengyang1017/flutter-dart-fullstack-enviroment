@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_practice_runner_server/src/execution/docker_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/execution/execution_backend.dart';
-import 'package:flutter_practice_runner_server/src/execution/fly_machine_exec_execution_backend.dart';
+import 'package:flutter_practice_runner_server/src/execution/fly_preview_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/execution/local_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/runner_authenticator.dart';
 import 'package:flutter_practice_runner_server/src/runner_server.dart';
@@ -281,7 +281,7 @@ RunnerExecutionBackend _createExecutionBackend(
             environment['RUNNER_DOCKER_RUNNER_OWNERSHIP'] ?? '10001:10001',
       );
     case 'fly':
-      return FlyMachineExecExecutionBackend(
+      return FlyPreviewExecutionBackend(
         appName: environment['FLY_RUNTIME_APP'] ?? '',
         apiToken: environment['FLY_API_TOKEN'] ?? '',
         image: environment['FLY_RUNTIME_IMAGE'] ??
@@ -303,6 +303,8 @@ RunnerExecutionBackend _createExecutionBackend(
         serverpodExecutable:
             environment['RUNNER_CONTAINER_SERVERPOD_EXECUTABLE'] ??
                 '/home/sandbox/.pub-cache/bin/serverpod',
+        remotePreviewPort:
+            int.tryParse(environment['FLY_RUNTIME_PREVIEW_PORT'] ?? '') ?? 8080,
       );
     default:
       throw ArgumentError.value(
