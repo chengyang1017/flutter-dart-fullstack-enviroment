@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_practice_runner_server/src/execution/fly_execution_backend.dart';
+import 'package:flutter_practice_runner_server/src/execution/fly_machine_exec_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/runner_session.dart';
 
 Future<void> main() async {
@@ -27,7 +27,7 @@ Future<void> main() async {
     directory: directory,
     createdAt: DateTime.now().toUtc(),
   );
-  final backend = FlyExecutionBackend(
+  final backend = FlyMachineExecExecutionBackend(
     appName: appName,
     apiToken: apiToken,
     image: image,
