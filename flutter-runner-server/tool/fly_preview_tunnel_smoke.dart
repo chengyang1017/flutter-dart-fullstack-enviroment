@@ -81,6 +81,7 @@ Future<void> main() async {
 
     stdout.writeln('[preview] Starting Flutter web-server on remote port 8080...');
     final startCommand = _shellCommand(<String>[
+      'git config --global --add safe.directory /opt/flutter',
       'cd /workspace',
       'nohup /opt/flutter/bin/flutter run -d web-server '
           '--web-hostname=:: --web-port=8080 '
