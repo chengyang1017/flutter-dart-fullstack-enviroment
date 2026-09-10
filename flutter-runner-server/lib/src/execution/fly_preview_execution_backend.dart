@@ -195,8 +195,10 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
 
     final command = <String>[
       'if [ -f /tmp/flutter-preview.pid ]; then',
-      r'pid="$(cat /tmp/flutter-preview.pid 2>/dev/null || true)"',
-      r'if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi',
+      r'pid="$(cat /tmp/flutter-preview.pid 2>/dev/null || true)"'
+          .replaceAll(r'\"', '"'),
+      r'if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi'
+          .replaceAll(r'\"', '"'),
       'fi',
       'rm -f /tmp/flutter-preview.pid',
     ].join(' ');
