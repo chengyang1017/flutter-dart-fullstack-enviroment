@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 import '../../export/services/workspace_import_picker.dart';
 import '../../playground/screens/playground_screen.dart';
 import '../../project_creation/services/flutter_project_scaffold_service.dart';
@@ -230,8 +232,7 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
           controller: textController,
           autofocus: true,
           maxLength: 80,
-          onSubmitted: (value) =>
-              Navigator.of(dialogContext).pop(value.trim()),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value.trim()),
         ),
         actions: [
           TextButton(
@@ -344,6 +345,10 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
       key: const ValueKey('project-mode-screen'),
       appBar: AppBar(
         title: const Text('开始项目'),
+        actions: const [
+          AppThemeToggleButton(),
+          SizedBox(width: 6),
+        ],
       ),
       body: SafeArea(
         child: Center(
@@ -632,10 +637,12 @@ class _ProjectCard extends StatelessWidget {
                             project.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style:
-                                Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                           ),
                           const SizedBox(height: 3),
                           Text(
@@ -645,11 +652,13 @@ class _ProjectCard extends StatelessWidget {
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style:
-                                Theme.of(context).textTheme.labelMedium?.copyWith(
-                                      color: scheme.primary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -726,7 +735,8 @@ class _ProjectCard extends StatelessWidget {
     }
 
     if (project.kind == WorkspaceProjectKind.generatedFlutter) {
-      final platforms = project.flutterPlatforms.map(_platformLabel).join(' · ');
+      final platforms =
+          project.flutterPlatforms.map(_platformLabel).join(' · ');
       return platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
     }
     if (project.kind == WorkspaceProjectKind.importedFlutter) {

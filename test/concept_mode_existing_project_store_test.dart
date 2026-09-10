@@ -58,7 +58,7 @@ void main() {
     );
     expect(
       find.text(
-        'chengyang1017/glyphora / apps/mobile-flutter · lib/ only',
+        'chengyang1017/glyphora / apps/mobile-flutter · 应用 + 后端',
       ),
       findsOneWidget,
     );

@@ -28,6 +28,7 @@ class WorkspaceProjectBar extends StatelessWidget {
     this.onCommit,
     this.onShare,
     this.onKeep,
+    this.onGitSync,
   });
 
   final List<WorkspaceProject> projects;
@@ -41,6 +42,7 @@ class WorkspaceProjectBar extends StatelessWidget {
   final VoidCallback? onCommit;
   final VoidCallback? onShare;
   final VoidCallback? onKeep;
+  final VoidCallback? onGitSync;
 
   static const _surface = Color(0xff15191f);
   static const _surfaceHover = Color(0xff1c222b);
@@ -79,6 +81,13 @@ class WorkspaceProjectBar extends StatelessWidget {
             label: 'Commit',
             onPressed: onCommit,
           ),
+          if (onGitSync != null) ...[
+            const SizedBox(width: 4),
+            _GitHubSyncButton(
+              project: activeProject,
+              onPressed: onGitSync!,
+            ),
+          ],
           if (WorkspaceCloudRuntime.enabled && onShare != null) ...[
             const SizedBox(width: 4),
             _ProjectActionButton(
@@ -213,8 +222,10 @@ class WorkspaceProjectBar extends StatelessWidget {
     final storage = identity == null ? '浏览器本地保存' : '云端保存';
 
     if (project.kind == WorkspaceProjectKind.generatedFlutter) {
-      final platforms = project.flutterPlatforms.map(_platformLabel).join(' · ');
-      final projectType = platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
+      final platforms =
+          project.flutterPlatforms.map(_platformLabel).join(' · ');
+      final projectType =
+          platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
       return '$namespace · $projectType · $storage';
     }
     if (project.kind == WorkspaceProjectKind.importedFlutter) {
@@ -236,6 +247,127 @@ class WorkspaceProjectBar extends StatelessWidget {
       'linux' => 'Linux',
       _ => platform,
     };
+  }
+}
+
+class _GitHubSyncButton extends StatefulWidget {
+  const _GitHubSyncButton({
+    required this.project,
+    required this.onPressed,
+  });
+
+  final WorkspaceProject project;
+  final VoidCallback onPressed;
+
+  @override
+  State<_GitHubSyncButton> createState() => _GitHubSyncButtonState();
+}
+
+class _GitHubSyncButtonState extends State<_GitHubSyncButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final remote = widget.project.gitRemote;
+    final isBound = remote != null;
+
+    final String label;
+    final String tooltip;
+    final IconData leadingIcon;
+    final IconData trailingIcon;
+
+    if (!isBound) {
+      label = 'GitHub · 未绑定';
+      tooltip = '点击绑定 GitHub 仓库';
+      leadingIcon = Icons.link_rounded;
+      trailingIcon = Icons.add_rounded;
+    } else {
+      final fullName = remote.repositoryFullName;
+      final repositoryName = fullName == null
+          ? _repositoryNameFromUrl(remote.repositoryUrl)
+          : fullName.split('/').last;
+      final identity = fullName ?? remote.repositoryUrl;
+      final idText = remote.repositoryId == null
+          ? ''
+          : '\nRepository #${remote.repositoryId}';
+
+      label = 'GitHub · $repositoryName';
+      tooltip = 'GitHub\n$identity\n${remote.branch}$idText\n点击打开同步中心';
+      leadingIcon = Icons.sync_rounded;
+      trailingIcon = Icons.keyboard_arrow_down_rounded;
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: InkWell(
+          key: const ValueKey('workspace-github-sync'),
+          borderRadius: BorderRadius.circular(7),
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 90),
+            height: 36,
+            constraints: const BoxConstraints(maxWidth: 190),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? WorkspaceProjectBar._surfaceHover
+                  : WorkspaceProjectBar._surface,
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: WorkspaceProjectBar._border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  leadingIcon,
+                  size: 16,
+                  color: WorkspaceProjectBar._accent,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: WorkspaceProjectBar._text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  trailingIcon,
+                  size: 15,
+                  color: WorkspaceProjectBar._muted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _repositoryNameFromUrl(String value) {
+    var source = value.trim().replaceAll('\\', '/');
+    while (source.endsWith('/')) {
+      source = source.substring(0, source.length - 1);
+    }
+    if (source.toLowerCase().endsWith('.git')) {
+      source = source.substring(0, source.length - 4);
+    }
+
+    final slash = source.lastIndexOf('/');
+    final colon = source.lastIndexOf(':');
+    final split = slash > colon ? slash : colon;
+    return split >= 0 && split + 1 < source.length
+        ? source.substring(split + 1)
+        : source;
   }
 }
 

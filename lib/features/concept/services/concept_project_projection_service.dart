@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:yaml/yaml.dart';
 
 import '../../workspace/models/workspace_entry.dart';
@@ -12,6 +14,27 @@ class ConceptFlutterProjectCandidate {
 
   final String projectRoot;
   final String projectName;
+
+  String get displayPath => projectRoot.isEmpty ? '/' : projectRoot;
+}
+
+enum ConceptBackendKind {
+  serverpod,
+  node,
+}
+
+class ConceptBackendProjectCandidate {
+  const ConceptBackendProjectCandidate({
+    required this.projectRoot,
+    required this.sourceRoot,
+    required this.projectName,
+    required this.kind,
+  });
+
+  final String projectRoot;
+  final String sourceRoot;
+  final String projectName;
+  final ConceptBackendKind kind;
 
   String get displayPath => projectRoot.isEmpty ? '/' : projectRoot;
 }
@@ -60,16 +83,92 @@ class ConceptProjectProjectionService {
     return List<ConceptFlutterProjectCandidate>.unmodifiable(candidates);
   }
 
+  List<ConceptBackendProjectCandidate> detectBackendProjects(
+    WorkspaceSnapshot repositorySnapshot, {
+    required ConceptFlutterProjectCandidate app,
+  }) {
+    final byPath = <String, WorkspaceEntry>{
+      for (final entry in repositorySnapshot.entries) entry.path: entry,
+    };
+    final candidates = <ConceptBackendProjectCandidate>[];
+
+    for (final entry in repositorySnapshot.entries) {
+      if (!entry.isFile || !entry.isText) continue;
+      if (entry.path != 'pubspec.yaml' &&
+          !entry.path.endsWith('/pubspec.yaml')) {
+        continue;
+      }
+
+      final root = _manifestRoot(entry.path, 'pubspec.yaml');
+      if (root == app.projectRoot || !_looksLikeServerpodPubspec(entry.content)) {
+        continue;
+      }
+      final sourceRoot = _existingSourceRoot(byPath, root, 'lib');
+      if (sourceRoot == null) continue;
+
+      candidates.add(
+        ConceptBackendProjectCandidate(
+          projectRoot: root,
+          sourceRoot: sourceRoot,
+          projectName: _projectName(entry.content, root),
+          kind: ConceptBackendKind.serverpod,
+        ),
+      );
+    }
+
+    for (final entry in repositorySnapshot.entries) {
+      if (!entry.isFile ||
+          !entry.isText ||
+          (entry.path != 'package.json' &&
+              !entry.path.endsWith('/package.json'))) {
+        continue;
+      }
+
+      final root = _manifestRoot(entry.path, 'package.json');
+      if (root == app.projectRoot || !_looksLikeNodeBackend(entry.content)) {
+        continue;
+      }
+
+      final sourceRoot = _existingSourceRoot(byPath, root, 'src');
+      if (sourceRoot == null && root.isEmpty) continue;
+
+      candidates.add(
+        ConceptBackendProjectCandidate(
+          projectRoot: root,
+          sourceRoot: sourceRoot ?? root,
+          projectName: _nodeProjectName(entry.content, root),
+          kind: ConceptBackendKind.node,
+        ),
+      );
+    }
+
+    candidates.sort((a, b) {
+      final kind = a.kind.index.compareTo(b.kind.index);
+      if (kind != 0) return kind;
+      final depth = _depth(a.projectRoot).compareTo(_depth(b.projectRoot));
+      return depth != 0 ? depth : a.projectRoot.compareTo(b.projectRoot);
+    });
+    return List<ConceptBackendProjectCandidate>.unmodifiable(candidates);
+  }
+
   ConceptProjectProjection project({
     required WorkspaceSnapshot repositorySnapshot,
     required String repositoryName,
     required ConceptFlutterProjectCandidate candidate,
   }) {
     final projectRoot = candidate.projectRoot;
+    final backendCandidates = detectBackendProjects(
+      repositorySnapshot,
+      app: candidate,
+    );
+    final backend =
+        backendCandidates.isEmpty ? null : backendCandidates.first;
     final context = ConceptProjectContext(
       repositoryName: repositoryName,
       projectName: candidate.projectName,
       projectRoot: projectRoot,
+      backendRoot: backend?.projectRoot,
+      backendSourceRoot: backend?.sourceRoot,
     );
 
     final projectedEntries = repositorySnapshot.entries
@@ -108,7 +207,7 @@ class ConceptProjectProjectionService {
     final mappedActive = context.toConceptPath(repositorySnapshot.activePath);
     final activePath = mappedActive != null &&
             projectedFilePaths.contains(mappedActive) &&
-            mappedActive.startsWith('lib/')
+            _isConceptCodePath(mappedActive)
         ? mappedActive
         : 'lib/main.dart';
 
@@ -186,6 +285,85 @@ class ConceptProjectProjectionService {
     } catch (_) {
       return false;
     }
+  }
+
+  bool _looksLikeServerpodPubspec(String content) {
+    try {
+      final root = loadYaml(content);
+      if (root is! YamlMap) return false;
+      final dependencies = root['dependencies'];
+      return (dependencies is YamlMap &&
+              dependencies.containsKey('serverpod')) ||
+          root['serverpod'] is YamlMap;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _looksLikeNodeBackend(String content) {
+    try {
+      final root = jsonDecode(content);
+      if (root is! Map) return false;
+      final packages = <String>{
+        ..._dependencyNames(root['dependencies']),
+        ..._dependencyNames(root['devDependencies']),
+      };
+      return const <String>{
+        'express',
+        '@nestjs/core',
+        'fastify',
+        'koa',
+        'hono',
+        '@hapi/hapi',
+      }.any(packages.contains);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Set<String> _dependencyNames(Object? value) {
+    if (value is! Map) return const <String>{};
+    return value.keys.whereType<String>().toSet();
+  }
+
+  String _nodeProjectName(String packageJson, String rootPath) {
+    try {
+      final root = jsonDecode(packageJson);
+      if (root is Map) {
+        final raw = root['name'];
+        if (raw is String && raw.trim().isNotEmpty) return raw.trim();
+      }
+    } catch (_) {
+      // Fall back to the folder name below.
+    }
+    if (rootPath.isNotEmpty) return rootPath.split('/').last;
+    return 'Node Backend';
+  }
+
+  String _manifestRoot(String path, String fileName) {
+    if (path == fileName) return '';
+    return path.substring(0, path.length - '/$fileName'.length);
+  }
+
+  String? _existingSourceRoot(
+    Map<String, WorkspaceEntry> byPath,
+    String root,
+    String sourceDirectory,
+  ) {
+    final sourceRoot = _join(root, sourceDirectory);
+    final direct = byPath[sourceRoot];
+    if (direct?.isDirectory == true) return sourceRoot;
+    if (byPath.keys.any((path) => path.startsWith('$sourceRoot/'))) {
+      return sourceRoot;
+    }
+    return null;
+  }
+
+  bool _isConceptCodePath(String path) {
+    return path == 'lib' ||
+        path.startsWith('lib/') ||
+        path == 'backend' ||
+        path.startsWith('backend/');
   }
 
   String _projectName(String pubspec, String rootPath) {

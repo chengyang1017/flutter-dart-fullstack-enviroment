@@ -12,6 +12,7 @@ import '../../workspace/services/workspace_git_connection_runtime.dart';
 import '../../workspace/services/workspace_persistence.dart';
 import '../../workspace/services/workspace_project_library.dart';
 import '../models/concept_project_context.dart';
+import 'concept_project_projection_service.dart';
 
 typedef ConceptGitProjectSelector =
     Future<WorkspaceGitFlutterProjectCandidate?> Function(
@@ -109,7 +110,7 @@ class ConceptGitImportService {
 
       WorkspaceGitPullResult pulled;
       try {
-        pulled = await git.pullRemote(
+        pulled = await git.pullRepositoryRemote(
           workspaceId: created.id,
           secretName: _clean(request.secretName),
           username: _clean(request.username),
@@ -152,7 +153,7 @@ class ConceptGitImportService {
           username: _clean(request.username),
         );
 
-        pulled = await git.pullRemote(
+        pulled = await git.pullRepositoryRemote(
           workspaceId: created.id,
           secretName: _clean(request.secretName),
           username: _clean(request.username),
@@ -192,7 +193,29 @@ class ConceptGitImportService {
     required WorkspaceGitPullResult pulled,
     required ConceptGitImportRequest request,
   }) async {
-    final snapshot = pulled.toSnapshot();
+    final repositorySnapshot = pulled.toSnapshot();
+    const projectionService = ConceptProjectProjectionService();
+    final flutterProjects =
+        projectionService.detectFlutterProjects(repositorySnapshot);
+    final selectedRoot = pulled.repositoryRelativePaths
+        ? (pulled.projectPath ?? '')
+        : '';
+    final selected = flutterProjects.where(
+      (candidate) => candidate.projectRoot == selectedRoot,
+    );
+    if (selected.length != 1) {
+      throw StateError(
+        'Unable to resolve the selected Flutter app inside the imported repository.',
+      );
+    }
+
+    final projection = projectionService.project(
+      repositorySnapshot: repositorySnapshot,
+      repositoryName: _repositoryDisplayName(pulled.repositoryUrl),
+      candidate: selected.single,
+    );
+    final snapshot = projection.snapshot;
+
     await library.snapshotStore.save(created.storageKey, snapshot);
     await library.renameProject(created.id, pulled.projectName);
     await library.markGitPullSynced(
@@ -209,15 +232,6 @@ class ConceptGitImportService {
       username: _clean(request.username),
     );
 
-    final projectRoot = savedProject.gitRemote?.projectPath ?? '';
-    final projection = ConceptProjectProjection(
-      context: ConceptProjectContext(
-        repositoryName: _repositoryDisplayName(pulled.repositoryUrl),
-        projectName: pulled.projectName,
-        projectRoot: projectRoot,
-      ),
-      snapshot: snapshot,
-    );
     final store = KeyedWorkspaceSnapshotStore(
       delegate: persistence.snapshotStore,
       storageKey: savedProject.storageKey,

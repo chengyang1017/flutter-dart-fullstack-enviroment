@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/responsive_framework.dart';
+import '../../../core/theme/app_theme.dart';
 import '../controller/lesson_controller.dart';
 import '../data/author_answer_repository.dart';
 import '../data/lesson_progress_store.dart';
@@ -363,6 +364,8 @@ class _LessonHeader extends StatelessWidget {
               ],
             ),
           ),
+          const AppThemeToggleButton(compact: true),
+          const SizedBox(width: 8),
           SizedBox(
             width: 96,
             child: LinearProgressIndicator(

@@ -13,6 +13,10 @@ class WorkspaceGitRemote {
     String? projectPath,
     WorkspaceGitProvider? provider,
     String? lastSyncedHead,
+    int? repositoryId,
+    String? repositoryFullName,
+    String? canonicalUrl,
+    DateTime? lastResolvedAt,
   }) {
     final normalizedUrl = _normalizeRepositoryUrl(repositoryUrl);
     return WorkspaceGitRemote._(
@@ -22,6 +26,10 @@ class WorkspaceGitRemote {
       projectPath: _validateProjectPath(projectPath),
       provider: provider ?? _detectProvider(normalizedUrl),
       lastSyncedHead: _validateSyncedHead(lastSyncedHead),
+      repositoryId: _validateRepositoryId(repositoryId),
+      repositoryFullName: _validateRepositoryFullName(repositoryFullName),
+      canonicalUrl: _validateCanonicalUrl(canonicalUrl),
+      lastResolvedAt: lastResolvedAt?.toUtc(),
     );
   }
 
@@ -32,6 +40,10 @@ class WorkspaceGitRemote {
     required this.projectPath,
     required this.provider,
     required this.lastSyncedHead,
+    required this.repositoryId,
+    required this.repositoryFullName,
+    required this.canonicalUrl,
+    required this.lastResolvedAt,
   });
 
   /// Repository location only. Credentials, access tokens and SSH private keys
@@ -50,6 +62,19 @@ class WorkspaceGitRemote {
   /// This is non-secret concurrency metadata used to guard future pushes.
   final String? lastSyncedHead;
 
+  /// Stable GitHub repository identity. This survives repository renames and
+  /// owner transfers, unlike owner/name and repository URLs.
+  final int? repositoryId;
+
+  /// Latest canonical GitHub owner/name, for example `owner/repository`.
+  final String? repositoryFullName;
+
+  /// Latest canonical GitHub browser URL.
+  final String? canonicalUrl;
+
+  /// Last successful canonical identity resolution.
+  final DateTime? lastResolvedAt;
+
   WorkspaceGitRemote copyWith({
     String? repositoryUrl,
     String? remoteName,
@@ -59,6 +84,14 @@ class WorkspaceGitRemote {
     WorkspaceGitProvider? provider,
     String? lastSyncedHead,
     bool clearLastSyncedHead = false,
+    int? repositoryId,
+    bool clearRepositoryId = false,
+    String? repositoryFullName,
+    bool clearRepositoryFullName = false,
+    String? canonicalUrl,
+    bool clearCanonicalUrl = false,
+    DateTime? lastResolvedAt,
+    bool clearLastResolvedAt = false,
   }) {
     return WorkspaceGitRemote(
       repositoryUrl: repositoryUrl ?? this.repositoryUrl,
@@ -68,6 +101,15 @@ class WorkspaceGitRemote {
       provider: provider ?? this.provider,
       lastSyncedHead:
           clearLastSyncedHead ? null : lastSyncedHead ?? this.lastSyncedHead,
+      repositoryId:
+          clearRepositoryId ? null : repositoryId ?? this.repositoryId,
+      repositoryFullName: clearRepositoryFullName
+          ? null
+          : repositoryFullName ?? this.repositoryFullName,
+      canonicalUrl:
+          clearCanonicalUrl ? null : canonicalUrl ?? this.canonicalUrl,
+      lastResolvedAt:
+          clearLastResolvedAt ? null : lastResolvedAt ?? this.lastResolvedAt,
     );
   }
 
@@ -78,6 +120,12 @@ class WorkspaceGitRemote {
         if (projectPath != null) 'projectPath': projectPath,
         'provider': provider.name,
         if (lastSyncedHead != null) 'lastSyncedHead': lastSyncedHead,
+        if (repositoryId != null) 'repositoryId': repositoryId,
+        if (repositoryFullName != null)
+          'repositoryFullName': repositoryFullName,
+        if (canonicalUrl != null) 'canonicalUrl': canonicalUrl,
+        if (lastResolvedAt != null)
+          'lastResolvedAt': lastResolvedAt!.toUtc().toIso8601String(),
       };
 
   factory WorkspaceGitRemote.fromJson(Map<dynamic, dynamic> json) {
@@ -86,11 +134,19 @@ class WorkspaceGitRemote {
     final branch = json['branch'];
     final projectPath = json['projectPath'];
     final lastSyncedHead = json['lastSyncedHead'];
+    final repositoryId = json['repositoryId'];
+    final repositoryFullName = json['repositoryFullName'];
+    final canonicalUrl = json['canonicalUrl'];
+    final lastResolvedAt = json['lastResolvedAt'];
     if (repositoryUrl is! String ||
         remoteName is! String ||
         branch is! String ||
         (projectPath != null && projectPath is! String) ||
-        (lastSyncedHead != null && lastSyncedHead is! String)) {
+        (lastSyncedHead != null && lastSyncedHead is! String) ||
+        (repositoryId != null && repositoryId is! int) ||
+        (repositoryFullName != null && repositoryFullName is! String) ||
+        (canonicalUrl != null && canonicalUrl is! String) ||
+        (lastResolvedAt != null && lastResolvedAt is! String)) {
       throw const FormatException('Invalid Workspace Git remote metadata.');
     }
 
@@ -107,7 +163,45 @@ class WorkspaceGitRemote {
       projectPath: projectPath as String?,
       provider: provider,
       lastSyncedHead: lastSyncedHead as String?,
+      repositoryId: repositoryId as int?,
+      repositoryFullName: repositoryFullName as String?,
+      canonicalUrl: canonicalUrl as String?,
+      lastResolvedAt: lastResolvedAt == null
+          ? null
+          : DateTime.tryParse(lastResolvedAt)?.toUtc(),
     );
+  }
+
+  static int? _validateRepositoryId(int? value) {
+    if (value == null) return null;
+    if (value <= 0) {
+      throw const FormatException('Invalid Git repository id.');
+    }
+    return value;
+  }
+
+  static String? _validateRepositoryFullName(String? value) {
+    if (value == null) return null;
+    final source = value.trim();
+    if (!RegExp(r'^[^/\s]+/[^/\s]+$').hasMatch(source)) {
+      throw const FormatException('Invalid Git repository full name.');
+    }
+    return source;
+  }
+
+  static String? _validateCanonicalUrl(String? value) {
+    if (value == null) return null;
+    final source = value.trim();
+    final uri = Uri.tryParse(source);
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.toLowerCase() != 'github.com' ||
+        uri.pathSegments.where((part) => part.isNotEmpty).length < 2) {
+      throw const FormatException('Invalid GitHub canonical repository URL.');
+    }
+    return source.endsWith('/')
+        ? source.substring(0, source.length - 1)
+        : source;
   }
 
   static String _normalizeRepositoryUrl(String value) {

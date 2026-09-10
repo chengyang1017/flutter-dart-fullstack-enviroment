@@ -198,8 +198,6 @@ class _FunctionCallGraphViewState extends State<FunctionCallGraphView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _CallEdgeLegend(),
-        const SizedBox(height: 8),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -378,6 +376,45 @@ class _GraphZoomToolbar extends StatelessWidget {
               icon: Icons.fit_screen_rounded,
               onPressed: onFit,
             ),
+            const SizedBox(
+              height: 18,
+              child: VerticalDivider(width: 1),
+            ),
+            PopupMenuButton<void>(
+              tooltip: '电线说明',
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              icon: const Icon(Icons.help_outline_rounded, size: 18),
+              itemBuilder: (context) => [
+                PopupMenuItem<void>(
+                  enabled: false,
+                  child: _LegendItem(
+                    icon: Icons.circle,
+                    iconSize: 9,
+                    label: '调用者：圆点发出调用',
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                PopupMenuItem<void>(
+                  enabled: false,
+                  child: _LegendItem(
+                    icon: Icons.arrow_right_alt,
+                    iconSize: 20,
+                    label: '被调用者：箭头指向这里',
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                PopupMenuItem<void>(
+                  enabled: false,
+                  child: _LegendItem(
+                    icon: Icons.more_horiz_rounded,
+                    iconSize: 20,
+                    label: '虚线：应用 ↔ 后端',
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -409,51 +446,6 @@ class _GraphZoomButton extends StatelessWidget {
   }
 }
 
-class _CallEdgeLegend extends StatelessWidget {
-  const _CallEdgeLegend();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      key: const ValueKey('function-call-edge-legend'),
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          _LegendItem(
-            icon: Icons.circle,
-            iconSize: 9,
-            label: '调用者：圆点发出调用',
-            color: theme.colorScheme.primary,
-          ),
-          _LegendItem(
-            icon: Icons.arrow_right_alt,
-            iconSize: 20,
-            label: '被调用者：箭头指向这里',
-            color: theme.colorScheme.primary,
-          ),
-          Text(
-            '调用 → 被调用',
-            key: const ValueKey('function-call-direction-meaning'),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _LegendItem extends StatelessWidget {
   const _LegendItem({
     required this.icon,
@@ -481,6 +473,38 @@ class _LegendItem extends StatelessWidget {
 String _functionNodeIdentity(CodeFlowNode node) =>
     '${node.location.filePath}:${node.location.line}:${node.location.column}:'
     '${node.displayName}';
+
+bool _crossesApplicationBackendBoundary(
+  CodeFlowNode first,
+  CodeFlowNode second,
+) {
+  if (first.isBackend != second.isBackend) {
+    return true;
+  }
+
+  final firstPath = first.location.filePath;
+  final secondPath = second.location.filePath;
+  return (_isAppSourcePath(firstPath) && _isBackendSourcePath(secondPath)) ||
+      (_isBackendSourcePath(firstPath) && _isAppSourcePath(secondPath));
+}
+
+bool _isAppSourcePath(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  if (_isBackendSourcePath(normalized)) return false;
+  return normalized == 'lib' ||
+      normalized.startsWith('lib/') ||
+      (normalized.startsWith('apps/') && normalized.contains('/lib/')) ||
+      normalized.contains('_app/lib/');
+}
+
+bool _isBackendSourcePath(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  return normalized == 'backend' ||
+      normalized.startsWith('backend/') ||
+      normalized.startsWith('server/') ||
+      normalized.contains('/server/') ||
+      normalized.contains('_server/lib/');
+}
 
 Future<void> _showFunctionNodeNameDialog(
   BuildContext context,
@@ -610,7 +634,6 @@ class _FunctionNodeCard extends StatelessWidget {
       lineNumber: node.location.line,
       sourceCode: node.sourceCode,
     );
-    final visibleName = customName ?? node.displayName;
 
     return Material(
       elevation: isRoot ? 2 : 0,
@@ -652,14 +675,33 @@ class _FunctionNodeCard extends StatelessWidget {
                         child: Tooltip(
                           message: customName == null
                               ? node.displayName
-                              : '原函数：${node.displayName}',
-                          child: Text(
-                            visibleName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                              : '$customName\n${node.displayName}',
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                customName ?? node.displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (customName != null) ...[
+                                const SizedBox(height: 1),
+                                Text(
+                                  node.displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: muted,
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ),
@@ -779,15 +821,169 @@ class _FunctionSourceViewport extends StatefulWidget {
       _FunctionSourceViewportState();
 }
 
+class _WireLabelSelection {
+  const _WireLabelSelection({
+    required this.globalLine,
+    required this.startColumn,
+    required this.endColumn,
+    required this.source,
+  });
+
+  final int globalLine;
+  final int startColumn;
+  final int endColumn;
+  final String source;
+}
+
 class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
+  TextSelection? _selection;
+
+  @override
+  void didUpdateWidget(covariant _FunctionSourceViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.node.location.filePath != widget.node.location.filePath ||
+        oldWidget.node.location.line != widget.node.location.line ||
+        oldWidget.node.sourceCode != widget.node.sourceCode ||
+        oldWidget.labelModeEnabled != widget.labelModeEnabled) {
+      _selection = null;
+    }
+  }
 
   @override
   void dispose() {
     _verticalController.dispose();
     _horizontalController.dispose();
     super.dispose();
+  }
+
+  _WireLabelSelection? _selectedSource() {
+    if (widget.labelModeEnabled) return null;
+
+    final selection = _selection;
+    if (selection == null || selection.isCollapsed) return null;
+
+    final source = widget.node.sourceCode;
+    final start = selection.start.clamp(0, source.length).toInt();
+    final end = selection.end.clamp(start, source.length).toInt();
+    if (end <= start) return null;
+
+    final selected = source.substring(start, end);
+    if (selected.trim().isEmpty || selected.contains('\n')) return null;
+
+    final before = source.substring(0, start);
+    final localLine = '\n'.allMatches(before).length;
+    final lastBreak = before.lastIndexOf('\n');
+    final lineStart = lastBreak < 0 ? 0 : lastBreak + 1;
+
+    return _WireLabelSelection(
+      globalLine: widget.node.sourceStartLine + localLine,
+      startColumn: start - lineStart,
+      endColumn: end - lineStart,
+      source: selected,
+    );
+  }
+
+  Future<void> _addSelectedLabel() async {
+    final labels = widget.labels;
+    final selected = _selectedSource();
+    if (labels == null || selected == null) return;
+
+    final labelController = TextEditingController();
+    String? errorText;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('添加位置标签'),
+              content: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '${widget.node.location.filePath}:${selected.globalLine} '
+                      '· 第 ${selected.startColumn + 1}–${selected.endColumn} 列',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '只绑定这一处源码；上方增删行或函数移动后会智能重新定位。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 10),
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: '选中的源码',
+                        border: OutlineInputBorder(),
+                      ),
+                      child: SelectableText(
+                        selected.source,
+                        maxLines: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: labelController,
+                      autofocus: true,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        labelText: '显示成什么',
+                        hintText: '例如：等待',
+                        errorText: errorText,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (labelController.text.trim().isEmpty) {
+                      setDialogState(() => errorText = '标签不能为空');
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(true);
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      await labels.setPositionLabel(
+        path: widget.node.location.filePath,
+        sourceText: widget.node.sourceCode,
+        lineNumber: selected.globalLine,
+        startColumn: selected.startColumn,
+        endColumn: selected.endColumn,
+        label: labelController.text,
+        wholeLine: false,
+        baseLineNumber: widget.node.sourceStartLine,
+      );
+      if (mounted) {
+        setState(() => _selection = null);
+      }
+    }
+
+    labelController.dispose();
   }
 
   @override
@@ -799,43 +995,54 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
       fontSize: 10.5,
       height: 1.45,
     );
+    final selected = _selectedSource();
+    final canAdd = widget.labels != null && selected != null;
 
-    return MouseRegion(
-      onEnter: (_) => widget.onHoverChanged(true),
-      onExit: (_) => widget.onHoverChanged(false),
-      child: Container(
-        height: 184,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface.withOpacity(0.72),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: theme.colorScheme.outlineVariant,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Scrollbar(
-          controller: _verticalController,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            controller: _verticalController,
-            primary: false,
-            padding: const EdgeInsets.all(10),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MouseRegion(
+          onEnter: (_) => widget.onHoverChanged(true),
+          onExit: (_) => widget.onHoverChanged(false),
+          child: Container(
+            height: 150,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface.withOpacity(0.72),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
             child: Scrollbar(
-              controller: _horizontalController,
-              notificationPredicate: (notification) =>
-                  notification.metrics.axis == Axis.horizontal,
+              controller: _verticalController,
+              thumbVisibility: true,
               child: SingleChildScrollView(
-                controller: _horizontalController,
+                controller: _verticalController,
                 primary: false,
-                scrollDirection: Axis.horizontal,
-                child: SelectableText.rich(
-                  TextSpan(
-                    style: sourceStyle,
-                    children: _buildDisplayedSourceSpans(
-                      node: widget.node,
-                      labels: widget.labels,
-                      labelModeEnabled: widget.labelModeEnabled,
-                      theme: theme,
+                padding: const EdgeInsets.all(10),
+                child: Scrollbar(
+                  controller: _horizontalController,
+                  notificationPredicate: (notification) =>
+                      notification.metrics.axis == Axis.horizontal,
+                  child: SingleChildScrollView(
+                    controller: _horizontalController,
+                    primary: false,
+                    scrollDirection: Axis.horizontal,
+                    child: SelectableText.rich(
+                      TextSpan(
+                        style: sourceStyle,
+                        children: _buildDisplayedSourceSpans(
+                          node: widget.node,
+                          labels: widget.labels,
+                          labelModeEnabled: widget.labelModeEnabled,
+                          theme: theme,
+                        ),
+                      ),
+                      onSelectionChanged: (selection, cause) {
+                        if (!mounted) return;
+                        setState(() => _selection = selection);
+                      },
                     ),
                   ),
                 ),
@@ -843,7 +1050,42 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
             ),
           ),
         ),
-      ),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: 30,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.labelModeEnabled
+                      ? '先关闭电线标签显示，再选择源码添加标签'
+                      : selected == null
+                          ? '选择同一行的一段源码即可添加标签'
+                          : '已选择：${selected.source}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                key: const ValueKey('wire-source-add-label'),
+                onPressed: canAdd ? _addSelectedLabel : null,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.label_outline_rounded, size: 15),
+                label: const Text('添加标签'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1580,6 +1822,10 @@ class _FunctionCallEdgePainter extends CustomPainter {
       final callee = direction == FunctionCallGraphDirection.outgoing
           ? hierarchyEdge.child
           : hierarchyEdge.parent;
+      final crossesNetworkBoundary = _crossesApplicationBackendBoundary(
+        caller.node,
+        callee.node,
+      );
 
       final callerIsLeft = caller.rect.center.dx < callee.rect.center.dx;
       final start =
@@ -1606,7 +1852,11 @@ class _FunctionCallEdgePainter extends CustomPainter {
           end.dx,
           end.dy,
         );
-      canvas.drawPath(path, stroke);
+      if (crossesNetworkBoundary) {
+        _drawDashedPath(canvas, path, stroke);
+      } else {
+        canvas.drawPath(path, stroke);
+      }
 
       // Caller endpoint: a solid dot means this function starts the call.
       canvas.drawCircle(start, 5, marker);
@@ -1643,6 +1893,20 @@ class _FunctionCallEdgePainter extends CustomPainter {
         callerIsLeft: callerIsLeft,
         isCaller: false,
       );
+    }
+  }
+
+  void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
+    const dashLength = 10.0;
+    const gapLength = 7.0;
+
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = math.min(distance + dashLength, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance = end + gapLength;
+      }
     }
   }
 

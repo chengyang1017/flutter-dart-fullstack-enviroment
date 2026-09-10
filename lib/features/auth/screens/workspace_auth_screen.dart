@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 import '../../workspace/services/http_workspace_auth_service.dart';
 
 class WorkspaceAuthScreen extends StatefulWidget {
@@ -126,6 +128,11 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        const Align(
+                          alignment: Alignment.centerRight,
+                          child: AppThemeToggleButton(),
+                        ),
+                        const SizedBox(height: 4),
                         Icon(
                           Icons.cloud_done_outlined,
                           size: 56,
@@ -146,9 +153,10 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                               ? '创建账号后，项目会保存在你的云端命名空间。'
                               : '登录后继续访问你名下的云端项目。',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                         ),
                         const SizedBox(height: 24),
                         SegmentedButton<bool>(
@@ -176,7 +184,9 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                             controller: _usernameController,
                             enabled: !_submitting,
                             textInputAction: TextInputAction.next,
-                            autofillHints: const <String>[AutofillHints.username],
+                            autofillHints: const <String>[
+                              AutofillHints.username
+                            ],
                             decoration: const InputDecoration(
                               labelText: '用户名',
                               hintText: '例如 alice',
@@ -298,9 +308,10 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                         Text(
                           '你的项目由登录账号隔离保存。浏览器只保留当前账号的本地缓存。',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                         ),
                       ],
                     ),

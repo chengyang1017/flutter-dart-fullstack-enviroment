@@ -320,12 +320,13 @@ class ConceptLabelController extends ChangeNotifier {
     required int endColumn,
     required String label,
     required bool wholeLine,
+    int baseLineNumber = 1,
   }) async {
     final normalizedLabel = label.trim();
     if (normalizedLabel.isEmpty) return;
 
     final lines = sourceText.split('\n');
-    final lineIndex = lineNumber - 1;
+    final lineIndex = lineNumber - baseLineNumber;
     if (lineIndex < 0 || lineIndex >= lines.length) return;
 
     final line = lines[lineIndex];

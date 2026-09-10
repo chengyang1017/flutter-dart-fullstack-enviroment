@@ -278,14 +278,12 @@ class WorkspaceGitPushService {
     '.dart_tool',
     '.gradle',
     '.idea',
+    '.symlinks',
+    '.plugin_symlinks',
     'build',
     'coverage',
-    'android',
-    'ios',
-    'linux',
-    'macos',
-    'windows',
-    'web',
+    'node_modules',
+    'Pods',
   };
 
   static const Set<String> _ignoredFileNames = <String>{
@@ -367,6 +365,21 @@ class WorkspaceGitPushService {
             ? username!.trim()
             : _defaultUsername(provider));
 
+    if (provider == 'github' &&
+        remote['repositoryId'] != null &&
+        cloneExecutor is ProcessWorkspaceGitCloneExecutor) {
+      await WorkspaceGitRemoteChecker(
+        workspaceStore: workspaceStore,
+        secretStore: secretStore,
+        executor: const ProcessWorkspaceGitCommandExecutor(),
+      ).check(
+        userId: userId,
+        workspaceId: workspaceId,
+        secretName: secretName,
+        username: username,
+      );
+    }
+
     final temp = await Directory.systemTemp.createTemp('workspace-git-push-');
     try {
       final checkout =
@@ -403,9 +416,13 @@ class WorkspaceGitPushService {
         checkout,
         projectPath: projectPath,
       );
+      final repositoryRelative = _workspaceUsesRepositoryRelativePaths(
+        files,
+        flutterRoot: flutterRoot,
+      );
       await _applyWorkspaceFiles(
         checkout: checkout,
-        flutterRoot: flutterRoot,
+        targetRoot: repositoryRelative ? '' : flutterRoot,
         files: files,
       );
 
@@ -467,11 +484,7 @@ class WorkspaceGitPushService {
         throw const FormatException('Workspace snapshot file is invalid.');
       }
       _validatePortablePath(path);
-      if (_shouldIgnore(path)) {
-        throw FormatException(
-          'Generated/platform path cannot be pushed from Workspace: $path',
-        );
-      }
+      if (_shouldIgnore(path)) continue;
       if (files.containsKey(path)) {
         throw FormatException(
             'Workspace snapshot contains duplicate path: $path');
@@ -497,17 +510,34 @@ class WorkspaceGitPushService {
       }
     }
 
-    final pubspec = files['pubspec.yaml'];
-    final main = files['lib/main.dart'];
-    if (pubspec == null ||
-        main == null ||
-        _isBinaryPayload(pubspec) ||
-        _isBinaryPayload(main)) {
+    if (files.isEmpty) {
       throw const FormatException(
-        'Workspace Git push requires text pubspec.yaml and lib/main.dart.',
+        'Workspace Git push requires at least one portable repository file.',
       );
     }
     return files;
+  }
+
+  bool _workspaceUsesRepositoryRelativePaths(
+    Map<String, String> files, {
+    required String flutterRoot,
+  }) {
+    if (flutterRoot.isEmpty) return true;
+
+    final prefix = '$flutterRoot/';
+    final hasRepositoryRelativeFlutterRoot =
+        files.containsKey('${prefix}pubspec.yaml') &&
+            files.containsKey('${prefix}lib/main.dart');
+    if (hasRepositoryRelativeFlutterRoot) return true;
+
+    final hasProjectRelativeFlutterRoot =
+        files.containsKey('pubspec.yaml') && files.containsKey('lib/main.dart');
+    if (hasProjectRelativeFlutterRoot) return false;
+
+    throw FormatException(
+      'Workspace does not contain the bound Flutter project at '
+      '$flutterRoot or as the Workspace root.',
+    );
   }
 
   Future<String> _findFlutterRoot(
@@ -591,13 +621,13 @@ class WorkspaceGitPushService {
 
   Future<void> _applyWorkspaceFiles({
     required Directory checkout,
-    required String flutterRoot,
+    required String targetRoot,
     required Map<String, String> files,
   }) async {
     final root = Directory(
-      flutterRoot.isEmpty
+      targetRoot.isEmpty
           ? checkout.path
-          : '${checkout.path}${Platform.pathSeparator}${_platformPath(flutterRoot)}',
+          : '${checkout.path}${Platform.pathSeparator}${_platformPath(targetRoot)}',
     );
     final existingPortableFiles = <String, File>{};
 

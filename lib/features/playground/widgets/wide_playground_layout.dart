@@ -49,12 +49,12 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
   bool _wireModeEnabled = false;
   bool _wireModeFullscreen = false;
   bool _labelModeEnabled = false;
+  bool _wireLabelModeEnabled = false;
   double _wirePanelWidth = _wirePanelDefaultWidth;
   String? _sourceDiffPath;
   late final ConceptLabelController _labels;
   late final ValueNotifier<double> _wirePanelLiveWidth;
   late final ValueNotifier<bool> _wireSashHighlighted;
-  final GlobalKey _wirePanelKey = GlobalKey();
 
   int? _wireActivePointerId;
   double _wireDragStartGlobalX = 0;
@@ -656,96 +656,190 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
     final wireTheme = _wireTheme();
     final scheme = wireTheme.colorScheme;
 
+    Widget wireLabelButton({required bool compact}) {
+      return Tooltip(
+        message: _wireLabelModeEnabled ? '关闭电线容器源码标签' : '开启电线容器源码标签',
+        child: IconButton(
+          key: ValueKey(
+            _wireLabelModeEnabled
+                ? 'wire-label-mode-on'
+                : 'wire-label-mode-off',
+          ),
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints.tightFor(
+            width: compact ? 34 : 36,
+            height: compact ? 34 : 36,
+          ),
+          onPressed: () {
+            setState(() {
+              _wireLabelModeEnabled = !_wireLabelModeEnabled;
+            });
+          },
+          icon: Icon(
+            _wireLabelModeEnabled
+                ? Icons.label_rounded
+                : Icons.label_outline_rounded,
+            size: 18,
+            color: _wireLabelModeEnabled
+                ? const Color(0xff82aaff)
+                : const Color(0xff8f98a8),
+          ),
+        ),
+      );
+    }
+
+    final codeFlow = CodeFlowPanel(
+      controller: widget.controller,
+      labels: _labels,
+      labelModeEnabled: _wireLabelModeEnabled,
+    );
+
     return Theme(
       data: wireTheme,
       child: Material(
         color: scheme.surface,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
           children: [
-            Container(
-              height: fullscreen ? 46 : 40,
-              padding: const EdgeInsets.only(left: 12, right: 4),
-              decoration: const BoxDecoration(
-                color: Color(0xff111318),
-                border: Border(
-                  bottom: BorderSide(color: Color(0xff2b333e)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!fullscreen)
+                  Container(
+                    height: 40,
+                    padding: const EdgeInsets.only(left: 12, right: 4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xff111318),
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xff2b333e)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.account_tree_outlined,
+                          size: 17,
+                          color: Color(0xff82aaff),
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            '电线模式',
+                            style: TextStyle(
+                              color: Color(0xffd7dde8),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Tooltip(
+                          message: '拖动左侧边缘可调整宽度；双击恢复默认宽度',
+                          child: ValueListenableBuilder<double>(
+                            valueListenable: _wirePanelLiveWidth,
+                            builder: (context, liveWidth, _) {
+                              final width = _wireActivePointerId == null
+                                  ? _wirePanelWidth
+                                  : liveWidth;
+                              return Text(
+                                '${_clampWirePanelWidth(width).round()} px',
+                                style: const TextStyle(
+                                  color: Color(0xff697386),
+                                  fontSize: 10,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        wireLabelButton(compact: true),
+                        IconButton(
+                          tooltip: '全屏显示电线模式',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            setState(() {
+                              _wireModeFullscreen = true;
+                            });
+                          },
+                          icon: const Icon(
+                            Icons.fullscreen_rounded,
+                            size: 19,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '关闭电线模式',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            setState(() {
+                              _wireModeEnabled = false;
+                              _wireModeFullscreen = false;
+                            });
+                          },
+                          icon: const Icon(Icons.close, size: 18),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(child: codeFlow),
+              ],
+            ),
+            if (fullscreen)
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: Material(
+                  color: const Color(0xff15191f).withOpacity(0.94),
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(9),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: const Color(0xff2b333e),
+                      ),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        wireLabelButton(compact: true),
+                        IconButton(
+                          tooltip: '退出全屏',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 34,
+                            height: 34,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _wireModeFullscreen = false;
+                            });
+                          },
+                          icon: const Icon(
+                            Icons.fullscreen_exit_rounded,
+                            size: 18,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '关闭电线模式',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 34,
+                            height: 34,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _wireModeEnabled = false;
+                              _wireModeFullscreen = false;
+                            });
+                          },
+                          icon: const Icon(Icons.close, size: 17),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.account_tree_outlined,
-                    size: 17,
-                    color: Color(0xff82aaff),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      fullscreen ? '电线模式 · 全屏' : '电线模式',
-                      style: const TextStyle(
-                        color: Color(0xffd7dde8),
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  if (!fullscreen)
-                    Tooltip(
-                      message: '拖动左侧边缘可调整宽度；双击恢复默认宽度',
-                      child: ValueListenableBuilder<double>(
-                        valueListenable: _wirePanelLiveWidth,
-                        builder: (context, liveWidth, _) {
-                          final width = _wireActivePointerId == null
-                              ? _wirePanelWidth
-                              : liveWidth;
-                          return Text(
-                            '${_clampWirePanelWidth(width).round()} px',
-                            style: const TextStyle(
-                              color: Color(0xff697386),
-                              fontSize: 10,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  IconButton(
-                    tooltip: fullscreen ? '退出全屏' : '全屏显示电线模式',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      setState(() {
-                        _wireModeFullscreen = !_wireModeFullscreen;
-                      });
-                    },
-                    icon: Icon(
-                      fullscreen
-                          ? Icons.fullscreen_exit_rounded
-                          : Icons.fullscreen_rounded,
-                      size: 19,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: '关闭电线模式',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      setState(() {
-                        _wireModeEnabled = false;
-                        _wireModeFullscreen = false;
-                      });
-                    },
-                    icon: const Icon(Icons.close, size: 18),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: CodeFlowPanel(
-                key: _wirePanelKey,
-                controller: widget.controller,
-                labels: _labels,
-                labelModeEnabled: _labelModeEnabled,
-              ),
-            ),
           ],
         ),
       ),

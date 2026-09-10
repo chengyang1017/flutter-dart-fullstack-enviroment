@@ -1,5 +1,6 @@
 import '../controllers/workspace_controller.dart';
 import '../models/workspace_git_pull.dart';
+import '../services/http_workspace_git_remote_service.dart';
 import '../services/workspace_git_remote_service.dart';
 import '../services/workspace_project_library.dart';
 
@@ -18,6 +19,7 @@ class WorkspaceGitPullCoordinator {
     String? secretName,
     String? username,
     bool allowDirtyOverwrite = false,
+    bool includeRepository = true,
   }) async {
     final project = projects.activeProject;
     final remote = project.gitRemote;
@@ -32,11 +34,17 @@ class WorkspaceGitPullCoordinator {
     }
 
     final original = workspace.createSnapshot();
-    final result = await git.pullRemote(
-      workspaceId: project.id,
-      secretName: secretName,
-      username: username,
-    );
+    final result = includeRepository && git is HttpWorkspaceGitRemoteService
+        ? await (git as HttpWorkspaceGitRemoteService).pullRepositoryRemote(
+            workspaceId: project.id,
+            secretName: secretName,
+            username: username,
+          )
+        : await git.pullRemote(
+            workspaceId: project.id,
+            secretName: secretName,
+            username: username,
+          );
     if (result.repositoryUrl != remote.repositoryUrl ||
         result.branch != remote.branch) {
       throw StateError(
