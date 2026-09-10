@@ -364,11 +364,13 @@ class FlyMachineExecExecutionBackend implements RunnerExecutionBackend {
         throw const FormatException('Expected a JSON object.');
       }
       final rawExitCode = decoded['exit_code'];
+      // Fly's MachineExecResponse uses `json:"exit_code,omitempty"`, so a
+      // successful remote command (exit code 0) omits the field entirely.
       final remoteExitCode = switch (rawExitCode) {
         int value => value,
         num value => value.toInt(),
         String value => int.tryParse(value) ?? 1,
-        _ => 1,
+        _ => 0,
       };
       return _FlyMachineExecResult(
         exitCode: remoteExitCode,
