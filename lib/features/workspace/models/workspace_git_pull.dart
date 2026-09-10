@@ -63,6 +63,7 @@ class WorkspaceGitPullResult {
     required Map<String, String> files,
     required this.importedFileCount,
     required this.ignoredFileCount,
+    this.repositoryRelativePaths = false,
   }) : files = Map<String, String>.unmodifiable(files);
 
   final String repositoryUrl;
@@ -78,6 +79,10 @@ class WorkspaceGitPullResult {
   final int importedFileCount;
   final int ignoredFileCount;
 
+  /// True when [files] keep repository-relative paths instead of being
+  /// re-rooted to the selected Flutter application.
+  final bool repositoryRelativePaths;
+
   factory WorkspaceGitPullResult.fromJson(Map<dynamic, dynamic> json) {
     final repositoryUrl = json['repositoryUrl'];
     final branch = json['branch'];
@@ -88,6 +93,7 @@ class WorkspaceGitPullResult {
     final importedFileCount = json['importedFileCount'];
     final ignoredFileCount = json['ignoredFileCount'];
     final rawFiles = json['files'];
+    final repositoryRelativePaths = json['repositoryRelativePaths'] ?? false;
 
     if (repositoryUrl is! String ||
         branch is! String ||
@@ -101,6 +107,7 @@ class WorkspaceGitPullResult {
         importedFileCount < 0 ||
         ignoredFileCount is! int ||
         ignoredFileCount < 0 ||
+        repositoryRelativePaths is! bool ||
         rawFiles is! Map) {
       throw const FormatException('Invalid Git pull response.');
     }
@@ -125,11 +132,18 @@ class WorkspaceGitPullResult {
       }
       files[path] = payload;
     }
+    final primaryPrefix = repositoryRelativePaths &&
+            normalizedProjectPath != null &&
+            normalizedProjectPath.isNotEmpty
+        ? '$normalizedProjectPath/'
+        : '';
+    final pubspecPath = '${primaryPrefix}pubspec.yaml';
+    final mainPath = '${primaryPrefix}lib/main.dart';
     if (files.length != importedFileCount ||
-        !files.containsKey('pubspec.yaml') ||
-        !files.containsKey('lib/main.dart') ||
-        WorkspaceEntry.isRunnerBinaryContent(files['pubspec.yaml']!) ||
-        WorkspaceEntry.isRunnerBinaryContent(files['lib/main.dart']!)) {
+        !files.containsKey(pubspecPath) ||
+        !files.containsKey(mainPath) ||
+        WorkspaceEntry.isRunnerBinaryContent(files[pubspecPath]!) ||
+        WorkspaceEntry.isRunnerBinaryContent(files[mainPath]!)) {
       throw const FormatException(
         'Git pull response contains an invalid Flutter source set.',
       );
@@ -145,6 +159,7 @@ class WorkspaceGitPullResult {
       files: files,
       importedFileCount: importedFileCount,
       ignoredFileCount: ignoredFileCount,
+      repositoryRelativePaths: repositoryRelativePaths,
     );
   }
 
@@ -200,11 +215,20 @@ class WorkspaceGitPullResult {
       }
     }
 
+    final primaryPrefix = repositoryRelativePaths &&
+            projectPath != null &&
+            projectPath!.isNotEmpty
+        ? '$projectPath/'
+        : '';
+
     return WorkspaceSnapshot(
       entries: entries,
       baseEntries: List<WorkspaceEntry>.of(entries),
-      openFiles: const <String>['lib/main.dart', 'pubspec.yaml'],
-      activePath: 'lib/main.dart',
+      openFiles: <String>[
+        '${primaryPrefix}lib/main.dart',
+        '${primaryPrefix}pubspec.yaml',
+      ],
+      activePath: '${primaryPrefix}lib/main.dart',
       nextId: idCounter + 1,
       savedAt: (pulledAt ?? DateTime.now()).toUtc(),
       expandedDirectoryIds: rootDirectoryIds,

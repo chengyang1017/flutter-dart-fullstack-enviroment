@@ -41,16 +41,17 @@ class FlutterProjectDirectoryImportService {
       throw const FormatException('Selected folder is empty.');
     }
 
-    final normalized = <({String path, Uint8List bytes})>[];
+    final normalizedWithPickerRoot = <({String path, Uint8List bytes})>[];
     for (final file in pickedFiles) {
       final path = _normalizePath(file.path);
       if (path.isEmpty) continue;
-      normalized.add((path: path, bytes: file.bytes));
+      normalizedWithPickerRoot.add((path: path, bytes: file.bytes));
     }
-    if (normalized.isEmpty) {
+    if (normalizedWithPickerRoot.isEmpty) {
       throw const FormatException('Selected folder contains no readable files.');
     }
 
+    final normalized = _stripSelectedFolderPrefix(normalizedWithPickerRoot);
     final projectRoot = _detectFlutterProjectRoot(normalized);
     final rootName = _projectRootName(projectRoot);
     final retained = <String, Uint8List>{};
@@ -58,18 +59,13 @@ class FlutterProjectDirectoryImportService {
     var importedBytes = 0;
 
     for (final file in normalized) {
-      final relative = _relativeToProjectRoot(file.path, projectRoot);
-      if (relative == null) {
+      final path = file.path;
+      if (_shouldIgnore(path)) {
         ignoredFileCount += 1;
         continue;
       }
-      if (relative.isEmpty) continue;
-      if (_shouldIgnore(relative)) {
-        ignoredFileCount += 1;
-        continue;
-      }
-      if (retained.containsKey(relative)) {
-        throw FormatException('Folder contains duplicate path: $relative');
+      if (retained.containsKey(path)) {
+        throw FormatException('Folder contains duplicate path: $path');
       }
       if (retained.length >= maxImportedFiles) {
         throw const FormatException(
@@ -78,7 +74,7 @@ class FlutterProjectDirectoryImportService {
       }
       if (file.bytes.length > maxSingleFileBytes) {
         throw FormatException(
-          'File is larger than the 25 MB per-file limit: $relative',
+          'File is larger than the 25 MB per-file limit: $path',
         );
       }
 
@@ -88,16 +84,17 @@ class FlutterProjectDirectoryImportService {
           'Project is larger than the 120 MB folder-import limit.',
         );
       }
-      retained[relative] = file.bytes;
+      retained[path] = file.bytes;
     }
 
-    final pubspecBytes = retained['pubspec.yaml'];
+    final selectedPubspecPath = _join(projectRoot, 'pubspec.yaml');
+    final pubspecBytes = retained[selectedPubspecPath];
     if (pubspecBytes == null) {
       throw const FormatException(
         'Flutter pubspec.yaml was detected, but could not be imported.',
       );
     }
-    final pubspec = _decodeRequiredText('pubspec.yaml', pubspecBytes);
+    final pubspec = _decodeRequiredText(selectedPubspecPath, pubspecBytes);
     if (!_looksLikeFlutterPubspec(pubspec)) {
       throw const FormatException(
         'The selected folder does not look like a Flutter project.',
@@ -106,6 +103,7 @@ class FlutterProjectDirectoryImportService {
 
     final snapshot = _buildSnapshot(
       retained,
+      projectRoot: projectRoot,
       importedAt: importedAt ?? DateTime.now().toUtc(),
     );
 
@@ -119,6 +117,7 @@ class FlutterProjectDirectoryImportService {
 
   WorkspaceSnapshot _buildSnapshot(
     Map<String, Uint8List> files, {
+    required String projectRoot,
     required DateTime importedAt,
   }) {
     final directories = <String>{};
@@ -179,14 +178,18 @@ class FlutterProjectDirectoryImportService {
 
     final dartPaths = textPaths.where((path) => path.endsWith('.dart')).toList()
       ..sort();
-    final activePath = textPaths.contains('lib/main.dart')
-        ? 'lib/main.dart'
+    final selectedMainPath = _join(projectRoot, 'lib/main.dart');
+    final selectedPubspecPath = _join(projectRoot, 'pubspec.yaml');
+    final activePath = textPaths.contains(selectedMainPath)
+        ? selectedMainPath
         : dartPaths.isNotEmpty
             ? dartPaths.first
-            : 'pubspec.yaml';
+            : selectedPubspecPath;
     final openFiles = <String>[
       activePath,
-      if (activePath != 'pubspec.yaml') 'pubspec.yaml',
+      if (activePath != selectedPubspecPath &&
+          textPaths.contains(selectedPubspecPath))
+        selectedPubspecPath,
     ];
 
     return WorkspaceSnapshot(
@@ -249,19 +252,29 @@ class FlutterProjectDirectoryImportService {
     return slash == -1 ? projectRoot : projectRoot.substring(slash + 1);
   }
 
-  String? _relativeToProjectRoot(String path, String projectRoot) {
-    if (projectRoot.isEmpty) return path;
-    if (path == projectRoot) return '';
+  List<({String path, Uint8List bytes})> _stripSelectedFolderPrefix(
+    List<({String path, Uint8List bytes})> files,
+  ) {
+    if (files.any((file) => !file.path.contains('/'))) return files;
 
-    final prefix = '$projectRoot/';
-    if (!path.startsWith(prefix)) return null;
-    return path.substring(prefix.length);
+    final firstSegment = files.first.path.split('/').first;
+    final prefix = '$firstSegment/';
+    if (!files.every((file) => file.path.startsWith(prefix))) return files;
+
+    return files
+        .map(
+          (file) => (
+            path: file.path.substring(prefix.length),
+            bytes: file.bytes,
+          ),
+        )
+        .toList(growable: false);
   }
 
   bool _shouldIgnore(String relativePath) {
-    if (_ignoredRootFiles.contains(relativePath)) return true;
     if (relativePath.startsWith('__MACOSX/')) return true;
     final segments = relativePath.split('/');
+    if (_ignoredRootFiles.contains(segments.last)) return true;
     return segments.any(_ignoredDirectoryNames.contains);
   }
 
@@ -312,6 +325,9 @@ class FlutterProjectDirectoryImportService {
     }
     return segments.join('/');
   }
+
+  String _join(String root, String path) =>
+      root.isEmpty ? path : '$root/$path';
 
   int _depth(String path) => '/'.allMatches(path).length;
 }

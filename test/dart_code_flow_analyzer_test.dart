@@ -178,16 +178,16 @@ void loadCart() {}
 
     expect(first.sourceName, 'buildCart');
     expect(first.source.filePath, 'lib/main.dart');
-    expect(first.source.line, 2);
+    expect(first.source.line, 1);
     expect(first.callSite.filePath, 'lib/main.dart');
-    expect(first.callSite.line, 3);
+    expect(first.callSite.line, 2);
     expect(first.callSite.column, 3);
     expect(first.callSite.length, 'loadCart'.length);
     expect(first.targetName, 'loadCart');
-    expect(first.target.line, 7);
+    expect(first.target.line, 6);
 
-    expect(second.callSite.line, 4);
-    expect(second.target.line, 7);
+    expect(second.callSite.line, 3);
+    expect(second.target.line, 6);
   });
 
   test('requires the cursor to identify a method or function', () {

@@ -31,7 +31,10 @@ class WorkspaceController extends ChangeNotifier {
         _editorStates = Map<String, WorkspaceEditorState>.of(
           editorStates ?? const <String, WorkspaceEditorState>{},
         ),
-        _nextId = nextId;
+        _nextId = nextId {
+    _rebuildCurrentIndexes();
+    _rebuildBasePathIndex();
+  }
 
   factory WorkspaceController.flutterPlayground({
     required String mainDartContent,
@@ -103,11 +106,23 @@ flutter:
   final Map<String, WorkspaceEditorState> _editorStates;
   final Set<String> _stagedPaths = <String>{};
 
+  final Map<String, String> _entryIdByPath = <String, String>{};
+  final Map<String, List<String>> _childIdsByParentPath =
+      <String, List<String>>{};
+  final Map<String, String> _baseEntryIdByPath = <String, String>{};
+
+  List<WorkspaceEntry>? _sortedEntriesCache;
+  List<WorkspaceChange>? _changesCache;
+  Set<String>? _dirtyFileDirectoryPathsCache;
+
   Timer? _contentNotificationDebounce;
   int _nextId;
   String activePath;
 
   List<WorkspaceEntry> get entries {
+    final cached = _sortedEntriesCache;
+    if (cached != null) return cached;
+
     final values = _entries.values.toList()
       ..sort((a, b) {
         if (a.parentPath == b.parentPath && a.type != b.type) {
@@ -115,7 +130,7 @@ flutter:
         }
         return a.path.compareTo(b.path);
       });
-    return List.unmodifiable(values);
+    return _sortedEntriesCache = List<WorkspaceEntry>.unmodifiable(values);
   }
 
   List<String> get openFiles => List.unmodifiable(_openFiles);
@@ -123,10 +138,8 @@ flutter:
   WorkspaceEntry? get activeEntry => entryAt(activePath);
 
   WorkspaceEntry? entryAt(String path) {
-    for (final entry in _entries.values) {
-      if (entry.path == path) return entry;
-    }
-    return null;
+    final id = _entryIdByPath[path];
+    return id == null ? null : _entries[id];
   }
 
   WorkspaceEntry? entryById(String id) => _entries[id];
@@ -144,7 +157,8 @@ flutter:
   bool get hasStagedChanges => stagedChanges.isNotEmpty;
 
   bool isPathStaged(String path) =>
-      changes.any((change) => change.path == path) && _stagedPaths.contains(path);
+      changes.any((change) => change.path == path) &&
+      _stagedPaths.contains(path);
 
   WorkspaceChange? changeForPath(String path) {
     for (final change in changes) {
@@ -155,10 +169,8 @@ flutter:
 
   WorkspaceEntry? baseEntryForChange(WorkspaceChange change) {
     final sourcePath = change.previousPath ?? change.path;
-    for (final entry in _baseEntries.values) {
-      if (entry.path == sourcePath) return entry;
-    }
-    return null;
+    final id = _baseEntryIdByPath[sourcePath];
+    return id == null ? null : _baseEntries[id];
   }
 
   String? baseContentForChange(WorkspaceChange change) {
@@ -216,6 +228,8 @@ flutter:
     }
 
     _stagedPaths.removeAll(staged.map((change) => change.path));
+    _rebuildBasePathIndex();
+    _invalidateChangeCaches();
     notifyListeners();
     return true;
   }
@@ -228,6 +242,32 @@ flutter:
     if (base == null) return true;
 
     return base.path != current.path || base.content != current.content;
+  }
+
+  bool hasDirtyFileDescendant(String directory) {
+    final cached = _dirtyFileDirectoryPathsCache;
+    if (cached != null) return cached.contains(directory);
+
+    final dirtyDirectories = <String>{};
+    for (final current in _entries.values) {
+      if (!current.isFile) continue;
+
+      final base = _baseEntries[current.id];
+      final dirty = base == null ||
+          base.path != current.path ||
+          base.content != current.content;
+      if (!dirty) continue;
+
+      var parent = current.parentPath;
+      while (parent.isNotEmpty) {
+        dirtyDirectories.add(parent);
+        final slash = parent.lastIndexOf('/');
+        parent = slash == -1 ? '' : parent.substring(0, slash);
+      }
+    }
+
+    _dirtyFileDirectoryPathsCache = dirtyDirectories;
+    return dirtyDirectories.contains(directory);
   }
 
   bool isDirectoryExpanded(String path) {
@@ -262,6 +302,9 @@ flutter:
   }
 
   List<WorkspaceChange> get changes {
+    final cached = _changesCache;
+    if (cached != null) return cached;
+
     final result = <WorkspaceChange>[];
 
     for (final base in _baseEntries.values) {
@@ -310,7 +353,7 @@ flutter:
     }
 
     result.sort((a, b) => a.path.compareTo(b.path));
-    return List.unmodifiable(result);
+    return _changesCache = List<WorkspaceChange>.unmodifiable(result);
   }
 
   WorkspaceSnapshot createSnapshot() {
@@ -395,23 +438,25 @@ flutter:
       );
 
     _nextId = snapshot.nextId > 0 ? snapshot.nextId : 1;
+    _rebuildCurrentIndexes();
+    _rebuildBasePathIndex();
+    _invalidateChangeCaches();
     notifyListeners();
   }
 
   List<WorkspaceEntry> childrenOf(String parentPath) {
-    final children = _entries.values
-        .where((entry) => entry.parentPath == parentPath)
-        .toList()
-      ..sort((a, b) {
-        if (a.type != b.type) return a.isDirectory ? -1 : 1;
-        return a.name.compareTo(b.name);
-      });
-    return List.unmodifiable(children);
+    final ids = _childIdsByParentPath[parentPath];
+    if (ids == null || ids.isEmpty) return const <WorkspaceEntry>[];
+
+    return List<WorkspaceEntry>.unmodifiable(
+      ids.map((id) => _entries[id]).whereType<WorkspaceEntry>(),
+    );
   }
 
   void openFile(String path) {
     final entry = entryAt(path);
     if (entry == null || !entry.isFile) return;
+    if (activePath == path && _openFiles.contains(path)) return;
 
     if (!_openFiles.contains(path)) {
       _openFiles.add(path);
@@ -455,7 +500,7 @@ flutter:
 
     _contentNotificationDebounce?.cancel();
     _contentNotificationDebounce = Timer(
-      const Duration(milliseconds: 180),
+      const Duration(milliseconds: 300),
       () {
         _contentNotificationDebounce = null;
         notifyListeners();
@@ -477,6 +522,7 @@ flutter:
     _entries[entry.id] = entry;
     _openFiles.add(path);
     activePath = path;
+    _didChangeStructure();
     notifyListeners();
     return path;
   }
@@ -493,6 +539,7 @@ flutter:
     );
     _entries[entry.id] = entry;
     _expandedDirectoryIds.add(entry.id);
+    _didChangeStructure();
     notifyListeners();
     return path;
   }
@@ -532,6 +579,7 @@ flutter:
         }
       }
     }
+    _didChangeStructure();
     notifyListeners();
   }
 
@@ -590,6 +638,7 @@ flutter:
     _entries[current.id] = base;
     _replaceOpenPath(oldPath, base.path);
     if (activePath == oldPath) activePath = base.path;
+    _didChangeStructure();
     notifyListeners();
   }
 
@@ -610,6 +659,7 @@ flutter:
     _editorStates.clear();
     _stagedPaths.clear();
     activePath = 'lib/main.dart';
+    _didChangeStructure();
     notifyListeners();
   }
 
@@ -624,6 +674,8 @@ flutter:
         ),
       );
     _stagedPaths.clear();
+    _rebuildBasePathIndex();
+    _invalidateChangeCaches();
     notifyListeners();
     return true;
   }
@@ -636,6 +688,7 @@ flutter:
 
     _stagedPaths.remove(path);
     _entries[entry.id] = entry.copyWith(content: content);
+    _didChangeContent();
     return true;
   }
 
@@ -652,11 +705,8 @@ flutter:
     for (final entry in affected) {
       final suffix = entry.path.substring(source.length);
       final nextPath = '$target$suffix';
-      final collision = _entries.values.any(
-        (candidate) =>
-            !affectedIds.contains(candidate.id) && candidate.path == nextPath,
-      );
-      if (collision) {
+      final collisionId = _entryIdByPath[nextPath];
+      if (collisionId != null && !affectedIds.contains(collisionId)) {
         throw ArgumentError('Path already exists: $nextPath');
       }
     }
@@ -676,12 +726,59 @@ flutter:
     if (activePath == source || activePath.startsWith('$source/')) {
       activePath = '$target${activePath.substring(source.length)}';
     }
+    _didChangeStructure();
     notifyListeners();
   }
 
   void _replaceOpenPath(String oldPath, String newPath) {
     final index = _openFiles.indexOf(oldPath);
     if (index != -1) _openFiles[index] = newPath;
+  }
+
+  void _didChangeContent() {
+    _sortedEntriesCache = null;
+    _invalidateChangeCaches();
+  }
+
+  void _didChangeStructure() {
+    _rebuildCurrentIndexes();
+    _invalidateChangeCaches();
+  }
+
+  void _invalidateChangeCaches() {
+    _changesCache = null;
+    _dirtyFileDirectoryPathsCache = null;
+  }
+
+  void _rebuildCurrentIndexes() {
+    _entryIdByPath.clear();
+    _childIdsByParentPath.clear();
+
+    for (final entry in _entries.values) {
+      _entryIdByPath[entry.path] = entry.id;
+      (_childIdsByParentPath[entry.parentPath] ??= <String>[]).add(entry.id);
+    }
+
+    for (final ids in _childIdsByParentPath.values) {
+      ids.sort((a, b) {
+        final left = _entries[a]!;
+        final right = _entries[b]!;
+        if (left.type != right.type) return left.isDirectory ? -1 : 1;
+        return left.name.compareTo(right.name);
+      });
+    }
+
+    _sortedEntriesCache = null;
+  }
+
+  void _rebuildBasePathIndex() {
+    _baseEntryIdByPath
+      ..clear()
+      ..addEntries(
+        _baseEntries.values.map(
+          (entry) => MapEntry(entry.path, entry.id),
+        ),
+      );
   }
 
   void _validateSnapshotEntries(
@@ -712,8 +809,9 @@ flutter:
 
   void _assertCreatablePath(String path) {
     _validatePath(path);
-    final collision = _entries.values.any((entry) => entry.path == path);
-    if (collision) throw ArgumentError('Path already exists: $path');
+    if (_entryIdByPath.containsKey(path)) {
+      throw ArgumentError('Path already exists: $path');
+    }
   }
 
   void _validatePath(String path) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/navigation/monaco_route_observer.dart';
+import '../core/theme/app_theme.dart';
 import '../features/auth/screens/workspace_auth_screen.dart';
 import '../features/auth/widgets/claim_existing_account_dialog.dart';
 import '../features/home/screens/home_screen.dart';
@@ -15,6 +16,22 @@ class PlaygroundApp extends StatefulWidget {
 
 class _PlaygroundAppState extends State<PlaygroundApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    AppThemeController.deepNight.addListener(_handleThemeChanged);
+  }
+
+  void _handleThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AppThemeController.deepNight.removeListener(_handleThemeChanged);
+    super.dispose();
+  }
 
   Future<void> _login({
     required String email,
@@ -81,10 +98,10 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
       navigatorObservers: [monacoRouteObserver],
       title: 'Flutter UI Playground',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: AppThemeData.light,
+      darkTheme: AppThemeData.deepNight,
+      themeMode:
+          AppThemeController.deepNight.value ? ThemeMode.dark : ThemeMode.light,
       home: cloudConfigured && identity == null
           ? WorkspaceAuthScreen(
               initialError: WorkspaceAuthRuntime.startupError?.toString(),

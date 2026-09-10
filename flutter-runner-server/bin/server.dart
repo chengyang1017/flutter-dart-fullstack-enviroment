@@ -10,34 +10,117 @@ import 'package:flutter_practice_runner_server/src/session_manager.dart';
 
 Future<void> main() async {
   final environment = Platform.environment;
-  final host = environment['RUNNER_HOST'] ?? '127.0.0.1';
-  final port = int.tryParse(environment['RUNNER_PORT'] ?? '') ?? 8787;
+  final platformPort = environment['PORT'];
+  final host = environment['RUNNER_HOST'] ??
+      (platformPort == null || platformPort.isEmpty ? '127.0.0.1' : '0.0.0.0');
+  final port = int.tryParse(
+        environment['RUNNER_PORT'] ?? platformPort ?? '',
+      ) ??
+      8787;
   final allowedOrigin = environment['RUNNER_ALLOWED_ORIGIN'] ?? '*';
   final idleMinutes = int.tryParse(
         environment['RUNNER_IDLE_MINUTES'] ?? '',
       ) ??
       20;
-  final previewUrlTemplate =
-      environment['RUNNER_PREVIEW_URL_TEMPLATE'] ?? 'http://localhost:{port}';
-  final backendUrlTemplate =
-      environment['RUNNER_BACKEND_URL_TEMPLATE'] ?? 'http://localhost:{port}';
+  final allowTerminalCommands =
+      (environment['RUNNER_ENABLE_TERMINAL'] ?? '').trim().toLowerCase() ==
+          'true';
+  final maxSessionsPerUser = (int.tryParse(
+            environment['RUNNER_MAX_SESSIONS_PER_USER'] ?? '',
+          ) ??
+          2)
+      .clamp(1, 16)
+      .toInt();
+  final maxTotalSessions = (int.tryParse(
+            environment['RUNNER_MAX_TOTAL_SESSIONS'] ?? '',
+          ) ??
+          4)
+      .clamp(1, 64)
+      .toInt();
+  final maxRequestBytes = (int.tryParse(
+            environment['RUNNER_MAX_REQUEST_BYTES'] ?? '',
+          ) ??
+          32 * 1024 * 1024)
+      .clamp(1024, 128 * 1024 * 1024)
+      .toInt();
+  final maxWorkspaceFiles = (int.tryParse(
+            environment['RUNNER_MAX_WORKSPACE_FILES'] ?? '',
+          ) ??
+          5000)
+      .clamp(1, 20000)
+      .toInt();
+  final maxFileBytes = (int.tryParse(
+            environment['RUNNER_MAX_FILE_BYTES'] ?? '',
+          ) ??
+          8 * 1024 * 1024)
+      .clamp(1024, 32 * 1024 * 1024)
+      .toInt();
+  final maxWorkspaceBytes = (int.tryParse(
+            environment['RUNNER_MAX_WORKSPACE_BYTES'] ?? '',
+          ) ??
+          24 * 1024 * 1024)
+      .clamp(1024, 96 * 1024 * 1024)
+      .toInt();
+  final publicBaseUrl = _normalizePublicBaseUrl(
+    environment['RUNNER_PUBLIC_BASE_URL'] ?? 'http://localhost:$port',
+  );
+  final previewUrlTemplate = environment['RUNNER_PREVIEW_URL_TEMPLATE'] ??
+      '$publicBaseUrl/preview/{sessionId}/{accessKey}/';
+  final backendUrlTemplate = environment['RUNNER_BACKEND_URL_TEMPLATE'] ??
+      '$publicBaseUrl/backend/{sessionId}/{accessKey}/';
   final workspaceRoot = Directory(
     environment['RUNNER_WORKSPACE_ROOT'] ??
         '${Directory.systemTemp.path}${Platform.pathSeparator}flutter-practice-runner',
   );
-  final authTokens = environment['RUNNER_AUTH_TOKENS'];
-  if (authTokens == null || authTokens.trim().isEmpty) {
-    stderr.writeln(
-      'RUNNER_AUTH_TOKENS is required. Example: '
-      '''{"dev-runner-token":"user-1"}''',
-    );
-    exitCode = 64;
-    return;
-  }
+  final workspaceStorageApiUrl =
+      (environment['WORKSPACE_STORAGE_API_URL'] ?? '').trim();
+  final staticAuthTokens = (environment['RUNNER_AUTH_TOKENS'] ?? '').trim();
+  final requestedAuthMode = (environment['RUNNER_AUTH_MODE'] ?? '').trim();
+  final authMode = requestedAuthMode.isNotEmpty
+      ? requestedAuthMode.toLowerCase()
+      : workspaceStorageApiUrl.isNotEmpty
+          ? 'workspace'
+          : 'static';
+  final authCacheSeconds = int.tryParse(
+        environment['RUNNER_AUTH_CACHE_SECONDS'] ?? '',
+      ) ??
+      15;
 
-  late final StaticBearerRunnerAuthenticator authenticator;
+  late final RunnerAuthenticator authenticator;
+  late final String authenticationLabel;
+
   try {
-    authenticator = StaticBearerRunnerAuthenticator.fromJson(authTokens);
+    switch (authMode) {
+      case 'workspace':
+        if (workspaceStorageApiUrl.isEmpty) {
+          throw const FormatException(
+            'WORKSPACE_STORAGE_API_URL is required when '
+            'RUNNER_AUTH_MODE=workspace.',
+          );
+        }
+        authenticator = WorkspaceAccountRunnerAuthenticator(
+          baseUri: Uri.parse(workspaceStorageApiUrl),
+          cacheTtl: Duration(
+            seconds: authCacheSeconds.clamp(0, 300).toInt(),
+          ),
+        );
+        authenticationLabel = 'workspace account bearer';
+        break;
+      case 'static':
+        if (staticAuthTokens.isEmpty) {
+          throw const FormatException(
+            'RUNNER_AUTH_TOKENS is required when RUNNER_AUTH_MODE=static.',
+          );
+        }
+        authenticator =
+            StaticBearerRunnerAuthenticator.fromJson(staticAuthTokens);
+        authenticationLabel = 'static bearer';
+        break;
+      default:
+        throw FormatException(
+          'RUNNER_AUTH_MODE must be workspace or static: $authMode',
+        );
+    }
   } on FormatException catch (error) {
     stderr.writeln(error.message);
     exitCode = 64;
@@ -45,6 +128,31 @@ Future<void> main() async {
   }
 
   final executionBackend = _createExecutionBackend(environment);
+
+  final publicUri = Uri.tryParse(publicBaseUrl);
+  final publicWorkspaceRunner = authMode == 'workspace' &&
+      publicUri != null &&
+      publicUri.scheme.toLowerCase() == 'https';
+  final allowLocalPublicExecution =
+      (environment['RUNNER_ALLOW_LOCAL_PUBLIC_EXECUTION'] ?? '')
+              .trim()
+              .toLowerCase() ==
+          'true';
+
+  if (publicWorkspaceRunner &&
+      executionBackend.name != 'docker' &&
+      !allowLocalPublicExecution) {
+    stderr.writeln(
+      'Refusing public Workspace Runner startup with '
+      '${executionBackend.name} execution. Set RUNNER_EXECUTION_MODE=docker. '
+      'RUNNER_ALLOW_LOCAL_PUBLIC_EXECUTION=true is an explicit unsafe override.',
+    );
+    exitCode = 64;
+    if (authenticator is WorkspaceAccountRunnerAuthenticator) {
+      authenticator.close();
+    }
+    return;
+  }
 
   final manager = SessionManager(
     rootDirectory: workspaceRoot,
@@ -56,6 +164,13 @@ Future<void> main() async {
     manager: manager,
     authenticator: authenticator,
     allowedOrigin: allowedOrigin,
+    allowTerminalCommands: allowTerminalCommands,
+    maxSessionsPerUser: maxSessionsPerUser,
+    maxTotalSessions: maxTotalSessions,
+    maxRequestBytes: maxRequestBytes,
+    maxWorkspaceFiles: maxWorkspaceFiles,
+    maxFileBytes: maxFileBytes,
+    maxWorkspaceBytes: maxWorkspaceBytes,
   );
 
   final server = await HttpServer.bind(host, port);
@@ -65,7 +180,23 @@ Future<void> main() async {
   stdout.writeln('Workspace root: ${workspaceRoot.path}');
   stdout.writeln('Execution backend: ${executionBackend.name}');
   stdout.writeln('Idle session timeout: $idleMinutes minutes');
-  stdout.writeln('Runner authentication: bearer ownership enabled');
+  stdout.writeln('Runner authentication: $authenticationLabel');
+  stdout.writeln(
+    'Runner limits: sessions/user=$maxSessionsPerUser, '
+    'total sessions=$maxTotalSessions, '
+    'request bytes=$maxRequestBytes, '
+    'workspace files=$maxWorkspaceFiles.',
+  );
+  stdout.writeln(
+    'Runner terminal: ${allowTerminalCommands ? 'enabled' : 'disabled'}',
+  );
+  if (publicWorkspaceRunner && allowedOrigin == '*') {
+    stderr.writeln(
+      'Warning: RUNNER_ALLOWED_ORIGIN is *. '
+      'Set it to the production web origin before public launch.',
+    );
+  }
+  stdout.writeln('Public runtime gateway: $publicBaseUrl');
 
   final cleanupTimer = Timer.periodic(
     const Duration(minutes: 1),
@@ -88,6 +219,10 @@ Future<void> main() async {
     cleanupTimer.cancel();
     stdout.writeln('Stopping Flutter Practice Runner...');
     await server.close(force: true);
+    runnerServer.close();
+    if (authenticator is WorkspaceAccountRunnerAuthenticator) {
+      authenticator.close();
+    }
     await manager.dispose();
   }
 
@@ -117,10 +252,8 @@ RunnerExecutionBackend _createExecutionBackend(
       return LocalExecutionBackend(
         flutterExecutable: environment['FLUTTER_EXECUTABLE'] ?? 'flutter',
         dartExecutable: environment['DART_EXECUTABLE'] ?? 'dart',
-        dartFrogExecutable:
-            environment['DART_FROG_EXECUTABLE'] ?? 'dart_frog',
-        serverpodExecutable:
-            environment['SERVERPOD_EXECUTABLE'] ?? 'serverpod',
+        dartFrogExecutable: environment['DART_FROG_EXECUTABLE'] ?? 'dart_frog',
+        serverpodExecutable: environment['SERVERPOD_EXECUTABLE'] ?? 'serverpod',
       );
     case 'docker':
       return DockerExecutionBackend(
@@ -152,4 +285,25 @@ RunnerExecutionBackend _createExecutionBackend(
         'Expected local or docker.',
       );
   }
+}
+
+String _normalizePublicBaseUrl(String value) {
+  var result = value.trim();
+  while (result.endsWith('/')) {
+    result = result.substring(0, result.length - 1);
+  }
+  if (result.isEmpty) {
+    throw const FormatException('RUNNER_PUBLIC_BASE_URL cannot be empty.');
+  }
+
+  final uri = Uri.tryParse(result);
+  if (uri == null ||
+      (uri.scheme != 'http' && uri.scheme != 'https') ||
+      uri.host.isEmpty) {
+    throw FormatException(
+      'RUNNER_PUBLIC_BASE_URL must be an absolute http/https URL: $value',
+    );
+  }
+
+  return result;
 }

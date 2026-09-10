@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 import '../../lessons/screens/lesson_list_screen.dart';
 import '../../project_mode/screens/project_mode_screen.dart';
 
@@ -64,6 +66,11 @@ class HomeScreen extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          const Align(
+                            alignment: Alignment.centerRight,
+                            child: AppThemeToggleButton(),
+                          ),
+                          const SizedBox(height: 8),
                           Icon(
                             Icons.widgets_outlined,
                             size: 72,

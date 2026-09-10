@@ -76,20 +76,91 @@ Future<List<({String path, Uint8List bytes})>?>
 
   final rootName = js_util.getProperty<String>(rootHandle, 'name').trim();
   final selected = <({String path, Object handle})>[];
+  final enumeratedGitMetadata = <({String path, Object handle})>[];
 
   await _collectDirectoryHandles(
     rootHandle,
     prefix: rootName,
     selected: selected,
+    gitMetadata: enumeratedGitMetadata,
   );
 
-  return _readFileSystemHandles(selected);
+  final portableFiles = await _readFileSystemHandles(selected);
+  final discoveredGitMetadata =
+      await _readFileSystemHandles(enumeratedGitMetadata);
+  final directGitMetadata = await _readRootGitMetadata(
+    rootHandle,
+    rootName: rootName,
+  );
+
+  final gitMetadataByPath = <String, Uint8List>{};
+  for (final entry in <({String path, Uint8List bytes})>[
+    ...discoveredGitMetadata,
+    ...directGitMetadata,
+  ]) {
+    gitMetadataByPath[entry.path] = entry.bytes;
+  }
+
+  return <({String path, Uint8List bytes})>[
+    ...portableFiles,
+    for (final entry in gitMetadataByPath.entries)
+      (path: entry.key, bytes: entry.value),
+  ];
+}
+
+Future<List<({String path, Uint8List bytes})>> _readRootGitMetadata(
+  Object rootHandle, {
+  required String rootName,
+}) async {
+  Object gitHandle;
+  try {
+    final promise = js_util.callMethod<Object>(
+      rootHandle,
+      'getDirectoryHandle',
+      <Object?>['.git'],
+    );
+    gitHandle = await js_util.promiseToFuture<Object>(promise);
+  } catch (_) {
+    return const <({String path, Uint8List bytes})>[];
+  }
+
+  final result = <({String path, Uint8List bytes})>[];
+  for (final name in const <String>['config', 'HEAD']) {
+    try {
+      final handlePromise = js_util.callMethod<Object>(
+        gitHandle,
+        'getFileHandle',
+        <Object?>[name],
+      );
+      final handle = await js_util.promiseToFuture<Object>(handlePromise);
+      final filePromise = js_util.callMethod<Object>(
+        handle,
+        'getFile',
+        const <Object?>[],
+      );
+      final file = await js_util.promiseToFuture<html.File>(filePromise);
+      if (file.size > 256 * 1024) continue;
+      final prefix = rootName.isEmpty ? '' : '$rootName/';
+      result.add(
+        (
+          path: '${prefix}.git/$name',
+          bytes: await _readFile(file),
+        ),
+      );
+    } catch (_) {
+      // Git metadata is optional. Failure to read one metadata file must not
+      // block opening the user's project folder.
+    }
+  }
+
+  return result;
 }
 
 Future<void> _collectDirectoryHandles(
   Object directoryHandle, {
   required String prefix,
   required List<({String path, Object handle})> selected,
+  required List<({String path, Object handle})> gitMetadata,
 }) async {
   final iterator = js_util.callMethod<Object>(
     directoryHandle,
@@ -114,11 +185,20 @@ Future<void> _collectDirectoryHandles(
     final path = prefix.isEmpty ? name : '$prefix/$name';
 
     if (kind == 'directory') {
+      if (name == '.git' && _isRootGitDirectoryPath(path)) {
+        await _collectRootGitMetadataHandles(
+          handle,
+          prefix: path,
+          selected: gitMetadata,
+        );
+        continue;
+      }
       if (_ignoredDirectoryNames.contains(name)) continue;
       await _collectDirectoryHandles(
         handle,
         prefix: path,
         selected: selected,
+        gitMetadata: gitMetadata,
       );
       continue;
     }
@@ -135,16 +215,57 @@ Future<void> _collectDirectoryHandles(
   }
 }
 
+Future<void> _collectRootGitMetadataHandles(
+  Object gitHandle, {
+  required String prefix,
+  required List<({String path, Object handle})> selected,
+}) async {
+  final iterator = js_util.callMethod<Object>(
+    gitHandle,
+    'values',
+    const <Object?>[],
+  );
+
+  while (true) {
+    final nextPromise = js_util.callMethod<Object>(
+      iterator,
+      'next',
+      const <Object?>[],
+    );
+    final next = await js_util.promiseToFuture<Object>(nextPromise);
+    if (js_util.getProperty<bool>(next, 'done')) return;
+
+    final handle = js_util.getProperty<Object>(next, 'value');
+    final name = js_util.getProperty<String>(handle, 'name').trim();
+    if (name != 'config' && name != 'HEAD') continue;
+
+    final kind = js_util.getProperty<String>(handle, 'kind');
+    if (kind != 'file') continue;
+
+    selected.add((path: '$prefix/$name', handle: handle));
+  }
+}
+
+bool _isRootGitDirectoryPath(String path) {
+  final segments = path
+      .replaceAll('\\', '/')
+      .split('/')
+      .where((segment) => segment.isNotEmpty)
+      .toList(growable: false);
+  return segments.length == 2 && segments.last == '.git';
+}
+
 Future<List<({String path, Uint8List bytes})>> _readFileSystemHandles(
   List<({String path, Object handle})> selected,
 ) async {
   final result = <({String path, Uint8List bytes})>[];
   var selectedBytes = 0;
 
-  for (var start = 0; start < selected.length; start += _directoryReadBatchSize) {
-    final end = (start + _directoryReadBatchSize)
-        .clamp(0, selected.length)
-        .toInt();
+  for (var start = 0;
+      start < selected.length;
+      start += _directoryReadBatchSize) {
+    final end =
+        (start + _directoryReadBatchSize).clamp(0, selected.length).toInt();
     final batch = selected.sublist(start, end);
 
     final files = await Future.wait(
@@ -200,7 +321,8 @@ Future<List<({String path, Uint8List bytes})>?>
 
   for (final file in files) {
     final path = _directoryPath(file);
-    if (_shouldIgnoreDirectoryPath(path)) continue;
+    final isGitMetadata = _isRootGitMetadataPath(path);
+    if (!isGitMetadata && _shouldIgnoreDirectoryPath(path)) continue;
 
     if (selected.length >= _maxImportedFiles) {
       throw const FormatException(
@@ -224,10 +346,11 @@ Future<List<({String path, Uint8List bytes})>?>
   }
 
   final result = <({String path, Uint8List bytes})>[];
-  for (var start = 0; start < selected.length; start += _directoryReadBatchSize) {
-    final end = (start + _directoryReadBatchSize)
-        .clamp(0, selected.length)
-        .toInt();
+  for (var start = 0;
+      start < selected.length;
+      start += _directoryReadBatchSize) {
+    final end =
+        (start + _directoryReadBatchSize).clamp(0, selected.length).toInt();
     final batch = selected.sublist(start, end);
     final bytes = await Future.wait(
       batch.map((entry) => _readFile(entry.file)),
@@ -252,10 +375,20 @@ bool _isAbortError(Object error) {
 
 String _directoryPath(html.File file) {
   final relativePath = file.relativePath?.trim();
-  final source = relativePath == null || relativePath.isEmpty
-      ? file.name
-      : relativePath;
+  final source =
+      relativePath == null || relativePath.isEmpty ? file.name : relativePath;
   return source.replaceAll('\\', '/');
+}
+
+bool _isRootGitMetadataPath(String path) {
+  final segments = path
+      .replaceAll('\\', '/')
+      .split('/')
+      .where((segment) => segment.isNotEmpty)
+      .toList(growable: false);
+  if (segments.length < 2 || segments.length > 3) return false;
+  return segments[segments.length - 2] == '.git' &&
+      (segments.last == 'config' || segments.last == 'HEAD');
 }
 
 bool _shouldIgnoreDirectoryPath(String path) {

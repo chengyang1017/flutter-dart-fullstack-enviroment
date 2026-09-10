@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 import '../data/lesson_catalog.dart';
 import '../data/lesson_progress_store.dart';
 import '../models/lesson.dart';
@@ -111,6 +113,10 @@ class _LessonListScreenState extends State<LessonListScreen> {
         title: Text(
           project?.title ?? '教材模式',
         ),
+        actions: const [
+          AppThemeToggleButton(),
+          SizedBox(width: 6),
+        ],
       ),
       body: SafeArea(
         child:

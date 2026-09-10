@@ -42,14 +42,44 @@ class HttpWorkspaceGitRemoteService implements WorkspaceGitRemoteService {
     required String workspaceId,
     String? secretName,
     String? username,
+  }) {
+    return _pullRemote(
+      workspaceId: workspaceId,
+      secretName: secretName,
+      username: username,
+      includeRepository: false,
+    );
+  }
+
+  Future<WorkspaceGitPullResult> pullRepositoryRemote({
+    required String workspaceId,
+    String? secretName,
+    String? username,
+  }) {
+    return _pullRemote(
+      workspaceId: workspaceId,
+      secretName: secretName,
+      username: username,
+      includeRepository: true,
+    );
+  }
+
+  Future<WorkspaceGitPullResult> _pullRemote({
+    required String workspaceId,
+    required bool includeRepository,
+    String? secretName,
+    String? username,
   }) async {
     final body = await _postGitAction(
       workspaceId: workspaceId,
       action: 'pull',
-      requestBody: _credentialReferenceBody(
-        secretName: secretName,
-        username: username,
-      ),
+      requestBody: <String, dynamic>{
+        ..._credentialReferenceBody(
+          secretName: secretName,
+          username: username,
+        ),
+        if (includeRepository) 'includeRepository': true,
+      },
       fallbackError: 'Git pull failed.',
     );
     return WorkspaceGitPullResult.fromJson(body);

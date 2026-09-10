@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'runner_authenticator.dart';
 import 'runner_session.dart';
@@ -10,6 +11,13 @@ class RunnerServer {
     required this.manager,
     required this.authenticator,
     this.allowedOrigin = '*',
+    this.allowTerminalCommands = false,
+    this.maxSessionsPerUser = 2,
+    this.maxTotalSessions = 4,
+    this.maxRequestBytes = 32 * 1024 * 1024,
+    this.maxWorkspaceFiles = 5000,
+    this.maxFileBytes = 8 * 1024 * 1024,
+    this.maxWorkspaceBytes = 24 * 1024 * 1024,
   });
 
   static const _supportedFirebaseCapabilities = <String>{
@@ -24,7 +32,19 @@ class RunnerServer {
   final SessionManager manager;
   final RunnerAuthenticator authenticator;
   final String allowedOrigin;
+  final bool allowTerminalCommands;
+  final int maxSessionsPerUser;
+  final int maxTotalSessions;
+  final int maxRequestBytes;
+  final int maxWorkspaceFiles;
+  final int maxFileBytes;
+  final int maxWorkspaceBytes;
   final Map<String, String> _sessionOwners = <String, String>{};
+  final HttpClient _proxyClient = HttpClient();
+
+  void close() {
+    _proxyClient.close(force: true);
+  }
 
   Future<void> handle(HttpRequest request) async {
     if (request.method == 'OPTIONS') {
@@ -41,6 +61,12 @@ class RunnerServer {
           'status': 'ok',
           'activeSessions': manager.sessions.length,
         });
+        return;
+      }
+
+      if (segments.isNotEmpty &&
+          (segments.first == 'preview' || segments.first == 'backend')) {
+        await _proxyRuntimeGateway(request, segments);
         return;
       }
 
@@ -76,6 +102,24 @@ class RunnerServer {
           body['platforms'],
         );
         final includeWorkspace = body['includeWorkspace'] == true;
+
+        if (manager.sessions.length >= maxTotalSessions) {
+          await _sendError(
+            request.response,
+            HttpStatus.tooManyRequests,
+            'Runner is at its active session limit. Try again later.',
+          );
+          return;
+        }
+
+        if (_activeSessionCountForUser(userId) >= maxSessionsPerUser) {
+          await _sendError(
+            request.response,
+            HttpStatus.tooManyRequests,
+            'You already have the maximum number of active Runner sessions.',
+          );
+          return;
+        }
 
         final session = await manager.createSession(
           files,
@@ -178,6 +222,14 @@ class RunnerServer {
             );
             return;
           case 'command':
+            if (!allowTerminalCommands) {
+              await _sendError(
+                request.response,
+                HttpStatus.forbidden,
+                'Terminal commands are disabled on this Runner.',
+              );
+              return;
+            }
             final body = await _readJsonObject(request);
             final command = _readTerminalCommand(body['command']);
             final exitCode = await _runTerminalCommand(session, command);
@@ -216,8 +268,15 @@ class RunnerServer {
       );
     } on RunnerSessionNotFound catch (error) {
       await _sendError(request.response, HttpStatus.notFound, error.toString());
+    } on RunnerPayloadTooLarge catch (error) {
+      await _sendError(
+        request.response,
+        HttpStatus.requestEntityTooLarge,
+        error.message,
+      );
     } on FormatException catch (error) {
-      await _sendError(request.response, HttpStatus.badRequest, error.toString());
+      await _sendError(
+          request.response, HttpStatus.badRequest, error.toString());
     } on StateError catch (error) {
       await _sendError(request.response, HttpStatus.conflict, error.toString());
     } catch (error, stackTrace) {
@@ -229,6 +288,264 @@ class RunnerServer {
         error.toString(),
       );
     }
+  }
+
+  Future<void> _proxyRuntimeGateway(
+    HttpRequest request,
+    List<String> segments,
+  ) async {
+    if (segments.length < 3) {
+      await _sendError(
+        request.response,
+        HttpStatus.notFound,
+        'Runtime gateway route not found.',
+      );
+      return;
+    }
+
+    final kind = segments[0];
+    final sessionId = segments[1];
+    final accessKey = segments[2];
+
+    RunnerSession session;
+    try {
+      session = manager.requireSession(sessionId);
+    } on RunnerSessionNotFound {
+      await _sendError(
+        request.response,
+        HttpStatus.notFound,
+        'Runtime session not found.',
+      );
+      return;
+    }
+
+    if (session.publicAccessKey != accessKey) {
+      await _sendError(
+        request.response,
+        HttpStatus.notFound,
+        'Runtime session not found.',
+      );
+      return;
+    }
+
+    final targetPort = kind == 'preview'
+        ? session.previewGatewayPort
+        : session.backendGatewayPort;
+    if (targetPort == null) {
+      await _sendError(
+        request.response,
+        HttpStatus.serviceUnavailable,
+        '$kind runtime is not running.',
+      );
+      return;
+    }
+
+    session.touch();
+
+    final remainingSegments = segments.skip(3).toList(growable: false);
+    final targetPath =
+        remainingSegments.isEmpty ? '/' : '/${remainingSegments.join('/')}';
+    final targetUri = Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: targetPort,
+      path: targetPath,
+      query: request.uri.query.isEmpty ? null : request.uri.query,
+    );
+    final gatewayBasePath = '/$kind/$sessionId/$accessKey/';
+
+    if (WebSocketTransformer.isUpgradeRequest(request)) {
+      await _proxyRuntimeWebSocket(request, targetUri);
+      return;
+    }
+
+    try {
+      final upstreamRequest = await _proxyClient.openUrl(
+        request.method,
+        targetUri,
+      );
+
+      _copyProxyRequestHeaders(request.headers, upstreamRequest.headers);
+      upstreamRequest.headers.set(
+        'x-forwarded-prefix',
+        gatewayBasePath.substring(0, gatewayBasePath.length - 1),
+      );
+
+      await upstreamRequest.addStream(request);
+      final upstreamResponse = await upstreamRequest.close();
+
+      final response = request.response;
+      response.statusCode = upstreamResponse.statusCode;
+      _copyProxyResponseHeaders(
+        upstreamResponse.headers,
+        response.headers,
+        gatewayBasePath: gatewayBasePath,
+      );
+      _setCors(response);
+
+      final isPreviewHtml = kind == 'preview' &&
+          upstreamResponse.headers.contentType?.mimeType == 'text/html';
+
+      if (isPreviewHtml) {
+        final bytes = <int>[];
+        await for (final chunk in upstreamResponse) {
+          bytes.addAll(chunk);
+        }
+        final source = utf8.decode(bytes, allowMalformed: true);
+        final rewritten = _rewritePreviewHtml(
+          source,
+          gatewayBasePath,
+        );
+        response.headers.contentType = ContentType.html;
+        response.write(rewritten);
+      } else {
+        await response.addStream(upstreamResponse);
+      }
+
+      await response.close();
+    } on SocketException catch (error) {
+      try {
+        await _sendError(
+          request.response,
+          HttpStatus.badGateway,
+          'Runtime gateway connection failed: ${error.message}',
+        );
+      } catch (_) {
+        await request.response.close();
+      }
+    }
+  }
+
+  Future<void> _proxyRuntimeWebSocket(
+    HttpRequest request,
+    Uri targetUri,
+  ) async {
+    final protocolsHeader = request.headers.value(
+      'sec-websocket-protocol',
+    );
+    final protocols = protocolsHeader
+        ?.split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+
+    final upstream = await WebSocket.connect(
+      targetUri.replace(scheme: 'ws').toString(),
+      protocols: protocols == null || protocols.isEmpty ? null : protocols,
+    );
+
+    final selectedProtocol = upstream.protocol;
+    final downstream = await WebSocketTransformer.upgrade(
+      request,
+      protocolSelector: selectedProtocol == null
+          ? null
+          : (offered) =>
+              offered.contains(selectedProtocol) ? selectedProtocol : null,
+    );
+
+    downstream.listen(
+      upstream.add,
+      onError: (_) => upstream.close(),
+      onDone: () {
+        upstream.close();
+      },
+      cancelOnError: true,
+    );
+    upstream.listen(
+      downstream.add,
+      onError: (_) => downstream.close(),
+      onDone: () {
+        downstream.close();
+      },
+      cancelOnError: true,
+    );
+  }
+
+  void _copyProxyRequestHeaders(
+    HttpHeaders source,
+    HttpHeaders target,
+  ) {
+    source.forEach((name, values) {
+      final lower = name.toLowerCase();
+      if (_isHopByHopHeader(lower) ||
+          lower == HttpHeaders.hostHeader ||
+          lower == HttpHeaders.contentLengthHeader ||
+          lower == HttpHeaders.acceptEncodingHeader) {
+        return;
+      }
+      for (final value in values) {
+        target.add(name, value);
+      }
+    });
+  }
+
+  void _copyProxyResponseHeaders(
+    HttpHeaders source,
+    HttpHeaders target, {
+    required String gatewayBasePath,
+  }) {
+    source.forEach((name, values) {
+      final lower = name.toLowerCase();
+      if (_isHopByHopHeader(lower) ||
+          lower == HttpHeaders.contentLengthHeader ||
+          lower == HttpHeaders.contentEncodingHeader) {
+        return;
+      }
+
+      if (lower == HttpHeaders.locationHeader && values.isNotEmpty) {
+        final location = values.first;
+        if (location.startsWith('/')) {
+          target.set(
+            HttpHeaders.locationHeader,
+            '$gatewayBasePath${location.substring(1)}',
+          );
+          return;
+        }
+      }
+
+      for (final value in values) {
+        target.add(name, value);
+      }
+    });
+  }
+
+  bool _isHopByHopHeader(String name) {
+    return name == HttpHeaders.connectionHeader ||
+        name == 'keep-alive' ||
+        name == 'proxy-authenticate' ||
+        name == 'proxy-authorization' ||
+        name == 'te' ||
+        name == 'trailers' ||
+        name == HttpHeaders.transferEncodingHeader ||
+        name == HttpHeaders.upgradeHeader;
+  }
+
+  String _rewritePreviewHtml(
+    String source,
+    String gatewayBasePath,
+  ) {
+    final baseTag = RegExp(
+      r'''<base\s+href=(["'])(.*?)\1\s*/?>''',
+      caseSensitive: false,
+    );
+
+    if (baseTag.hasMatch(source)) {
+      return source.replaceFirst(
+        baseTag,
+        '<base href="$gatewayBasePath">',
+      );
+    }
+
+    final headTag = RegExp(
+      r'<head(?:\s[^>]*)?>',
+      caseSensitive: false,
+    );
+    if (!headTag.hasMatch(source)) return source;
+
+    return source.replaceFirstMapped(
+      headTag,
+      (match) => '${match.group(0)}\n<base href="$gatewayBasePath">',
+    );
   }
 
   Future<int> _runTerminalCommand(
@@ -342,9 +659,8 @@ class RunnerServer {
         '.dart_tool/package_config.json',
       );
 
-      final lockContent = await lockFile.exists()
-          ? await lockFile.readAsString()
-          : null;
+      final lockContent =
+          await lockFile.exists() ? await lockFile.readAsString() : null;
       final hasPackageConfig = await packageConfig.exists();
 
       session.setStatus(
@@ -470,8 +786,43 @@ class RunnerServer {
   }
 
   Future<Map<String, dynamic>> _readJsonObject(HttpRequest request) async {
-    final source = await utf8.decoder.bind(request).join();
+    final declaredLength = request.contentLength;
+    if (declaredLength > maxRequestBytes) {
+      await request.drain<void>();
+      throw RunnerPayloadTooLarge(
+        'Request body exceeds the $maxRequestBytes byte limit.',
+      );
+    }
+
+    final builder = BytesBuilder(copy: false);
+    var received = 0;
+    var tooLarge = false;
+
+    await for (final chunk in request) {
+      received += chunk.length;
+
+      if (received > maxRequestBytes) {
+        tooLarge = true;
+        continue;
+      }
+
+      if (!tooLarge) {
+        builder.add(chunk);
+      }
+    }
+
+    if (tooLarge) {
+      throw RunnerPayloadTooLarge(
+        'Request body exceeds the $maxRequestBytes byte limit.',
+      );
+    }
+
+    final source = utf8.decode(
+      builder.takeBytes(),
+      allowMalformed: false,
+    );
     if (source.trim().isEmpty) return <String, dynamic>{};
+
     final decoded = jsonDecode(source);
     if (decoded is! Map) {
       throw const FormatException('Request body must be a JSON object.');
@@ -483,16 +834,54 @@ class RunnerServer {
     if (value is! Map) {
       throw const FormatException('files must be a JSON object.');
     }
+
+    if (value.length > maxWorkspaceFiles) {
+      throw RunnerPayloadTooLarge(
+        'Workspace contains more than $maxWorkspaceFiles files.',
+      );
+    }
+
     final result = <String, String>{};
+    var workspaceBytes = 0;
+
     for (final entry in value.entries) {
       if (entry.key is! String || entry.value is! String) {
         throw const FormatException(
           'Workspace files must map string paths to string contents.',
         );
       }
-      result[entry.key as String] = entry.value as String;
+
+      final path = entry.key as String;
+      final content = entry.value as String;
+      final fileBytes = utf8.encode(content).length;
+
+      if (fileBytes > maxFileBytes) {
+        throw RunnerPayloadTooLarge(
+          'Workspace file exceeds the $maxFileBytes byte limit: $path',
+        );
+      }
+
+      workspaceBytes += fileBytes;
+      if (workspaceBytes > maxWorkspaceBytes) {
+        throw RunnerPayloadTooLarge(
+          'Workspace payload exceeds the $maxWorkspaceBytes byte limit.',
+        );
+      }
+
+      result[path] = content;
     }
+
     return result;
+  }
+
+  int _activeSessionCountForUser(String userId) {
+    var count = 0;
+    for (final session in manager.sessions) {
+      if (_sessionOwners[session.id] == userId) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   Set<String>? _readFirebaseCapabilities(Object? value) {
@@ -550,4 +939,13 @@ class RunnerServer {
     );
     response.headers.set('cache-control', 'no-store');
   }
+}
+
+class RunnerPayloadTooLarge implements Exception {
+  const RunnerPayloadTooLarge(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

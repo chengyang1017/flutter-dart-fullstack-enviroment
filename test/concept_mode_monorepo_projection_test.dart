@@ -37,7 +37,7 @@ void main() {
       );
       expect(
         find.text(
-          'chengyang1017/glyphora / apps/mobile-flutter · lib/ only',
+          'chengyang1017/glyphora / apps/mobile-flutter · 应用 + 后端',
         ),
         findsOneWidget,
       );
@@ -47,6 +47,18 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('concept-lib-entry-lib/screens')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('concept-root-app')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('concept-root-backend')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('concept-lib-entry-backend/index.ts')),
         findsOneWidget,
       );
       expect(find.text('apps'), findsNothing);
@@ -77,6 +89,12 @@ WorkspaceSnapshot _repositorySnapshot() {
       id: 'api',
       path: 'apps/api',
       type: WorkspaceEntryType.directory,
+    ),
+    const WorkspaceEntry(
+      id: 'api-package',
+      path: 'apps/api/package.json',
+      type: WorkspaceEntryType.file,
+      content: '{"name":"api","dependencies":{"express":"^5.0.0"}}',
     ),
     const WorkspaceEntry(
       id: 'api-file',

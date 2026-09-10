@@ -154,6 +154,7 @@ class WorkspaceProjectLibrary {
   Future<WorkspaceProject> createImportedFlutter({
     required String name,
     required WorkspaceSnapshot snapshot,
+    WorkspaceGitRemote? gitRemote,
   }) async {
     final cleanName = _validateName(name);
     final now = DateTime.now().toUtc();
@@ -167,6 +168,7 @@ class WorkspaceProjectLibrary {
       lifecycle: WorkspaceLifecycle.saved,
       createdAt: now,
       updatedAt: now,
+      gitRemote: gitRemote,
     );
 
     await snapshotStore.save(project.storageKey, snapshot);
@@ -222,8 +224,15 @@ class WorkspaceProjectLibrary {
   Future<void> bindGitRemote(String id, WorkspaceGitRemote remote) async {
     final index = _projectIndex(id);
     final existing = _projects[index].gitRemote;
+    final sameStableRepository = existing != null &&
+        existing.repositoryId != null &&
+        remote.repositoryId != null &&
+        existing.repositoryId == remote.repositoryId;
+    final repositoryChanged = existing != null &&
+        !sameStableRepository &&
+        existing.repositoryUrl != remote.repositoryUrl;
     final targetChanged = existing != null &&
-        (existing.repositoryUrl != remote.repositoryUrl ||
+        (repositoryChanged ||
             existing.remoteName != remote.remoteName ||
             existing.branch != remote.branch ||
             existing.projectPath != remote.projectPath);

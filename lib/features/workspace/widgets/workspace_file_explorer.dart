@@ -68,12 +68,17 @@ class WorkspaceFileExplorer extends StatelessWidget {
             color: _WorkspaceExplorerPalette.border,
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              children: workspace
-                  .childrenOf('')
-                  .map((entry) => _buildEntry(context, entry, 0))
-                  .toList(),
+            child: Builder(
+              builder: (context) {
+                final rootEntries = workspace.childrenOf('');
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  itemCount: rootEntries.length,
+                  itemBuilder: (context, index) {
+                    return _buildEntry(context, rootEntries[index], 0);
+                  },
+                );
+              },
             ),
           ),
         ],
@@ -92,6 +97,7 @@ class WorkspaceFileExplorer extends StatelessWidget {
     int depth,
   ) {
     if (entry.isDirectory) {
+      final expanded = workspace.isDirectoryExpanded(entry.path);
       final folder = DragTarget<String>(
         onWillAccept: (sourcePath) {
           if (sourcePath == null) return false;
@@ -150,10 +156,12 @@ class WorkspaceFileExplorer extends StatelessWidget {
                   type: WorkspaceEntryType.directory,
                 ),
               ),
-              children: workspace
-                  .childrenOf(entry.path)
-                  .map((child) => _buildEntry(context, child, depth + 1))
-                  .toList(),
+              children: expanded
+                  ? workspace
+                      .childrenOf(entry.path)
+                      .map((child) => _buildEntry(context, child, depth + 1))
+                      .toList(growable: false)
+                  : const <Widget>[],
             ),
           );
         },
@@ -387,12 +395,7 @@ class WorkspaceFileExplorer extends StatelessWidget {
   }
 
   bool _hasDirtyDescendant(String directory) {
-    return workspace.entries.any(
-      (entry) =>
-          entry.isFile &&
-          entry.path.startsWith('$directory/') &&
-          workspace.isFileDirty(entry.path),
-    );
+    return workspace.hasDirtyFileDescendant(directory);
   }
 
   Future<void> _createEntry(

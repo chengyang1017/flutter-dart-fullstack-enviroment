@@ -174,89 +174,89 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.cable_outlined, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '电线模式',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _analyzing ? '自动更新中…' : '已开启 · 自动追踪当前函数',
-                        key: const ValueKey('wire-mode-live-indicator'),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: _analyzing
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
+          if (graph != null)
+            Container(
+              height: 38,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.outlineVariant,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _DirectionButton(
+                      icon: Icons.call_made_outlined,
+                      label: '我调用 ${graph.directCalleeCount}',
+                      selected:
+                          _direction == FunctionCallGraphDirection.outgoing,
+                      onPressed: () {
+                        if (_direction == FunctionCallGraphDirection.outgoing) {
+                          return;
+                        }
+                        setState(() {
+                          _direction = FunctionCallGraphDirection.outgoing;
+                        });
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    height: 22,
+                    child: VerticalDivider(
+                      width: 1,
+                      color: theme.colorScheme.outlineVariant,
+                    ),
+                  ),
+                  Expanded(
+                    child: _DirectionButton(
+                      icon: Icons.call_received_outlined,
+                      label: '调用我 ${graph.directCallerCount}',
+                      selected:
+                          _direction == FunctionCallGraphDirection.incoming,
+                      onPressed: () {
+                        if (_direction == FunctionCallGraphDirection.incoming) {
+                          return;
+                        }
+                        setState(() {
+                          _direction = FunctionCallGraphDirection.incoming;
+                        });
+                      },
+                    ),
+                  ),
+                  if (_statusMessage case final status?)
+                    Tooltip(
+                      message: status,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(
+                          Icons.info_outline_rounded,
+                          size: 16,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    ],
+                    ),
+                  IconButton(
+                    tooltip: '立即刷新电线',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints.tightFor(width: 36, height: 36),
+                    onPressed: _analyzing ? null : _analyze,
+                    icon: _analyzing
+                        ? const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(strokeWidth: 1.8),
+                          )
+                        : const Icon(Icons.refresh_rounded, size: 18),
                   ),
-                ),
-                IconButton(
-                  tooltip: '立即刷新电线',
-                  onPressed: _analyzing ? null : _analyze,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-          ),
-          if (_statusMessage case final status?)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: Text(
-                status,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          if (graph != null) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Text(
-                '${graph.scannedFiles} 个 Dart 文件 · '
-                '${graph.declarationCount} 个方法/函数 · 自动保持显示',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: SegmentedButton<FunctionCallGraphDirection>(
-                key: const ValueKey('code-flow-direction-selector'),
-                showSelectedIcon: false,
-                segments: <ButtonSegment<FunctionCallGraphDirection>>[
-                  ButtonSegment<FunctionCallGraphDirection>(
-                    value: FunctionCallGraphDirection.outgoing,
-                    icon: const Icon(Icons.call_made_outlined, size: 16),
-                    label: Text('我调用 ${graph.directCalleeCount}'),
-                  ),
-                  ButtonSegment<FunctionCallGraphDirection>(
-                    value: FunctionCallGraphDirection.incoming,
-                    icon: const Icon(Icons.call_received_outlined, size: 16),
-                    label: Text('调用我 ${graph.directCallerCount}'),
-                  ),
+                  const SizedBox(width: 2),
                 ],
-                selected: <FunctionCallGraphDirection>{_direction},
-                onSelectionChanged: (selection) {
-                  if (selection.isEmpty) return;
-                  setState(() => _direction = selection.first);
-                },
               ),
             ),
-          ],
-          const Divider(height: 16),
           Expanded(
             child: _buildBody(context, graph),
           ),
@@ -313,6 +313,47 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _DirectionButton extends StatelessWidget {
+  const _DirectionButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return TextButton.icon(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        minimumSize: const Size.fromHeight(38),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: selected
+            ? theme.colorScheme.primary
+            : theme.colorScheme.onSurfaceVariant,
+        backgroundColor: selected
+            ? theme.colorScheme.primaryContainer.withOpacity(0.55)
+            : Colors.transparent,
+        shape: const RoundedRectangleBorder(),
+      ),
+      icon: Icon(icon, size: 15),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 }

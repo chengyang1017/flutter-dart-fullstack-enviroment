@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 import '../../assets/widgets/asset_manager_dialog.dart';
 import '../../packages/widgets/package_manager_dialog.dart';
 import '../../playground/controllers/playground_controller.dart';
@@ -36,9 +38,9 @@ class ConceptModeScreen extends StatefulWidget {
   });
 
   /// When supplied, Concept Mode opens a selected Flutter subproject projected
-  /// from a larger repository. The projected Workspace itself still has a
-  /// normal Flutter root (`lib/`, `assets/`, `pubspec.yaml`), so visual tools do
-  /// not need to understand monorepo prefixes.
+  /// from a larger repository. The projected Workspace keeps a runnable Flutter
+  /// root while Concept Explorer presents `lib/` as App and an optional backend
+  /// source tree as the sibling Backend concept.
   final ConceptProjectProjection? projection;
 
   /// Optional persistence boundary for an existing project from Project Mode.
@@ -341,8 +343,8 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
             ),
             Text(
               sourceLabel == null
-                  ? 'Concept Mode · lib/ only'
-                  : '$sourceLabel · lib/ only',
+                  ? 'Concept Mode · 应用 + 后端'
+                  : '$sourceLabel · 应用 + 后端',
               key: sourceLabel == null
                   ? null
                   : const ValueKey('concept-source-project'),
@@ -351,6 +353,7 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
           ],
         ),
         actions: [
+          const AppThemeToggleButton(compact: true),
           IconButton(
             key: const ValueKey('concept-open-existing-project'),
             tooltip: '打开现有项目',
@@ -441,7 +444,7 @@ class _ConceptBoundaryBanner extends StatelessWidget {
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              '概念模式只直接控制 lib/。Assets、依赖和运行设备都通过界面管理；pubspec、lock、平台目录继续由系统隐藏处理。',
+              '概念模式直接展示应用与后端源码。Assets、依赖和运行设备继续通过界面管理；pubspec、lock、平台目录仍由系统隐藏处理。',
               style: TextStyle(fontSize: 12.5),
             ),
           ),

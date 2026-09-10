@@ -68,8 +68,8 @@ class _ConceptProjectPickerDialogState
                   const SizedBox(height: 4),
                   Text(
                     candidates.length == 1
-                        ? '检测到 1 个可运行 Flutter App。进入后仍然只显示它的 lib/。'
-                        : '检测到 ${candidates.length} 个可运行 Flutter App。选择概念模式要打开哪一个。',
+                        ? '检测到 1 个可运行 Flutter App。进入后显示应用，并自动寻找同仓库后端。'
+                        : '检测到 ${candidates.length} 个可运行 Flutter App。选择主应用；后端会从同仓库自动识别。',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),

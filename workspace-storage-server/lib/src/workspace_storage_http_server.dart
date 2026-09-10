@@ -248,6 +248,8 @@ class WorkspaceStorageHttpServer {
           workspaceId: workspaceId,
           secretName: _readOptionalString(body, 'secretName'),
           username: _readOptionalString(body, 'username'),
+          includeRepository:
+              _readOptionalBool(body, 'includeRepository') ?? false,
         );
         await _sendJson(request.response, HttpStatus.ok, result.toJson());
         return;
@@ -720,6 +722,15 @@ class WorkspaceStorageHttpServer {
     if (value == null) return null;
     if (value is! String) {
       throw FormatException('$key must be a string.');
+    }
+    return value;
+  }
+
+  bool? _readOptionalBool(Map<String, dynamic> body, String key) {
+    final value = body[key];
+    if (value == null) return null;
+    if (value is! bool) {
+      throw FormatException('$key must be a boolean.');
     }
     return value;
   }

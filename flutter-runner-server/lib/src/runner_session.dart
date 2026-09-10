@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 class RunnerLogEntry {
   const RunnerLogEntry({
@@ -20,11 +21,13 @@ class RunnerSession {
     required this.id,
     required this.directory,
     required this.createdAt,
-  }) : lastActivityAt = createdAt;
+  })  : publicAccessKey = _createPublicAccessKey(),
+        lastActivityAt = createdAt;
 
   final String id;
   final Directory directory;
   final DateTime createdAt;
+  final String publicAccessKey;
   DateTime lastActivityAt;
 
   String projectType = 'flutter';
@@ -43,6 +46,10 @@ class RunnerSession {
   int? runtimePreviewPort;
   int? runtimeBackendPort;
 
+  // Host ports exposed only through the public runtime gateway.
+  int? previewGatewayPort;
+  int? backendGatewayPort;
+
   // Database runtime state is also private to the runner. A Serverpod session
   // only receives these values when its workspace contains a persisted model.
   String? runtimeNetworkId;
@@ -51,6 +58,12 @@ class RunnerSession {
 
   final List<RunnerLogEntry> logs = <RunnerLogEntry>[];
   final Set<String> managedFiles = <String>{};
+
+  static String _createPublicAccessKey() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(24, (_) => random.nextInt(256));
+    return bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+  }
 
   void setStatus(String value) {
     status = value;

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../workspace/models/workspace_capability.dart';
 import '../../workspace/models/workspace_change.dart';
+import '../../workspace/services/workspace_auth_runtime.dart';
 import '../models/run_session.dart';
 import '../models/runner_event.dart';
 import '../models/runner_pub_get_result.dart';
@@ -14,11 +15,20 @@ class HttpFlutterRunnerClient
     implements FlutterRunnerClient, FlutterPackageRunnerClient {
   HttpFlutterRunnerClient({
     required String baseUrl,
-    this.accessToken = const String.fromEnvironment('RUNNER_API_TOKEN'),
+    String? accessToken,
     http.Client? httpClient,
     this.pollInterval = const Duration(milliseconds: 350),
   })  : baseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), ''),
+        accessToken = (accessToken ?? _defaultAccessToken()).trim(),
         _http = httpClient ?? http.Client();
+
+  static String _defaultAccessToken() {
+    const developmentToken = String.fromEnvironment('RUNNER_API_TOKEN');
+    if (developmentToken.trim().isNotEmpty) {
+      return developmentToken.trim();
+    }
+    return WorkspaceAuthRuntime.accessToken?.trim() ?? '';
+  }
 
   final String baseUrl;
   final String accessToken;

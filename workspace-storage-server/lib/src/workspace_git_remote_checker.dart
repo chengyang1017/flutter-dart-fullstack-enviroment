@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'workspace_secret_store.dart';
@@ -10,6 +11,9 @@ class WorkspaceGitRemoteCheckResult {
     required this.provider,
     required this.branchFound,
     this.remoteHead,
+    this.repositoryId,
+    this.repositoryFullName,
+    this.canonicalUrl,
   });
 
   final String repositoryUrl;
@@ -17,6 +21,9 @@ class WorkspaceGitRemoteCheckResult {
   final String provider;
   final bool branchFound;
   final String? remoteHead;
+  final int? repositoryId;
+  final String? repositoryFullName;
+  final String? canonicalUrl;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'repositoryUrl': repositoryUrl,
@@ -25,6 +32,10 @@ class WorkspaceGitRemoteCheckResult {
         'reachable': true,
         'branchFound': branchFound,
         'remoteHead': remoteHead,
+        if (repositoryId != null) 'repositoryId': repositoryId,
+        if (repositoryFullName != null)
+          'repositoryFullName': repositoryFullName,
+        if (canonicalUrl != null) 'canonicalUrl': canonicalUrl,
       };
 }
 
@@ -57,7 +68,8 @@ abstract interface class WorkspaceGitCommandExecutor {
   });
 }
 
-class ProcessWorkspaceGitCommandExecutor implements WorkspaceGitCommandExecutor {
+class ProcessWorkspaceGitCommandExecutor
+    implements WorkspaceGitCommandExecutor {
   const ProcessWorkspaceGitCommandExecutor({this.gitExecutable = 'git'});
 
   final String gitExecutable;
@@ -114,7 +126,8 @@ class ProcessWorkspaceGitCommandExecutor implements WorkspaceGitCommandExecutor 
 
   Future<File> _createAskPass(Directory directory) async {
     if (Platform.isWindows) {
-      final file = File('${directory.path}${Platform.pathSeparator}askpass.cmd');
+      final file =
+          File('${directory.path}${Platform.pathSeparator}askpass.cmd');
       await file.writeAsString(
         '@echo off\r\n'
         'echo %~1 | findstr /I "Username" >nul\r\n'
@@ -183,6 +196,9 @@ class WorkspaceGitRemoteChecker {
     final repositoryUrl = _validateRepositoryUrl(remote['repositoryUrl']);
     final branch = _validateBranch(remote['branch']);
     final provider = _readProvider(remote['provider']);
+    final storedRepositoryId = _readOptionalRepositoryId(
+      remote['repositoryId'],
+    );
 
     String? secret;
     if (secretName != null && secretName.trim().isNotEmpty) {
@@ -218,13 +234,133 @@ class WorkspaceGitRemoteChecker {
     final remoteHead =
         firstLine.isEmpty ? null : firstLine.split(RegExp(r'\s+')).first;
 
+    _GitHubRepositoryIdentity? identity;
+    if (provider == 'github' &&
+        executor is ProcessWorkspaceGitCommandExecutor) {
+      identity = await _tryResolveGitHubIdentity(
+        repositoryUrl,
+        secret: secret,
+      );
+      if (storedRepositoryId != null &&
+          identity != null &&
+          identity.id != storedRepositoryId) {
+        throw WorkspaceGitRemoteException(
+          'GitHub repository identity changed. Stored repository id '
+          '$storedRepositoryId does not match ${identity.id}. Rebind the '
+          'Workspace before pushing.',
+        );
+      }
+    }
+
     return WorkspaceGitRemoteCheckResult(
       repositoryUrl: repositoryUrl,
       branch: branch,
       provider: provider,
       branchFound: remoteHead != null,
       remoteHead: remoteHead,
+      repositoryId: identity?.id ?? storedRepositoryId,
+      repositoryFullName: identity?.fullName,
+      canonicalUrl: identity?.htmlUrl,
     );
+  }
+
+  int? _readOptionalRepositoryId(Object? value) {
+    if (value == null) return null;
+    if (value is! int || value <= 0) {
+      throw const FormatException('Invalid GitHub repository id.');
+    }
+    return value;
+  }
+
+  Future<_GitHubRepositoryIdentity?> _tryResolveGitHubIdentity(
+    String repositoryUrl, {
+    String? secret,
+  }) async {
+    final coordinates = _githubCoordinates(repositoryUrl);
+    if (coordinates == null) return null;
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 8);
+    try {
+      final uri = Uri.https(
+        'api.github.com',
+        '/repos/${coordinates.owner}/${coordinates.name}',
+      );
+      final request = await client.getUrl(uri);
+      request.followRedirects = true;
+      request.maxRedirects = 5;
+      request.headers
+        ..set(HttpHeaders.acceptHeader, 'application/vnd.github+json')
+        ..set(HttpHeaders.userAgentHeader, 'flutter-dart-fullstack-environment')
+        ..set('X-GitHub-Api-Version', '2022-11-28');
+      if (secret != null && secret.isNotEmpty) {
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $secret');
+      }
+
+      final response = await request.close();
+      final body = await utf8.decoder.bind(response).join();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return null;
+      final id = decoded['id'];
+      final fullName = decoded['full_name'];
+      final htmlUrl = decoded['html_url'];
+      if (id is! int ||
+          id <= 0 ||
+          fullName is! String ||
+          fullName.isEmpty ||
+          htmlUrl is! String ||
+          htmlUrl.isEmpty) {
+        return null;
+      }
+
+      return _GitHubRepositoryIdentity(
+        id: id,
+        fullName: fullName,
+        htmlUrl: htmlUrl,
+      );
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  _GitHubCoordinates? _githubCoordinates(String repositoryUrl) {
+    final scp = RegExp(
+      r'^[^@\s]+@github\.com:([^/\s]+)/([^\s]+)$',
+      caseSensitive: false,
+    ).firstMatch(repositoryUrl);
+    if (scp != null) {
+      return _GitHubCoordinates(
+        owner: scp.group(1)!,
+        name: _trimGitSuffix(scp.group(2)!),
+      );
+    }
+
+    final uri = Uri.tryParse(repositoryUrl);
+    if (uri == null || uri.host.toLowerCase() != 'github.com') return null;
+    final parts = uri.pathSegments
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.length < 2) return null;
+    return _GitHubCoordinates(
+      owner: parts[0],
+      name: _trimGitSuffix(parts[1]),
+    );
+  }
+
+  String _trimGitSuffix(String value) {
+    var source = value.trim();
+    while (source.endsWith('/')) {
+      source = source.substring(0, source.length - 1);
+    }
+    return source.toLowerCase().endsWith('.git')
+        ? source.substring(0, source.length - 4)
+        : source;
   }
 
   String _validateRepositoryUrl(Object? value) {
@@ -283,4 +419,26 @@ class WorkspaceGitRemoteChecker {
         'bitbucket' => 'x-token-auth',
         _ => 'oauth2',
       };
+}
+
+class _GitHubCoordinates {
+  const _GitHubCoordinates({
+    required this.owner,
+    required this.name,
+  });
+
+  final String owner;
+  final String name;
+}
+
+class _GitHubRepositoryIdentity {
+  const _GitHubRepositoryIdentity({
+    required this.id,
+    required this.fullName,
+    required this.htmlUrl,
+  });
+
+  final int id;
+  final String fullName;
+  final String htmlUrl;
 }

@@ -4,17 +4,27 @@ import 'package:http/http.dart' as http;
 
 import '../../workspace/models/workspace_entry.dart';
 import '../../workspace/models/workspace_snapshot.dart';
+import '../../workspace/services/workspace_auth_runtime.dart';
 
 class FlutterProjectScaffoldService {
   FlutterProjectScaffoldService({
     required String baseUrl,
-    this.accessToken = const String.fromEnvironment('RUNNER_API_TOKEN'),
+    String? accessToken,
     http.Client? httpClient,
   })  : baseUrl = baseUrl.replaceFirst(
           RegExp(r'/+$'),
           '',
         ),
+        accessToken = (accessToken ?? _defaultAccessToken()).trim(),
         _http = httpClient ?? http.Client();
+
+  static String _defaultAccessToken() {
+    const developmentToken = String.fromEnvironment('RUNNER_API_TOKEN');
+    if (developmentToken.trim().isNotEmpty) {
+      return developmentToken.trim();
+    }
+    return WorkspaceAuthRuntime.accessToken?.trim() ?? '';
+  }
 
   final String baseUrl;
   final String accessToken;

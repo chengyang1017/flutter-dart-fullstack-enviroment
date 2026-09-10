@@ -17,7 +17,7 @@ class SessionManager {
   static const flutterDartFrogProjectType = 'flutter-dart-frog';
   static const flutterServerpodMiniProjectType = 'flutter-serverpod-mini';
   static const serverpodServerDirectory = 'serverpod/practice_server';
-    static const supportedFlutterPlatforms = <String>{
+  static const supportedFlutterPlatforms = <String>{
     'android',
     'ios',
     'web',
@@ -54,7 +54,7 @@ class SessionManager {
     return session;
   }
 
-    Future<RunnerSession> createSession(
+  Future<RunnerSession> createSession(
     Map<String, String> files, {
     String projectName = 'flutter_practice',
     List<String> platforms = const <String>['web'],
@@ -137,7 +137,7 @@ class SessionManager {
     }
   }
 
-    Future<Map<String, Object?>> readWorkspaceTree(
+  Future<Map<String, Object?>> readWorkspaceTree(
     RunnerSession session,
   ) async {
     // Docker 环境再次确保最新 workspace 已经拉回宿主机。
@@ -252,6 +252,8 @@ class SessionManager {
 
     session.previewUrl = null;
     session.backendUrl = null;
+    session.previewGatewayPort = null;
+    session.backendGatewayPort = null;
     session.setStatus('starting');
     session.addLog('[runner] flutter pub get');
 
@@ -277,9 +279,11 @@ class SessionManager {
         session,
         dartDefines: dartDefines,
       );
-      session.previewUrl = previewUrlTemplate.replaceAll(
-        '{port}',
-        '${launch.previewPort}',
+      session.previewGatewayPort = launch.previewPort;
+      session.previewUrl = _resolveRuntimeUrl(
+        previewUrlTemplate,
+        session,
+        launch.previewPort,
       );
       session.addLog('[runner] ${launch.description}');
       for (final entry in dartDefines.entries) {
@@ -300,6 +304,7 @@ class SessionManager {
       }
       session.backendProcess = null;
       session.backendUrl = null;
+      session.backendGatewayPort = null;
       session.setStatus('error');
       rethrow;
     }
@@ -364,6 +369,8 @@ class SessionManager {
     if (flutterProcess == null && backendProcess == null) {
       session.previewUrl = null;
       session.backendUrl = null;
+      session.previewGatewayPort = null;
+      session.backendGatewayPort = null;
       session.setStatus('stopped');
       return;
     }
@@ -381,6 +388,8 @@ class SessionManager {
     session.backendProcess = null;
     session.previewUrl = null;
     session.backendUrl = null;
+    session.previewGatewayPort = null;
+    session.backendGatewayPort = null;
     session.setStatus('stopped');
   }
 
@@ -482,9 +491,11 @@ class SessionManager {
     required String framework,
   }) {
     session.backendProcess = launch.process;
-    session.backendUrl = backendUrlTemplate.replaceAll(
-      '{port}',
-      '${launch.previewPort}',
+    session.backendGatewayPort = launch.previewPort;
+    session.backendUrl = _resolveRuntimeUrl(
+      backendUrlTemplate,
+      session,
+      launch.previewPort,
     );
     session.addLog('[backend] $framework: ${launch.description}');
     _listenToBackendOutput(session, launch.process, framework);
@@ -591,9 +602,11 @@ class SessionManager {
 
     session.process = null;
     session.previewUrl = null;
+    session.previewGatewayPort = null;
     session.addLog('[runner] Flutter process exited with code $exitCode.');
 
-    final stopping = session.status == 'stopping' || session.status == 'stopped';
+    final stopping =
+        session.status == 'stopping' || session.status == 'stopped';
     if (!stopping) {
       final backendProcess = session.backendProcess;
       if (backendProcess != null) {
@@ -604,6 +617,7 @@ class SessionManager {
         }
         session.backendProcess = null;
         session.backendUrl = null;
+        session.backendGatewayPort = null;
       }
     }
 
@@ -624,9 +638,11 @@ class SessionManager {
 
     session.backendProcess = null;
     session.backendUrl = null;
+    session.backendGatewayPort = null;
     session.addLog('[backend] $framework process exited with code $exitCode.');
 
-    final stopping = session.status == 'stopping' || session.status == 'stopped';
+    final stopping =
+        session.status == 'stopping' || session.status == 'stopped';
     if (stopping) return;
 
     final flutterProcess = session.process;
@@ -638,6 +654,7 @@ class SessionManager {
       }
       session.process = null;
       session.previewUrl = null;
+      session.previewGatewayPort = null;
     }
     session.setStatus('error');
   }
@@ -681,7 +698,8 @@ class SessionManager {
   String _detectProjectType(Map<String, String> files) {
     final hasDartFrog = files.containsKey('backend/pubspec.yaml') &&
         files.keys.any(
-          (path) => path.startsWith('backend/routes/') && path.endsWith('.dart'),
+          (path) =>
+              path.startsWith('backend/routes/') && path.endsWith('.dart'),
         );
     final hasServerpod = files.containsKey(
           'serverpod/practice_server/config/generator.yaml',
@@ -696,6 +714,17 @@ class SessionManager {
     if (hasServerpod) return flutterServerpodMiniProjectType;
     if (hasDartFrog) return flutterDartFrogProjectType;
     return flutterProjectType;
+  }
+
+  String _resolveRuntimeUrl(
+    String template,
+    RunnerSession session,
+    int port,
+  ) {
+    return template
+        .replaceAll('{port}', '$port')
+        .replaceAll('{sessionId}', session.id)
+        .replaceAll('{accessKey}', session.publicAccessKey);
   }
 
   String _absolutePath(RunnerSession session, String relativePath) {
@@ -718,7 +747,7 @@ class SessionManager {
     }
   }
 
-    String _validateFlutterProjectName(String value) {
+  String _validateFlutterProjectName(String value) {
     final clean = value.trim();
 
     if (clean.isEmpty) {

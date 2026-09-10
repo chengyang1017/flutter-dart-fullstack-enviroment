@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../export/services/workspace_import_picker.dart';
+import '../../export/services/workspace_local_git_metadata.dart';
 import '../../project_creation/services/flutter_project_scaffold_service.dart';
 import '../../project_creation/widgets/create_flutter_project_dialog.dart';
 import '../../project_import/services/flutter_project_directory_import_service.dart';
@@ -16,13 +17,19 @@ import '../../runner/services/http_flutter_runner_client.dart';
 import '../../runner/services/mock_flutter_runner_client.dart';
 import '../../runner/services/runner_preview_tab.dart';
 import '../../runner/widgets/runner_target_dialog.dart';
+import '../../workspace/models/workspace_git_remote.dart';
 import '../../workspace/services/hive_workspace_persistence.dart';
 import '../../workspace/services/keyed_workspace_snapshot_store.dart';
+import '../../workspace/services/workspace_git_connection_runtime.dart';
+import '../../workspace/services/workspace_git_pull_coordinator.dart';
+import '../../workspace/services/workspace_git_push_coordinator.dart';
 import '../../workspace/services/workspace_persistence.dart';
 import '../../workspace/services/workspace_project_library.dart';
 import '../../workspace/services/workspace_share_service.dart';
 import '../../workspace/services/workspace_snapshot_store.dart';
+import '../../workspace/widgets/workspace_git_connection_dialog.dart';
 import '../../workspace/widgets/workspace_project_bar.dart';
+import '../../workspace/widgets/workspace_git_remote_dialog.dart';
 import '../controllers/playground_controller.dart';
 import '../models/workspace_view_mode.dart';
 import '../widgets/compact_playground_layout.dart';
@@ -410,6 +417,36 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         return;
       }
 
+      final normalizedPickedPaths = files
+          .map((file) => file.path.replaceAll('\\', '/'))
+          .toList(growable: false);
+      final gitConfigFound = normalizedPickedPaths.any(
+        (path) => path == '.git/config' || path.endsWith('/.git/config'),
+      );
+      final gitHeadFound = normalizedPickedPaths.any(
+        (path) => path == '.git/HEAD' || path.endsWith('/.git/HEAD'),
+      );
+
+      final localGit = detectWorkspaceLocalGitMetadata(files);
+      WorkspaceGitRemote? detectedRemote;
+      String? gitNotice;
+
+      if (localGit != null) {
+        if (localGit.branch == null) {
+          gitNotice = ' · 已检测 Git 仓库，但当前 HEAD 不是普通分支，未自动绑定';
+        } else {
+          try {
+            detectedRemote = WorkspaceGitRemote(
+              repositoryUrl: localGit.repositoryUrl,
+              remoteName: localGit.remoteName,
+              branch: localGit.branch!,
+            );
+          } on FormatException catch (error) {
+            gitNotice = ' · 已检测 .git，但远端地址无法自动绑定：$error';
+          }
+        }
+      }
+
       final bundle = const FlutterProjectDirectoryImportService().parse(files);
 
       await controller.flushWorkspacePersistence();
@@ -418,10 +455,49 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         library.activeProjectId,
       );
 
-      await library.createImportedFlutter(
+      var importedProject = await library.createImportedFlutter(
         name: bundle.projectName,
         snapshot: bundle.snapshot,
+        gitRemote: detectedRemote,
       );
+
+      if (detectedRemote != null) {
+        final runtime = WorkspaceGitConnectionRuntime.tryFromEnvironment();
+        if (runtime != null) {
+          try {
+            final checked = await runtime.coordinator.check(
+              project: importedProject,
+              snapshot: bundle.snapshot,
+            );
+            final result = checked.result;
+            final resolvedRemote = detectedRemote.copyWith(
+              repositoryId: result.repositoryId,
+              repositoryFullName: result.repositoryFullName,
+              canonicalUrl: result.canonicalUrl,
+              lastResolvedAt:
+                  result.repositoryId == null ? null : DateTime.now().toUtc(),
+            );
+            await library.bindGitRemote(
+              importedProject.id,
+              resolvedRemote,
+            );
+            importedProject =
+                library.projectById(importedProject.id) ?? importedProject;
+          } catch (_) {
+            // Opening a local folder must remain usable when GitHub is offline,
+            // private, or credentials have not been configured yet. The local
+            // origin/branch binding is still retained and can be resolved by a
+            // later explicit GitHub sync/check.
+          } finally {
+            runtime.close();
+          }
+        }
+
+        final remote = importedProject.gitRemote ?? detectedRemote;
+        final repositoryLabel =
+            remote.repositoryFullName ?? remote.repositoryUrl;
+        gitNotice = ' · Git: $repositoryLabel · ${remote.branch}';
+      }
 
       _disposeControllers();
       _createControllers();
@@ -429,6 +505,39 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       if (!mounted) return;
 
       setState(() {});
+
+      if (library.activeProject.gitRemote == null) {
+        final diagnostic = <String>[
+          'Git auto-detect diagnostic',
+          '',
+          '.git/config: ${gitConfigFound ? 'FOUND' : 'MISSING'}',
+          '.git/HEAD: ${gitHeadFound ? 'FOUND' : 'MISSING'}',
+          'metadata parser: ${localGit == null ? 'NO MATCH' : 'MATCHED'}',
+          'remote: ${localGit?.remoteName ?? 'MISSING'}',
+          'origin URL: ${localGit?.repositoryUrl ?? 'MISSING'}',
+          'branch: ${localGit?.branch ?? 'MISSING'}',
+          'gitRemote saved: NO',
+        ].join('\n');
+
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Git 自动绑定诊断'),
+            content: SizedBox(
+              width: 560,
+              child: SelectableText(diagnostic),
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+
+        if (!mounted) return;
+      }
 
       final ignored = bundle.ignoredFileCount == 0
           ? ''
@@ -439,7 +548,8 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       ).showSnackBar(
         SnackBar(
           content: Text(
-            '已打开 ${bundle.projectName}：${bundle.importedFileCount} 个文件$ignored。',
+            '已打开 ${bundle.projectName}：'
+            '${bundle.importedFileCount} 个文件$ignored${gitNotice ?? ''}。',
           ),
         ),
       );
@@ -713,6 +823,149 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _openGitHubEntry() async {
+    final library = _projectLibrary;
+    if (library == null) return;
+
+    if (library.activeProject.gitRemote != null) {
+      await _openGitHubSync();
+      return;
+    }
+
+    final project = library.activeProject;
+    final result = await showDialog<WorkspaceGitRemoteDialogResult>(
+      context: context,
+      builder: (_) => const WorkspaceGitRemoteDialog(),
+    );
+
+    if (result == null || !mounted || result.unbind) return;
+
+    final remote = result.remote;
+    if (remote == null) return;
+
+    await library.bindGitRemote(project.id, remote);
+
+    if (!mounted) return;
+    setState(() {});
+
+    await _openGitHubSync();
+  }
+
+  Future<void> _openGitHubSync() async {
+    final library = _projectLibrary;
+    if (library == null || library.activeProject.gitRemote == null) return;
+
+    final runtime = WorkspaceGitConnectionRuntime.tryFromEnvironment();
+    if (runtime == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GitHub 同步需要已登录并连接 Workspace 云端服务。'),
+        ),
+      );
+      return;
+    }
+
+    final pull = WorkspaceGitPullCoordinator(
+      workspace: controller.workspace,
+      projects: library,
+      git: runtime.coordinator.git,
+    );
+    final push = WorkspaceGitPushCoordinator(
+      workspace: controller.workspace,
+      projects: library,
+      remote: runtime.coordinator.remote,
+      git: runtime.coordinator.git,
+    );
+
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => WorkspaceGitConnectionDialog(
+          project: library.activeProject,
+          hasLocalChanges: controller.workspace.isDirty,
+          loadSecrets: () => runtime.coordinator.listGitSecrets(
+            project: library.activeProject,
+            snapshot: controller.workspace.createSnapshot(),
+          ),
+          checkConnection: ({
+            String? secretName,
+            String? secretValue,
+            String? username,
+          }) async {
+            final project = library.activeProject;
+            final checked = await runtime.coordinator.check(
+              project: project,
+              snapshot: controller.workspace.createSnapshot(),
+              secretName: secretName,
+              secretValue: secretValue,
+              username: username,
+            );
+
+            final result = checked.result;
+            final binding = project.gitRemote!;
+            if (binding.repositoryId != null &&
+                result.repositoryId != null &&
+                binding.repositoryId != result.repositoryId) {
+              throw StateError(
+                'GitHub repository identity changed. Rebind this Workspace '
+                'before syncing.',
+              );
+            }
+
+            final resolved = binding.copyWith(
+              repositoryId: result.repositoryId,
+              repositoryFullName: result.repositoryFullName,
+              canonicalUrl: result.canonicalUrl,
+              lastResolvedAt:
+                  result.repositoryId == null ? null : DateTime.now().toUtc(),
+            );
+            await library.bindGitRemote(project.id, resolved);
+
+            if (mounted) setState(() {});
+            return checked;
+          },
+          pullRemote: ({
+            String? secretName,
+            String? username,
+            bool allowDirtyOverwrite = false,
+          }) async {
+            final result = await pull.pullCurrent(
+              secretName: secretName,
+              username: username,
+              allowDirtyOverwrite: allowDirtyOverwrite,
+              includeRepository: true,
+            );
+            if (mounted) setState(() {});
+            return result;
+          },
+          pushRemote: ({
+            required String commitMessage,
+            required String authorName,
+            required String authorEmail,
+            String? secretName,
+            String? username,
+          }) async {
+            final result = await push.pushCurrent(
+              commitMessage: commitMessage,
+              authorName: authorName,
+              authorEmail: authorEmail,
+              secretName: secretName,
+              username: username,
+            );
+            if (mounted) setState(() {});
+            return result;
+          },
+        ),
+      );
+    } finally {
+      runtime.close();
+    }
+
+    if (mounted) setState(() {});
   }
 
   Future<void> _shareCurrentProject() async {
@@ -1088,6 +1341,9 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                       _commitWorkspace(),
                     )
                 : null,
+            onGitSync: () => unawaited(
+              _openGitHubEntry(),
+            ),
             onShare: () => unawaited(
               _shareCurrentProject(),
             ),

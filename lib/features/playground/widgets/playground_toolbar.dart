@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 import '../../export/services/workspace_export_download.dart';
 import '../../export/services/workspace_export_service.dart';
 import '../../export/services/workspace_import_picker.dart';
@@ -115,102 +117,102 @@ class PlaygroundToolbar extends StatelessWidget {
             ),
           ),
           child: SingleChildScrollView(
-          key: const ValueKey('playground-toolbar-scroll'),
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: [
-              if (projectControls != null) ...[
-                projectControls!,
+            key: const ValueKey('playground-toolbar-scroll'),
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                if (projectControls != null) ...[
+                  projectControls!,
+                  const SizedBox(width: 10),
+                  const _TopDivider(),
+                  const SizedBox(width: 10),
+                ],
+                _RunButton(
+                  enabled: runner.canRun,
+                  label: runner.isMock ? 'Run Mock' : 'Run',
+                  onPressed: runner.canRun ? (onRun ?? runner.run) : null,
+                ),
+                const SizedBox(width: 6),
+                _buildBackendButton(
+                  context,
+                  dartFrog: dartFrog,
+                  serverpod: serverpod,
+                  dartFrogEnabled: dartFrogEnabled,
+                  serverpodEnabled: serverpodEnabled,
+                ),
+                if (dartFrogEnabled) ...[
+                  const SizedBox(width: 4),
+                  _ToolbarTextAction(
+                    tooltip: 'Dart Frog API Lab',
+                    icon: Icons.http_rounded,
+                    label: 'API',
+                    onPressed: apiLabUrl != null
+                        ? () {
+                            showDialog<void>(
+                              context: context,
+                              builder: (_) => DartFrogApiLabDialog(
+                                baseUrl: apiLabUrl,
+                              ),
+                            );
+                          }
+                        : null,
+                  ),
+                ],
                 const SizedBox(width: 10),
                 const _TopDivider(),
-                const SizedBox(width: 10),
-              ],
-              _RunButton(
-                enabled: runner.canRun,
-                label: runner.isMock ? 'Run Mock' : 'Run',
-                onPressed: runner.canRun ? (onRun ?? runner.run) : null,
-              ),
-              const SizedBox(width: 6),
-              _buildBackendButton(
-                context,
-                dartFrog: dartFrog,
-                serverpod: serverpod,
-                dartFrogEnabled: dartFrogEnabled,
-                serverpodEnabled: serverpodEnabled,
-              ),
-              if (dartFrogEnabled) ...[
-                const SizedBox(width: 4),
-                _ToolbarTextAction(
-                  tooltip: 'Dart Frog API Lab',
-                  icon: Icons.http_rounded,
-                  label: 'API',
-                  onPressed: apiLabUrl != null
-                      ? () {
-                          showDialog<void>(
-                            context: context,
-                            builder: (_) => DartFrogApiLabDialog(
-                              baseUrl: apiLabUrl,
-                            ),
-                          );
-                        }
-                      : null,
+                const SizedBox(width: 6),
+                _ToolbarIconAction(
+                  tooltip: '快速预览',
+                  icon: Icons.bolt_rounded,
+                  onPressed: onQuickPreview ?? controller.runCode,
                 ),
+                _ToolbarIconAction(
+                  tooltip: 'Hot Reload',
+                  icon: Icons.refresh_rounded,
+                  onPressed: runner.canHotReload ? runner.hotReload : null,
+                ),
+                _ToolbarIconAction(
+                  tooltip: 'Hot Restart',
+                  icon: Icons.restart_alt_rounded,
+                  onPressed: runner.canHotRestart ? runner.hotRestart : null,
+                ),
+                _ToolbarIconAction(
+                  tooltip: 'Stop',
+                  icon: Icons.stop_rounded,
+                  onPressed: runner.canStop ? runner.stop : null,
+                ),
+                const SizedBox(width: 6),
+                const _TopDivider(),
+                const SizedBox(width: 6),
+                _buildTransferButton(
+                  context,
+                  canExport: canExport,
+                ),
+                const SizedBox(width: 6),
+                const _TopDivider(),
+                const SizedBox(width: 6),
+                _ToolbarIconAction(
+                  tooltip: controller.autoRun ? '关闭自动预览' : '开启自动预览',
+                  icon: controller.autoRun
+                      ? Icons.flash_on_rounded
+                      : Icons.flash_off_rounded,
+                  selected: controller.autoRun,
+                  onPressed: controller.toggleAutoRun,
+                ),
+                const AppThemeToggleButton(compact: true),
+                _ToolbarIconAction(
+                  tooltip: controller.darkPreview ? '切换浅色预览' : '切换深色预览',
+                  icon: controller.darkPreview
+                      ? Icons.dark_mode_rounded
+                      : Icons.light_mode_rounded,
+                  selected: controller.darkPreview,
+                  onPressed: controller.togglePreviewTheme,
+                ),
+                _buildDeviceButton(context),
+                const SizedBox(width: 2),
+                _buildMoreButton(context),
               ],
-              const SizedBox(width: 10),
-              const _TopDivider(),
-              const SizedBox(width: 6),
-              _ToolbarIconAction(
-                tooltip: '快速预览',
-                icon: Icons.bolt_rounded,
-                onPressed: onQuickPreview ?? controller.runCode,
-              ),
-              _ToolbarIconAction(
-                tooltip: 'Hot Reload',
-                icon: Icons.refresh_rounded,
-                onPressed: runner.canHotReload ? runner.hotReload : null,
-              ),
-              _ToolbarIconAction(
-                tooltip: 'Hot Restart',
-                icon: Icons.restart_alt_rounded,
-                onPressed: runner.canHotRestart ? runner.hotRestart : null,
-              ),
-              _ToolbarIconAction(
-                tooltip: 'Stop',
-                icon: Icons.stop_rounded,
-                onPressed: runner.canStop ? runner.stop : null,
-              ),
-              const SizedBox(width: 6),
-              const _TopDivider(),
-              const SizedBox(width: 6),
-              _buildTransferButton(
-                context,
-                canExport: canExport,
-              ),
-              const SizedBox(width: 6),
-              const _TopDivider(),
-              const SizedBox(width: 6),
-              _ToolbarIconAction(
-                tooltip: controller.autoRun ? '关闭自动预览' : '开启自动预览',
-                icon: controller.autoRun
-                    ? Icons.flash_on_rounded
-                    : Icons.flash_off_rounded,
-                selected: controller.autoRun,
-                onPressed: controller.toggleAutoRun,
-              ),
-              _ToolbarIconAction(
-                tooltip:
-                    controller.darkPreview ? '切换浅色预览' : '切换深色预览',
-                icon: controller.darkPreview
-                    ? Icons.dark_mode_rounded
-                    : Icons.light_mode_rounded,
-                selected: controller.darkPreview,
-                onPressed: controller.togglePreviewTheme,
-              ),
-              _buildDeviceButton(context),
-              const SizedBox(width: 2),
-              _buildMoreButton(context),
-            ],
             ),
           ),
         ),
@@ -527,7 +529,8 @@ class PlaygroundToolbar extends StatelessWidget {
 
     try {
       service.ensureEnabled(controller.workspace);
-      controller.selectWorkspaceFile(ServerpodWorkspaceService.greetingEndpointPath);
+      controller
+          .selectWorkspaceFile(ServerpodWorkspaceService.greetingEndpointPath);
     } catch (error) {
       _showFrameworkError(context, error);
     }
@@ -889,9 +892,8 @@ class _BackendMenuItem extends StatelessWidget {
           Icon(
             icon,
             size: 19,
-            color: selected
-                ? PlaygroundToolbar._accent
-                : PlaygroundToolbar._muted,
+            color:
+                selected ? PlaygroundToolbar._accent : PlaygroundToolbar._muted,
           ),
           const SizedBox(width: 12),
           Expanded(

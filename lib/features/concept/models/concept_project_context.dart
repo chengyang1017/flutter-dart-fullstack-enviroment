@@ -5,6 +5,8 @@ class ConceptProjectContext {
     required this.repositoryName,
     required this.projectName,
     required this.projectRoot,
+    this.backendRoot,
+    this.backendSourceRoot,
   });
 
   final String repositoryName;
@@ -14,7 +16,17 @@ class ConceptProjectContext {
   /// Empty means the repository root itself is the Flutter project root.
   final String projectRoot;
 
+  /// Root of the detected backend package inside the source repository.
+  final String? backendRoot;
+
+  /// Source directory exposed as the virtual `backend/` concept root.
+  ///
+  /// Serverpod maps its server `lib/` here. Node backends normally map `src/`.
+  final String? backendSourceRoot;
+
   bool get isMonorepoProject => projectRoot.isNotEmpty;
+  bool get hasBackend =>
+      backendSourceRoot != null && backendSourceRoot!.isNotEmpty;
 
   String get sourceLabel {
     if (projectRoot.isEmpty) return repositoryName;
@@ -23,6 +35,14 @@ class ConceptProjectContext {
 
   String toRepositoryPath(String conceptPath) {
     final normalized = _normalizeRelative(conceptPath);
+    final backendSource = backendSourceRoot;
+    if (backendSource != null && backendSource.isNotEmpty) {
+      if (normalized == 'backend') return backendSource;
+      if (normalized.startsWith('backend/')) {
+        return '$backendSource/${normalized.substring('backend/'.length)}';
+      }
+    }
+
     if (projectRoot.isEmpty) return normalized;
     if (normalized.isEmpty) return projectRoot;
     return '$projectRoot/$normalized';
@@ -30,6 +50,15 @@ class ConceptProjectContext {
 
   String? toConceptPath(String repositoryPath) {
     final normalized = _normalizeRelative(repositoryPath);
+    final backendSource = backendSourceRoot;
+    if (backendSource != null && backendSource.isNotEmpty) {
+      if (normalized == backendSource) return 'backend';
+      final backendPrefix = '$backendSource/';
+      if (normalized.startsWith(backendPrefix)) {
+        return 'backend/${normalized.substring(backendPrefix.length)}';
+      }
+    }
+
     if (projectRoot.isEmpty) return normalized;
     if (normalized == projectRoot) return '';
     final prefix = '$projectRoot/';

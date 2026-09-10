@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../workspace/controllers/workspace_controller.dart';
@@ -11,7 +13,12 @@ class ConceptLibExplorer extends StatelessWidget {
     required this.onOpenFile,
   });
 
-  static const rootPath = 'lib';
+  static const appRootPath = 'lib';
+  static const backendRootPath = 'backend';
+  static const serverpodBackendRootPath = 'serverpod/practice_server/lib';
+
+  /// Kept for callers/tests that still refer to the old concept root constant.
+  static const rootPath = appRootPath;
 
   final WorkspaceController workspace;
   final ValueChanged<String> onOpenFile;
@@ -22,6 +29,9 @@ class ConceptLibExplorer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appRoot = _appRoot();
+    final backendRoot = _backendRoot(appRoot);
+
     return Material(
       key: const ValueKey('concept-lib-explorer'),
       color: _background,
@@ -49,10 +59,23 @@ class ConceptLibExplorer extends StatelessWidget {
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 2),
-              children: workspace
-                  .childrenOf(rootPath)
-                  .map((entry) => _buildEntry(context, entry, 0))
-                  .toList(growable: false),
+              children: [
+                _buildConceptRoot(
+                  context,
+                  path: appRoot,
+                  stableKey: 'app',
+                  label: '应用',
+                  icon: Icons.flutter_dash_rounded,
+                ),
+                if (backendRoot != null)
+                  _buildConceptRoot(
+                    context,
+                    path: backendRoot,
+                    stableKey: 'backend',
+                    label: '后端',
+                    icon: Icons.dns_outlined,
+                  ),
+              ],
             ),
           ),
         ],
@@ -60,12 +83,190 @@ class ConceptLibExplorer extends StatelessWidget {
     );
   }
 
-  String _activeDirectory() {
-    final parent = workspace.activeEntry?.parentPath ?? rootPath;
-    if (parent == rootPath || parent.startsWith('$rootPath/')) {
-      return parent;
+  String _appRoot() {
+    if (_hasDirectory(appRootPath)) return appRootPath;
+
+    final candidates = <String>[];
+    for (final entry in workspace.entries) {
+      if (!entry.isFile || !entry.isText) continue;
+      if (entry.path != 'pubspec.yaml' &&
+          !entry.path.endsWith('/pubspec.yaml')) {
+        continue;
+      }
+      if (!_looksLikeFlutterPubspec(entry.content)) continue;
+
+      final projectRoot = _manifestRoot(entry.path, 'pubspec.yaml');
+      final sourceRoot = _join(projectRoot, 'lib');
+      final main = workspace.entryAt(_join(sourceRoot, 'main.dart'));
+      if (main == null || !main.isFile) continue;
+      candidates.add(sourceRoot);
     }
-    return rootPath;
+
+    if (candidates.isEmpty) return appRootPath;
+    candidates.sort(_compareSourceRoots);
+    return candidates.first;
+  }
+
+  String? _backendRoot(String appRoot) {
+    for (final path in const <String>[
+      backendRootPath,
+      serverpodBackendRootPath,
+    ]) {
+      if (_hasDirectory(path)) return path;
+    }
+
+    final appProjectRoot = _parentPath(appRoot);
+    final serverpodCandidates = <String>[];
+    final nodeCandidates = <String>[];
+
+    for (final entry in workspace.entries) {
+      if (!entry.isFile || !entry.isText) continue;
+
+      if (entry.path == 'pubspec.yaml' ||
+          entry.path.endsWith('/pubspec.yaml')) {
+        final root = _manifestRoot(entry.path, 'pubspec.yaml');
+        if (root == appProjectRoot ||
+            !_looksLikeServerpodPubspec(entry.content)) {
+          continue;
+        }
+
+        final sourceRoot = _join(root, 'lib');
+        if (_hasDirectory(sourceRoot)) {
+          serverpodCandidates.add(sourceRoot);
+        }
+        continue;
+      }
+
+      if (entry.path == 'package.json' ||
+          entry.path.endsWith('/package.json')) {
+        final root = _manifestRoot(entry.path, 'package.json');
+        if (root == appProjectRoot || !_looksLikeNodeBackend(entry.content)) {
+          continue;
+        }
+
+        final sourceRoot = _join(root, 'src');
+        nodeCandidates.add(_hasDirectory(sourceRoot) ? sourceRoot : root);
+      }
+    }
+
+    serverpodCandidates.sort(_compareSourceRoots);
+    if (serverpodCandidates.isNotEmpty) return serverpodCandidates.first;
+
+    nodeCandidates.sort(_compareSourceRoots);
+    if (nodeCandidates.isNotEmpty) return nodeCandidates.first;
+    return null;
+  }
+
+  bool _hasDirectory(String path) {
+    if (path.isEmpty) return false;
+    return workspace.entryAt(path)?.isDirectory == true ||
+        workspace.childrenOf(path).isNotEmpty;
+  }
+
+  bool _looksLikeFlutterPubspec(String content) {
+    return RegExp(r'^\s*flutter\s*:\s*$', multiLine: true).hasMatch(content) ||
+        RegExp(r'^\s*sdk\s*:\s*flutter\s*$', multiLine: true).hasMatch(content);
+  }
+
+  bool _looksLikeServerpodPubspec(String content) {
+    return RegExp(r'^\s*serverpod\s*:', multiLine: true).hasMatch(content);
+  }
+
+  bool _looksLikeNodeBackend(String content) {
+    try {
+      final root = jsonDecode(content);
+      if (root is! Map) return false;
+      final packages = <String>{
+        ..._dependencyNames(root['dependencies']),
+        ..._dependencyNames(root['devDependencies']),
+      };
+      return const <String>{
+        'express',
+        '@nestjs/core',
+        'fastify',
+        'koa',
+        'hono',
+        '@hapi/hapi',
+      }.any(packages.contains);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Set<String> _dependencyNames(Object? value) {
+    if (value is! Map) return const <String>{};
+    return value.keys.whereType<String>().toSet();
+  }
+
+  String _manifestRoot(String path, String fileName) {
+    if (path == fileName) return '';
+    return path.substring(0, path.length - '/$fileName'.length);
+  }
+
+  String _join(String root, String path) => root.isEmpty ? path : '$root/$path';
+
+  String _parentPath(String path) {
+    final slash = path.lastIndexOf('/');
+    return slash == -1 ? '' : path.substring(0, slash);
+  }
+
+  int _compareSourceRoots(String a, String b) {
+    final depth = a.split('/').length.compareTo(b.split('/').length);
+    return depth != 0 ? depth : a.compareTo(b);
+  }
+
+  Widget _buildConceptRoot(
+    BuildContext context, {
+    required String path,
+    required String stableKey,
+    required String label,
+    required IconData icon,
+  }) {
+    return ExpansionTile(
+      key: ValueKey('concept-root-$stableKey'),
+      initiallyExpanded: true,
+      onExpansionChanged: (expanded) {
+        if (workspace.entryAt(path)?.isDirectory == true) {
+          workspace.setDirectoryExpanded(path, expanded);
+        }
+      },
+      tilePadding: const EdgeInsets.only(left: 8, right: 2),
+      childrenPadding: EdgeInsets.zero,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      textColor: _textColor,
+      collapsedTextColor: _textColor,
+      iconColor: _mutedColor,
+      collapsedIconColor: _mutedColor,
+      leading: Icon(
+        icon,
+        size: 18,
+        color: _ConceptExplorerPalette.folder,
+      ),
+      title: _EntryLabel(
+        name: label,
+        dirty: _hasDirtyDescendant(path),
+      ),
+      children: workspace
+          .childrenOf(path)
+          .map((entry) => _buildEntry(context, entry, 0))
+          .toList(growable: false),
+    );
+  }
+
+  String _activeDirectory() {
+    final appRoot = _appRoot();
+    final parent = workspace.activeEntry?.parentPath ?? appRoot;
+    final backendRoot = _backendRoot(appRoot);
+    for (final root in <String>[
+      appRoot,
+      if (backendRoot != null) backendRoot,
+    ]) {
+      if (parent == root || parent.startsWith('$root/')) {
+        return parent;
+      }
+    }
+    return appRoot;
   }
 
   Widget _buildEntry(
@@ -74,6 +275,7 @@ class ConceptLibExplorer extends StatelessWidget {
     int depth,
   ) {
     if (entry.isDirectory) {
+      final expanded = workspace.isDirectoryExpanded(entry.path);
       return ExpansionTile(
         key: ValueKey('concept-lib-entry-${entry.path}'),
         initiallyExpanded: workspace.isDirectoryExpanded(entry.path),
@@ -114,10 +316,12 @@ class ConceptLibExplorer extends StatelessWidget {
           onRename: () => _rename(context, entry),
           onDelete: () => _delete(context, entry),
         ),
-        children: workspace
-            .childrenOf(entry.path)
-            .map((child) => _buildEntry(context, child, depth + 1))
-            .toList(growable: false),
+        children: expanded
+            ? workspace
+                .childrenOf(entry.path)
+                .map((child) => _buildEntry(context, child, depth + 1))
+                .toList(growable: false)
+            : const <Widget>[],
       );
     }
 
@@ -156,12 +360,7 @@ class ConceptLibExplorer extends StatelessWidget {
   }
 
   bool _hasDirtyDescendant(String directory) {
-    return workspace.entries.any(
-      (entry) =>
-          entry.isFile &&
-          entry.path.startsWith('$directory/') &&
-          workspace.isFileDirty(entry.path),
-    );
+    return workspace.hasDirtyFileDescendant(directory);
   }
 
   Future<void> _createEntry(
@@ -169,7 +368,8 @@ class ConceptLibExplorer extends StatelessWidget {
     required String directory,
     required WorkspaceEntryType type,
   }) async {
-    final safeDirectory = _insideLib(directory) ? directory : rootPath;
+    final safeDirectory =
+        _insideConceptSource(directory) ? directory : _appRoot();
     final name = await _askForName(
       context,
       title: type == WorkspaceEntryType.file ? '新建 Dart 文件' : '新建文件夹',
@@ -190,7 +390,7 @@ class ConceptLibExplorer extends StatelessWidget {
   }
 
   Future<void> _rename(BuildContext context, WorkspaceEntry entry) async {
-    if (!_insideLib(entry.path)) return;
+    if (!_insideConceptSource(entry.path)) return;
 
     final name = await _askForName(
       context,
@@ -204,16 +404,15 @@ class ConceptLibExplorer extends StatelessWidget {
   }
 
   Future<void> _delete(BuildContext context, WorkspaceEntry entry) async {
-    if (!_insideLib(entry.path)) return;
+    if (!_insideConceptSource(entry.path)) return;
 
+    final area = _areaLabel(entry.path);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('删除 ${entry.name}？'),
         content: Text(
-          entry.isDirectory
-              ? '这个文件夹以及里面的文件都会从 lib/ 删除。'
-              : '这个文件会从 lib/ 删除。',
+          entry.isDirectory ? '这个文件夹以及里面的文件都会从 $area 删除。' : '这个文件会从 $area 删除。',
         ),
         actions: [
           TextButton(
@@ -233,8 +432,19 @@ class ConceptLibExplorer extends StatelessWidget {
     }
   }
 
-  bool _insideLib(String path) =>
-      path == rootPath || path.startsWith('$rootPath/');
+  bool _insideConceptSource(String path) {
+    final appRoot = _appRoot();
+    if (path == appRoot || path.startsWith('$appRoot/')) return true;
+    final backendRoot = _backendRoot(appRoot);
+    return backendRoot != null &&
+        (path == backendRoot || path.startsWith('$backendRoot/'));
+  }
+
+  String _areaLabel(String path) {
+    final appRoot = _appRoot();
+    if (path == appRoot || path.startsWith('$appRoot/')) return '应用';
+    return '后端';
+  }
 
   Future<String?> _askForName(
     BuildContext context, {
@@ -312,7 +522,7 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 7),
           const Expanded(
             child: Text(
-              'LIB FILES',
+              '应用 / 后端',
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
@@ -331,12 +541,12 @@ class _Header extends StatelessWidget {
               ),
             ),
           _HeaderAction(
-            tooltip: '在 lib/ 新建文件',
+            tooltip: '在当前应用 / 后端区域新建文件',
             icon: Icons.note_add_outlined,
             onPressed: onCreateFile,
           ),
           _HeaderAction(
-            tooltip: '在 lib/ 新建文件夹',
+            tooltip: '在当前应用 / 后端区域新建文件夹',
             icon: Icons.create_new_folder_outlined,
             onPressed: onCreateDirectory,
           ),

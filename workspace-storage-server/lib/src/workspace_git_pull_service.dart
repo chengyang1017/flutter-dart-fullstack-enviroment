@@ -51,6 +51,7 @@ class WorkspaceGitPullResult {
     required this.files,
     required this.importedFileCount,
     required this.ignoredFileCount,
+    this.repositoryRelativePaths = false,
   });
 
   final String repositoryUrl;
@@ -66,6 +67,7 @@ class WorkspaceGitPullResult {
   final Map<String, String> files;
   final int importedFileCount;
   final int ignoredFileCount;
+  final bool repositoryRelativePaths;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'repositoryUrl': repositoryUrl,
@@ -77,6 +79,7 @@ class WorkspaceGitPullResult {
         'files': files,
         'importedFileCount': importedFileCount,
         'ignoredFileCount': ignoredFileCount,
+        if (repositoryRelativePaths) 'repositoryRelativePaths': true,
       };
 }
 
@@ -230,9 +233,9 @@ class WorkspaceGitPullService {
     required this.executor,
   });
 
-  static const int maxImportedFiles = 3000;
-  static const int maxSinglePortableFileBytes = 5 * 1024 * 1024;
-  static const int maxImportedPortableBytes = 50 * 1024 * 1024;
+  static const int maxImportedFiles = 6000;
+  static const int maxSinglePortableFileBytes = 25 * 1024 * 1024;
+  static const int maxImportedPortableBytes = 120 * 1024 * 1024;
   static const String binaryFilePrefix = '\u0000workspace-base64:';
 
   static const Set<String> _ignoredDirectoryNames = <String>{
@@ -240,14 +243,12 @@ class WorkspaceGitPullService {
     '.dart_tool',
     '.gradle',
     '.idea',
+    '.symlinks',
+    '.plugin_symlinks',
     'build',
     'coverage',
-    'android',
-    'ios',
-    'linux',
-    'macos',
-    'windows',
-    'web',
+    'node_modules',
+    'Pods',
   };
 
   static const Set<String> _ignoredFileNames = <String>{
@@ -267,6 +268,7 @@ class WorkspaceGitPullService {
     required String workspaceId,
     String? secretName,
     String? username,
+    bool includeRepository = false,
   }) async {
     final document =
         await workspaceStore.loadWorkspaceMeta(userId, workspaceId);
@@ -294,6 +296,21 @@ class WorkspaceGitPullService {
         workspaceId: workspaceId,
         name: secretName.trim(),
         context: 'git',
+      );
+    }
+
+    if (provider == 'github' &&
+        remote['repositoryId'] != null &&
+        executor is ProcessWorkspaceGitCloneExecutor) {
+      await WorkspaceGitRemoteChecker(
+        workspaceStore: workspaceStore,
+        secretStore: secretStore,
+        executor: const ProcessWorkspaceGitCommandExecutor(),
+      ).check(
+        userId: userId,
+        workspaceId: workspaceId,
+        secretName: secretName,
+        username: username,
       );
     }
 
@@ -329,6 +346,7 @@ class WorkspaceGitPullService {
       final imported = await _readFlutterProject(
         checkout,
         projectPath: projectPath,
+        includeRepository: includeRepository,
       );
       return WorkspaceGitPullResult(
         repositoryUrl: repositoryUrl,
@@ -340,6 +358,7 @@ class WorkspaceGitPullService {
         files: imported.files,
         importedFileCount: imported.files.length,
         ignoredFileCount: imported.ignoredFileCount,
+        repositoryRelativePaths: includeRepository,
       );
     } finally {
       if (await temp.exists()) {
@@ -351,6 +370,7 @@ class WorkspaceGitPullService {
   Future<_PortableFlutterProject> _readFlutterProject(
     Directory checkout, {
     String? projectPath,
+    bool includeRepository = false,
   }) async {
     if (!await checkout.exists()) {
       throw const WorkspaceGitRemoteException(
@@ -424,7 +444,8 @@ class WorkspaceGitPullService {
     var importedBytes = 0;
 
     for (final entry in repositoryFiles.entries) {
-      final relative = _relativeToRoot(entry.key, root);
+      final relative =
+          includeRepository ? entry.key : _relativeToRoot(entry.key, root);
       if (relative == null || relative.isEmpty) continue;
       if (_shouldIgnore(relative)) {
         ignoredFileCount += 1;
@@ -432,29 +453,32 @@ class WorkspaceGitPullService {
       }
       if (files.length >= maxImportedFiles) {
         throw const FormatException(
-          'Git project contains more than 3000 portable files.',
+          'Git repository contains more than 6000 portable files.',
         );
       }
 
       final length = await entry.value.length();
       if (length > maxSinglePortableFileBytes) {
         throw FormatException(
-          'File is larger than the 5 MB portable-file limit: $relative',
+          'File is larger than the 25 MB portable-file limit: $relative',
         );
       }
       importedBytes += length;
       if (importedBytes > maxImportedPortableBytes) {
         throw const FormatException(
-          'Git project contains more than 50 MB of portable files.',
+          'Git repository contains more than 120 MB of portable files.',
         );
       }
       files[relative] = await _readPortablePayload(entry.value);
     }
 
-    if (!files.containsKey('pubspec.yaml') ||
-        !files.containsKey('lib/main.dart') ||
-        files['pubspec.yaml']!.startsWith(binaryFilePrefix) ||
-        files['lib/main.dart']!.startsWith(binaryFilePrefix)) {
+    final primaryPrefix = includeRepository && root.isNotEmpty ? '$root/' : '';
+    final pubspecPath = '${primaryPrefix}pubspec.yaml';
+    final mainPath = '${primaryPrefix}lib/main.dart';
+    if (!files.containsKey(pubspecPath) ||
+        !files.containsKey(mainPath) ||
+        files[pubspecPath]!.startsWith(binaryFilePrefix) ||
+        files[mainPath]!.startsWith(binaryFilePrefix)) {
       throw const FormatException(
         'Pulled Flutter project must preserve text pubspec.yaml and lib/main.dart.',
       );
