@@ -35,6 +35,10 @@ Future<void> main() async {
     flyctlExecutable: flyctl,
     memoryMb: 2048,
     cpus: 1,
+    flutterExecutable: '/opt/flutter/bin/flutter',
+    dartExecutable: '/opt/flutter/bin/cache/dart-sdk/bin/dart',
+    dartFrogExecutable: '/home/sandbox/.pub-cache/bin/dart_frog',
+    serverpodExecutable: '/home/sandbox/.pub-cache/bin/serverpod',
   );
 
   try {
