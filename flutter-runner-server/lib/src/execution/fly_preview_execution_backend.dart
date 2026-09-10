@@ -138,10 +138,6 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
       '127.0.0.1:$localPort -> $remoteHost:$remotePreviewPort.',
     );
 
-    // The backend has already verified HTTP 200 through the tunnel. Mark the
-    // session running now because the returned Process is the tunnel transport,
-    // not the remote Flutter process whose stdout SessionManager normally uses
-    // as the readiness signal.
     session.setStatus('running');
 
     return RunnerProcessLaunch(
@@ -199,7 +195,8 @@ class FlyPreviewExecutionBackend extends FlyMachineExecExecutionBackend {
       r'if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi',
       'fi',
       'rm -f /tmp/flutter-preview.pid',
-    ].join(' ').replaceAll(r'\"', '"');
+    ].join(' ')
+      ..replaceAll(r'\"', '"');
 
     try {
       final result = await _machineExec(
