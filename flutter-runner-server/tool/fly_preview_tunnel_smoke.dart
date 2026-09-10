@@ -85,7 +85,7 @@ Future<void> main() async {
       'nohup /opt/flutter/bin/flutter run -d web-server '
           '--web-hostname=:: --web-port=8080 '
           '> /tmp/flutter-preview.log 2>&1 < /dev/null &',
-      'echo \\$! > /tmp/flutter-preview.pid',
+      'echo \$! > /tmp/flutter-preview.pid',
     ]);
     final startResult = await _machineExec(
       flyctl: flyctl,
