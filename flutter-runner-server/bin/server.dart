@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_practice_runner_server/src/execution/docker_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/execution/execution_backend.dart';
-import 'package:flutter_practice_runner_server/src/execution/fly_execution_backend.dart';
+import 'package:flutter_practice_runner_server/src/execution/fly_machine_exec_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/execution/local_execution_backend.dart';
 import 'package:flutter_practice_runner_server/src/runner_authenticator.dart';
 import 'package:flutter_practice_runner_server/src/runner_server.dart';
@@ -281,7 +281,7 @@ RunnerExecutionBackend _createExecutionBackend(
             environment['RUNNER_DOCKER_RUNNER_OWNERSHIP'] ?? '10001:10001',
       );
     case 'fly':
-      return FlyExecutionBackend(
+      return FlyMachineExecExecutionBackend(
         appName: environment['FLY_RUNTIME_APP'] ?? '',
         apiToken: environment['FLY_API_TOKEN'] ?? '',
         image: environment['FLY_RUNTIME_IMAGE'] ??
@@ -293,6 +293,16 @@ RunnerExecutionBackend _createExecutionBackend(
         cpus: int.tryParse(environment['FLY_RUNTIME_CPUS'] ?? '') ?? 1,
         memoryMb:
             int.tryParse(environment['FLY_RUNTIME_MEMORY_MB'] ?? '') ?? 2048,
+        flutterExecutable: environment['RUNNER_CONTAINER_FLUTTER_EXECUTABLE'] ??
+            '/opt/flutter/bin/flutter',
+        dartExecutable: environment['RUNNER_CONTAINER_DART_EXECUTABLE'] ??
+            '/opt/flutter/bin/cache/dart-sdk/bin/dart',
+        dartFrogExecutable:
+            environment['RUNNER_CONTAINER_DART_FROG_EXECUTABLE'] ??
+                '/home/sandbox/.pub-cache/bin/dart_frog',
+        serverpodExecutable:
+            environment['RUNNER_CONTAINER_SERVERPOD_EXECUTABLE'] ??
+                '/home/sandbox/.pub-cache/bin/serverpod',
       );
     default:
       throw ArgumentError.value(
