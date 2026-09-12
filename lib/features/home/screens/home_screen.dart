@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
 
 import '../../lessons/screens/lesson_list_screen.dart';
@@ -39,14 +40,17 @@ class HomeScreen extends StatelessWidget {
                   if (onClaimAccount != null)
                     IconButton(
                       key: const ValueKey('home-account-claim'),
-                      tooltip: '绑定正式登录账号',
+                      tooltip: context.l10n.tr(
+                        '绑定正式登录账号',
+                        'Link a permanent login account',
+                      ),
                       onPressed: onClaimAccount,
                       icon: const Icon(Icons.verified_user_outlined),
                     ),
                   if (onLogout != null)
                     IconButton(
                       key: const ValueKey('home-account-logout'),
-                      tooltip: '退出登录',
+                      tooltip: context.l10n.tr('退出登录', 'Log out'),
                       onPressed: () async => onLogout!(),
                       icon: const Icon(Icons.logout_rounded),
                     ),
@@ -68,7 +72,13 @@ class HomeScreen extends StatelessWidget {
                         children: [
                           const Align(
                             alignment: Alignment.centerRight,
-                            child: AppThemeToggleButton(),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AppLanguageToggleButton(),
+                                AppThemeToggleButton(),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Icon(
@@ -83,17 +93,22 @@ class HomeScreen extends StatelessWidget {
                             style: Theme.of(context).textTheme.headlineMedium,
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            '打开一个真实 Flutter 项目，然后在项目视角和概念视角之间自由切换。',
+                          Text(
+                            context.l10n.tr(
+                              '打开一个真实 Flutter 项目，然后在项目视角和概念视角之间自由切换。',
+                              'Open a real Flutter project, then switch freely between Project View and Concept View.',
+                            ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 40),
                           _EntryCard(
                             key: const ValueKey('home-start-project-entry'),
                             icon: Icons.rocket_launch_outlined,
-                            title: '开始项目',
-                            description:
-                                '创建、打开或导入 Flutter 项目。进入 Workspace 后再切换项目视角或概念视角。',
+                            title: context.l10n.tr('开始项目', 'Start a project'),
+                            description: context.l10n.tr(
+                              '创建、打开或导入 Flutter 项目。进入 Workspace 后再切换项目视角或概念视角。',
+                              'Create, open, or import a Flutter project. Once inside the Workspace, switch between Project View and Concept View.',
+                            ),
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute<void>(
@@ -105,8 +120,11 @@ class HomeScreen extends StatelessWidget {
                           _EntryCard(
                             key: const ValueKey('home-lesson-mode-entry'),
                             icon: Icons.school_outlined,
-                            title: '教材模式',
-                            description: '按步骤学习 Widget，用 AST 自动检查练习结果。',
+                            title: context.l10n.tr('教材模式', 'Lesson mode'),
+                            description: context.l10n.tr(
+                              '按步骤学习 Widget，用 AST 自动检查练习结果。',
+                              'Learn Widgets step by step and automatically check exercises with the AST.',
+                            ),
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute<void>(
