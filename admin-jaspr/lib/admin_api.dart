@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'catalog_localization.dart';
+
 class AdminApiException implements Exception {
   const AdminApiException(this.message, {this.statusCode});
 
@@ -102,18 +104,29 @@ class AdminApi {
     return _objectList(body['projects']);
   }
 
-  Future<Map<String, dynamic>> lessons(String token) {
-    return _getObject('/admin/lessons', token);
+  Future<Map<String, dynamic>> lessons(String token) async {
+    final catalog = await _getObject('/admin/lessons', token);
+    CatalogLocalization.materialize(catalog, 'en');
+    return catalog;
   }
 
   Future<Map<String, dynamic>> saveLessons(
     String token,
     Map<String, dynamic> catalog,
   ) async {
+    // The admin UI edits the English presentation fields. Capture those edits
+    // into translations.en, then persist the catalog with Chinese as the
+    // canonical/root language so existing Flutter lesson checks remain stable.
+    CatalogLocalization.capture(catalog, 'en');
+    final payload = Map<String, dynamic>.from(
+      jsonDecode(jsonEncode(catalog)) as Map,
+    );
+    CatalogLocalization.materialize(payload, 'zh');
+
     final response = await _client.put(
       baseUri.resolve('/admin/lessons'),
       headers: _headers(token, json: true),
-      body: jsonEncode(catalog),
+      body: jsonEncode(payload),
     );
     final body = _decodeObject(response);
     if (response.statusCode != 200) {
@@ -122,6 +135,7 @@ class AdminApi {
         statusCode: response.statusCode,
       );
     }
+    CatalogLocalization.materialize(body, 'en');
     return body;
   }
 
