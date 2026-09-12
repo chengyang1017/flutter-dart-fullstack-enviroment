@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../runner/controllers/flutter_runner_controller.dart';
 import '../../runner/widgets/runner_console_panel.dart';
 import '../../runner/widgets/runner_preview_panel.dart';
 import '../../workspace/widgets/workspace_editor_tabs.dart';
 import '../controllers/playground_controller.dart';
 import '../models/workspace_view_mode.dart';
-import 'monaco_code_editor_panel.dart';
 import 'code_flow_panel.dart';
 import 'error_panel.dart';
+import 'monaco_code_editor_panel.dart';
 import 'unified_workspace_explorer.dart';
 
 class CompactPlaygroundLayout extends StatelessWidget {
@@ -28,42 +29,54 @@ class CompactPlaygroundLayout extends StatelessWidget {
   final ValueChanged<WorkspaceViewMode> onViewModeChanged;
 
   @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          const _TitleBar(),
-          toolbar,
-          const TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: '代码', icon: Icon(Icons.code)),
-              Tab(text: '预览', icon: Icon(Icons.phone_android)),
-              Tab(text: '文件', icon: Icon(Icons.folder_outlined)),
-              Tab(text: '控制台', icon: Icon(Icons.terminal)),
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Column(
+      children: [
+        const _TitleBar(),
+        toolbar,
+        TabBar(
+          isScrollable: true,
+          tabs: [
+            Tab(text: l10n.tr('代码', 'Code'), icon: const Icon(Icons.code)),
+            Tab(
+              text: l10n.tr('预览', 'Preview'),
+              icon: const Icon(Icons.phone_android),
+            ),
+            Tab(
+              text: l10n.tr('文件', 'Files'),
+              icon: const Icon(Icons.folder_outlined),
+            ),
+            Tab(
+              text: l10n.tr('控制台', 'Console'),
+              icon: const Icon(Icons.terminal),
+            ),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            children: [
+              _EditorWithErrors(
+                controller: controller,
+                viewMode: viewMode,
+              ),
+              RunnerPreviewPanel(
+                playground: controller,
+                runner: runner,
+              ),
+              _FilesAndWireMode(
+                controller: controller,
+                runner: runner,
+                viewMode: viewMode,
+                onViewModeChanged: onViewModeChanged,
+              ),
+              RunnerConsolePanel(runner: runner),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _EditorWithErrors(
-                  controller: controller,
-                  viewMode: viewMode,
-                ),
-                RunnerPreviewPanel(
-                  playground: controller,
-                  runner: runner,
-                ),
-                _FilesAndWireMode(
-                  controller: controller,
-                  runner: runner,
-                  viewMode: viewMode,
-                  onViewModeChanged: onViewModeChanged,
-                ),
-                RunnerConsolePanel(runner: runner),
-              ],
-            ),
-          ),
-        ],
-      );
+        ),
+      ],
+    );
+  }
 }
 
 class _EditorWithErrors extends StatelessWidget {
@@ -112,15 +125,22 @@ class _FilesAndWireMode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return DefaultTabController(
       length: 2,
       child: Column(
         children: [
-          const Material(
+          Material(
             child: TabBar(
               tabs: [
-                Tab(text: '文件', icon: Icon(Icons.folder_outlined)),
-                Tab(text: '电线模式', icon: Icon(Icons.account_tree_outlined)),
+                Tab(
+                  text: l10n.tr('文件', 'Files'),
+                  icon: const Icon(Icons.folder_outlined),
+                ),
+                Tab(
+                  text: l10n.tr('电线模式', 'Wire Mode'),
+                  icon: const Icon(Icons.account_tree_outlined),
+                ),
               ],
             ),
           ),
@@ -159,7 +179,10 @@ class _TitleBar extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Flutter Practice Workspace',
+              context.l10n.tr(
+                'Flutter 练习 Workspace',
+                'Flutter Practice Workspace',
+              ),
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
