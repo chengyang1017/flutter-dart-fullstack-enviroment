@@ -7,40 +7,22 @@ import 'package:re_highlight/re_highlight.dart';
 /// 1. 大寫開頭的型別、Widget、類別
 /// 2. 小寫開頭並帶括號的函數、方法
 ///
-/// 不強制染色所有變數和屬性，因為 VS Code Dark 2026
-/// 本來就讓普通變數保持接近白色。
+/// 不強制染色所有變數和屬性，讓普通變量在深淺主題中都保持高可讀性。
 final Mode flutterDartMode = langDart.copyWith(
   Mode(
     name: 'Flutter Dart',
     contains: <Mode>[
-      // 類別、Widget、型別：
-      //
-      // PlaygroundController
-      // ChangeNotifier
-      // PreviewDevice
-      // String
-      // Container
       Mode(
         scope: 'type',
         match: r'\b[A-Z][A-Za-z0-9_]*\b',
         relevance: 0,
       ),
-
-      // 函數、方法：
-      //
-      // togglePreviewTheme(
-      // notifyListeners(
-      // contains(
-      // add(
       Mode(
         scope: 'function',
         match:
             r'\b(?!if\b|for\b|while\b|switch\b|catch\b|assert\b|return\b|throw\b|this\b|super\b|new\b)[a-z_][A-Za-z0-9_]*(?=\s*\()',
         relevance: 0,
       ),
-
-      // 保留 Dart 原有的關鍵字、字串、註釋、
-      // 數字、Annotation 等規則。
       ...List<Mode>.from(
         langDart.contains as List,
       ),
@@ -48,104 +30,114 @@ final Mode flutterDartMode = langDart.copyWith(
   ),
 );
 
-const TextStyle _normal = TextStyle(
-  color: Color(0xffd6deeb),
-);
-
-const TextStyle _keyword = TextStyle(
+const TextStyle _darkNormal = TextStyle(color: Color(0xffd6deeb));
+const TextStyle _darkKeyword = TextStyle(
   color: Color(0xffff7ab2),
   fontWeight: FontWeight.w500,
 );
-
-const TextStyle _type = TextStyle(
-  color: Color(0xff7fdbff),
-);
-
-const TextStyle _function = TextStyle(
-  color: Color(0xffffd580),
-);
-
-const TextStyle _constant = TextStyle(
-  color: Color(0xffb8e994),
-);
-
-const TextStyle _string = TextStyle(
-  color: Color(0xfff6bd8a),
-);
-
-const TextStyle _parameter = TextStyle(
-  color: Color(0xff82aaff),
-);
-
-const TextStyle _comment = TextStyle(
+const TextStyle _darkType = TextStyle(color: Color(0xff7fdbff));
+const TextStyle _darkFunction = TextStyle(color: Color(0xffffd580));
+const TextStyle _darkConstant = TextStyle(color: Color(0xffb8e994));
+const TextStyle _darkString = TextStyle(color: Color(0xfff6bd8a));
+const TextStyle _darkParameter = TextStyle(color: Color(0xff82aaff));
+const TextStyle _darkComment = TextStyle(
   color: Color(0xff7f9f7f),
   fontStyle: FontStyle.italic,
 );
+const TextStyle _darkAnnotation = TextStyle(color: Color(0xffc792ea));
 
-const TextStyle _annotation = TextStyle(
-  color: Color(0xffc792ea),
+const TextStyle _lightNormal = TextStyle(color: Color(0xff1f2937));
+const TextStyle _lightKeyword = TextStyle(
+  color: Color(0xffaf005f),
+  fontWeight: FontWeight.w500,
 );
+const TextStyle _lightType = TextStyle(color: Color(0xff006f8a));
+const TextStyle _lightFunction = TextStyle(color: Color(0xff8a5a00));
+const TextStyle _lightConstant = TextStyle(color: Color(0xff3b6d16));
+const TextStyle _lightString = TextStyle(color: Color(0xffa31515));
+const TextStyle _lightParameter = TextStyle(color: Color(0xff245ea8));
+const TextStyle _lightComment = TextStyle(
+  color: Color(0xff56812a),
+  fontStyle: FontStyle.italic,
+);
+const TextStyle _lightAnnotation = TextStyle(color: Color(0xff7a3e9d));
 
-/// 名称保持不变。
 const Map<String, TextStyle> vscodeDark2026Theme = <String, TextStyle>{
-  // 普通文字、局部变量、对象属性
   'root': TextStyle(
     color: Color(0xffd6deeb),
     backgroundColor: Color(0xff111318),
   ),
-  'variable': _normal,
-  'variable.other': _normal,
-  'property': _normal,
+  'variable': _darkNormal,
+  'variable.other': _darkNormal,
+  'property': _darkNormal,
+  'attr': _darkParameter,
+  'attribute': _darkParameter,
+  'params': _darkParameter,
+  'keyword': _darkKeyword,
+  'storage': _darkKeyword,
+  'literal': _darkKeyword,
+  'operator': _darkNormal,
+  'type': _darkType,
+  'built_in': _darkType,
+  'class': _darkType,
+  'title.class': _darkType,
+  'title.class.inherited': _darkType,
+  'function': _darkFunction,
+  'title': _darkFunction,
+  'title.function': _darkFunction,
+  'title.function.invoke': _darkFunction,
+  'constant': _darkConstant,
+  'symbol': _darkConstant,
+  'variable.language': _darkConstant,
+  'number': _darkConstant,
+  'string': _darkString,
+  'meta-string': _darkString,
+  'subst': _darkParameter,
+  'template-variable': _darkParameter,
+  'comment': _darkComment,
+  'quote': _darkComment,
+  'doctag': _darkComment,
+  'meta': _darkAnnotation,
+  'meta-keyword': _darkAnnotation,
+  'punctuation': _darkNormal,
+};
 
-  // named parameter
-  'attr': _parameter,
-  'attribute': _parameter,
-  'params': _parameter,
-
-  // class、void、extends、if、return、final
-  'keyword': _keyword,
-  'storage': _keyword,
-  'literal': _keyword,
-  'operator': _normal,
-
-  // Widget、类、类型
-  'type': _type,
-  'built_in': _type,
-  'class': _type,
-  'title.class': _type,
-  'title.class.inherited': _type,
-
-  // 函数和方法
-  'function': _function,
-  'title': _function,
-  'title.function': _function,
-  'title.function.invoke': _function,
-
-  // 常量、enum、布尔值
-  'constant': _constant,
-  'symbol': _constant,
-  'variable.language': _constant,
-
-  // 数字
-  'number': _constant,
-
-  // 字符串
-  'string': _string,
-  'meta-string': _string,
-
-  // 字符串插值
-  'subst': _parameter,
-  'template-variable': _parameter,
-
-  // 注释
-  'comment': _comment,
-  'quote': _comment,
-  'doctag': _comment,
-
-  // @override 等标记
-  'meta': _annotation,
-  'meta-keyword': _annotation,
-
-  // 标点
-  'punctuation': _normal,
+const Map<String, TextStyle> vscodeLight2026Theme = <String, TextStyle>{
+  'root': TextStyle(
+    color: Color(0xff1f2937),
+    backgroundColor: Color(0xffffffff),
+  ),
+  'variable': _lightNormal,
+  'variable.other': _lightNormal,
+  'property': _lightNormal,
+  'attr': _lightParameter,
+  'attribute': _lightParameter,
+  'params': _lightParameter,
+  'keyword': _lightKeyword,
+  'storage': _lightKeyword,
+  'literal': _lightKeyword,
+  'operator': _lightNormal,
+  'type': _lightType,
+  'built_in': _lightType,
+  'class': _lightType,
+  'title.class': _lightType,
+  'title.class.inherited': _lightType,
+  'function': _lightFunction,
+  'title': _lightFunction,
+  'title.function': _lightFunction,
+  'title.function.invoke': _lightFunction,
+  'constant': _lightConstant,
+  'symbol': _lightConstant,
+  'variable.language': _lightConstant,
+  'number': _lightConstant,
+  'string': _lightString,
+  'meta-string': _lightString,
+  'subst': _lightParameter,
+  'template-variable': _lightParameter,
+  'comment': _lightComment,
+  'quote': _lightComment,
+  'doctag': _lightComment,
+  'meta': _lightAnnotation,
+  'meta-keyword': _lightAnnotation,
+  'punctuation': _lightNormal,
 };
