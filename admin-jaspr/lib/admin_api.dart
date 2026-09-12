@@ -50,7 +50,7 @@ class AdminApi {
     required String password,
   }) async {
     final response = await _client.post(
-      baseUri.resolve('/auth/login'),
+      baseUri.resolve('/admin/login'),
       headers: const <String, String>{
         'content-type': 'application/json',
         'accept': 'application/json',
