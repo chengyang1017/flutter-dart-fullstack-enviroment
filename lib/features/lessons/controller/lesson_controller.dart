@@ -23,7 +23,7 @@ class LessonController extends ChangeNotifier {
     _restore();
   }
 
-  final Lesson lesson;
+  Lesson lesson;
   final LessonProgressStore store;
   final AuthorAnswerRepository answerRepository;
   final LessonChecker checker;
@@ -52,6 +52,17 @@ class LessonController extends ChangeNotifier {
       lesson.steps.every(
         (step) => completedSteps.contains(step.id),
       );
+
+  void replaceLesson(Lesson nextLesson) {
+    if (nextLesson.id != lesson.id) return;
+    lesson = nextLesson;
+    if (lesson.steps.isNotEmpty) {
+      currentStepIndex = currentStepIndex.clamp(0, lesson.steps.length - 1);
+    } else {
+      currentStepIndex = 0;
+    }
+    notifyListeners();
+  }
 
   String get selectedReferenceSymbol {
     return symbolAtEditor(
