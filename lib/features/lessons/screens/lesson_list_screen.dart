@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
 
 import '../data/lesson_catalog.dart';
@@ -107,13 +108,15 @@ class _LessonListScreenState extends State<LessonListScreen> {
   @override
   Widget build(BuildContext context) {
     final project = widget.project;
+    final l10n = context.l10n;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          project?.title ?? '教材模式',
+          project?.title ?? l10n.tr('教材模式', 'Lesson mode'),
         ),
         actions: const [
+          AppLanguageToggleButton(),
           AppThemeToggleButton(),
           SizedBox(width: 6),
         ],
@@ -156,6 +159,8 @@ class _LessonListScreenState extends State<LessonListScreen> {
   Widget _buildLessonList(
     LessonProject project,
   ) {
+    final l10n = context.l10n;
+
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: project.lessons.length,
@@ -191,8 +196,10 @@ class _LessonListScreenState extends State<LessonListScreen> {
                               ),
                             ),
                             if (lesson.comingSoon)
-                              const Chip(
-                                label: Text('即将推出'),
+                              Chip(
+                                label: Text(
+                                  l10n.tr('即将推出', 'Coming soon'),
+                                ),
                               ),
                           ],
                         ),
@@ -203,13 +210,13 @@ class _LessonListScreenState extends State<LessonListScreen> {
                           lesson.comingSoon
                               ? '${lesson.category} · '
                                   '${lesson.difficulty} · '
-                                  '${lesson.estimatedMinutes} 分钟'
+                                  '${lesson.estimatedMinutes} ${l10n.tr('分钟', 'min')}'
                               : '${lesson.category} · '
                                   '${lesson.difficulty} · '
-                                  '${lesson.estimatedMinutes} 分钟 · '
-                                  '${lesson.steps.length} 步 · '
+                                  '${lesson.estimatedMinutes} ${l10n.tr('分钟', 'min')} · '
+                                  '${lesson.steps.length} ${l10n.tr('步', 'steps')} · '
                                   '$completed/'
-                                  '${lesson.steps.length} 已完成',
+                                  '${lesson.steps.length} ${l10n.tr('已完成', 'completed')}',
                         ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -254,6 +261,7 @@ class _ProjectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalSteps = project.totalStepCount;
+    final l10n = context.l10n;
 
     final progress = totalSteps == 0 ? 0.0 : completedSteps / totalSteps;
 
@@ -300,8 +308,8 @@ class _ProjectCard extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '${project.lessons.length} 门教材 · '
-                '${project.availableLessonCount} 门可学习',
+                '${project.lessons.length} ${l10n.tr('门教材', 'lessons')} · '
+                '${project.availableLessonCount} ${l10n.tr('门可学习', 'available')}',
               ),
               const SizedBox(height: 10),
               LinearProgressIndicator(
