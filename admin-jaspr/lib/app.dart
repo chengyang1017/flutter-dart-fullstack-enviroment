@@ -357,7 +357,6 @@ class _AdminAppState extends State<AdminApp> {
             'placeholder': 'you@example.com',
           },
           events: events<String>(onInput: (value) => _email = value),
-          [],
         ),
         label(classes: 'field-label password-label', [text('Password')]),
         input<String>(
@@ -367,7 +366,6 @@ class _AdminAppState extends State<AdminApp> {
             'placeholder': '••••••••',
           },
           events: events<String>(onInput: (value) => _password = value),
-          [],
         ),
         if (_error != null)
           div(classes: 'message error-message', [text(_error!)]),
@@ -694,7 +692,6 @@ class _AdminAppState extends State<AdminApp> {
             if (lesson['comingSoon'] == true) 'checked': 'checked',
           },
           events: events<bool>(onChange: (value) => _updateLesson('comingSoon', value)),
-          [],
         ),
         span([
           strong([text('Coming soon')]),
@@ -723,7 +720,6 @@ class _AdminAppState extends State<AdminApp> {
       input<String>(
         attributes: {'type': type, 'value': value},
         events: events<String>(onInput: onInput),
-        [],
       ),
     ]);
   }
