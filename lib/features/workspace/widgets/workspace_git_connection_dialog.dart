@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../models/workspace_git_pull.dart';
 import '../models/workspace_git_push.dart';
 import '../models/workspace_git_remote_check.dart';
@@ -109,7 +110,10 @@ class _WorkspaceGitConnectionDialogState
       if (!mounted) return;
       setState(() {
         _loadingSecrets = false;
-        _errorText = '读取 Git 凭据失败：$error';
+        _errorText = context.l10n.tr(
+          '读取 Git 凭据失败：$error',
+          'Failed to load Git credentials: $error',
+        );
       });
     }
   }
@@ -119,7 +123,12 @@ class _WorkspaceGitConnectionDialogState
     final secretNameText = _secretNameController.text.trim();
     final secretValueText = _secretValueController.text;
     if (secretValueText.isNotEmpty && secretNameText.isEmpty) {
-      throw const FormatException('输入 Token 时必须同时填写 Secret name。');
+      throw FormatException(
+        context.l10n.tr(
+          '输入 Token 时必须同时填写 Secret name。',
+          'A Secret name is required when a token is provided.',
+        ),
+      );
     }
     final usernameText = _usernameController.text.trim();
     return (
@@ -130,8 +139,9 @@ class _WorkspaceGitConnectionDialogState
   }
 
   void _rememberSavedSecret(WorkspaceSecretMetadata? saved) {
-    if (saved == null || _secrets.any((item) => item.name == saved.name))
+    if (saved == null || _secrets.any((item) => item.name == saved.name)) {
       return;
+    }
     _secrets = [..._secrets, saved]..sort((a, b) => a.name.compareTo(b.name));
   }
 
@@ -186,13 +196,19 @@ class _WorkspaceGitConnectionDialogState
       setState(() {
         _checking = false;
         _result = checked.result;
-        _successText = 'GitHub 状态已刷新。';
+        _successText = context.l10n.tr(
+          'GitHub 状态已刷新。',
+          'GitHub status refreshed.',
+        );
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _checking = false;
-        _errorText = 'Git 连接检查失败：$error';
+        _errorText = context.l10n.tr(
+          'Git 连接检查失败：$error',
+          'Git connection check failed: $error',
+        );
       });
     }
   }
@@ -201,8 +217,10 @@ class _WorkspaceGitConnectionDialogState
     if (_busy) return;
     if (_hasLocalChanges) {
       setState(() {
-        _errorText =
-            '当前 Workspace 有本地修改。普通 Pull 不会覆盖它们；如果确定不要这些修改，请使用“放弃修改并重置到 GitHub”。';
+        _errorText = context.l10n.tr(
+          '当前 Workspace 有本地修改。普通 Pull 不会覆盖它们；如果确定不要这些修改，请使用“放弃修改并重置到 GitHub”。',
+          'This Workspace has local changes. A normal Pull will not overwrite them. If you want to discard them, use “Discard changes and reset to GitHub”.',
+        );
         _successText = null;
       });
       return;
@@ -238,20 +256,26 @@ class _WorkspaceGitConnectionDialogState
         _pulling = false;
         _hasLocalChanges = false;
         _lastSyncedHead = pulled.remoteHead;
-        _successText =
-            '已从 GitHub 拉取整个仓库 · ${pulled.importedFileCount} 个文件 · HEAD ${pulled.remoteHead.substring(0, 7)}';
+        _successText = context.l10n.tr(
+          '已从 GitHub 拉取整个仓库 · ${pulled.importedFileCount} 个文件 · HEAD ${pulled.remoteHead.substring(0, 7)}',
+          'Pulled the full repository from GitHub · ${pulled.importedFileCount} files · HEAD ${pulled.remoteHead.substring(0, 7)}',
+        );
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _pulling = false;
-        _errorText = 'Git Pull 失败：$error';
+        _errorText = context.l10n.tr(
+          'Git Pull 失败：$error',
+          'Git Pull failed: $error',
+        );
       });
     }
   }
 
   Future<void> _resetToGitHub() async {
     if (_busy) return;
+    final l10n = context.l10n;
 
     final first = await showDialog<bool>(
       context: context,
@@ -260,20 +284,27 @@ class _WorkspaceGitConnectionDialogState
           Icons.warning_amber_rounded,
           color: Theme.of(dialogContext).colorScheme.error,
         ),
-        title: const Text('放弃当前所有修改并与 GitHub 一致？'),
-        content: const Text(
-          '当前 Workspace 中尚未推送的修改会永久丢失。GitHub 远端不会被修改。'
-          '这不是普通 Pull。',
+        title: Text(
+          l10n.tr(
+            '放弃当前所有修改并与 GitHub 一致？',
+            'Discard all current changes and match GitHub?',
+          ),
+        ),
+        content: Text(
+          l10n.tr(
+            '当前 Workspace 中尚未推送的修改会永久丢失。GitHub 远端不会被修改。这不是普通 Pull。',
+            'Unpushed changes in this Workspace will be permanently lost. The GitHub remote will not be modified. This is not a normal Pull.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: Text(l10n.tr('取消', 'Cancel')),
           ),
           FilledButton(
             key: const ValueKey('workspace-git-reset-first-confirm'),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('继续'),
+            child: Text(l10n.tr('继续', 'Continue')),
           ),
         ],
       ),
@@ -284,15 +315,17 @@ class _WorkspaceGitConnectionDialogState
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('最后确认'),
-        content: const Text(
-          '确认后，本地 Workspace 将被 GitHub 当前分支的完整仓库内容替换。'
-          '未 Push 的本地修改无法恢复。',
+        title: Text(l10n.tr('最后确认', 'Final confirmation')),
+        content: Text(
+          l10n.tr(
+            '确认后，本地 Workspace 将被 GitHub 当前分支的完整仓库内容替换。未 Push 的本地修改无法恢复。',
+            'After confirmation, the local Workspace will be replaced by the full contents of the current GitHub branch. Unpushed local changes cannot be recovered.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('返回'),
+            child: Text(l10n.tr('返回', 'Back')),
           ),
           FilledButton(
             key: const ValueKey('workspace-git-reset-final-confirm'),
@@ -301,7 +334,12 @@ class _WorkspaceGitConnectionDialogState
               foregroundColor: Theme.of(dialogContext).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('放弃修改并重置'),
+            child: Text(
+              l10n.tr(
+                '放弃修改并重置',
+                'Discard changes and reset',
+              ),
+            ),
           ),
         ],
       ),
@@ -338,14 +376,19 @@ class _WorkspaceGitConnectionDialogState
         _resetting = false;
         _hasLocalChanges = false;
         _lastSyncedHead = pulled.remoteHead;
-        _successText =
-            '已放弃本地修改并重置到 GitHub · HEAD ${pulled.remoteHead.substring(0, 7)}';
+        _successText = context.l10n.tr(
+          '已放弃本地修改并重置到 GitHub · HEAD ${pulled.remoteHead.substring(0, 7)}',
+          'Discarded local changes and reset to GitHub · HEAD ${pulled.remoteHead.substring(0, 7)}',
+        );
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _resetting = false;
-        _errorText = '重置到 GitHub 失败：$error';
+        _errorText = context.l10n.tr(
+          '重置到 GitHub 失败：$error',
+          'Reset to GitHub failed: $error',
+        );
       });
     }
   }
@@ -366,19 +409,26 @@ class _WorkspaceGitConnectionDialogState
       return;
     }
 
+    final l10n = context.l10n;
     final commitMessage = _commitMessageController.text.trim();
     final authorName = _authorNameController.text.trim();
     final authorEmail = _authorEmailController.text.trim();
     if (commitMessage.isEmpty || authorName.isEmpty || authorEmail.isEmpty) {
       setState(() {
-        _errorText = 'Push 前请填写 Commit message、Author name 和 Author email。';
+        _errorText = l10n.tr(
+          'Push 前请填写 Commit message、Author name 和 Author email。',
+          'Enter a Commit message, Author name, and Author email before Push.',
+        );
         _successText = null;
       });
       return;
     }
     if (_lastSyncedHead == null) {
       setState(() {
-        _errorText = '第一次 Push 前必须先 Pull 或重置一次，以建立可信的 GitHub HEAD。';
+        _errorText = l10n.tr(
+          '第一次 Push 前必须先 Pull 或重置一次，以建立可信的 GitHub HEAD。',
+          'Before the first Push, Pull or reset once to establish a trusted GitHub HEAD.',
+        );
         _successText = null;
       });
       return;
@@ -397,7 +447,10 @@ class _WorkspaceGitConnectionDialogState
       if (currentHead == null || currentHead != _lastSyncedHead) {
         setState(() {
           _pushing = false;
-          _errorText = 'GitHub 在你上次同步后已经变化。请先 Pull；如果不要本地修改，则使用重置到 GitHub。';
+          _errorText = l10n.tr(
+            'GitHub 在你上次同步后已经变化。请先 Pull；如果不要本地修改，则使用重置到 GitHub。',
+            'GitHub changed after your last sync. Pull first, or reset to GitHub if you do not want the local changes.',
+          );
         });
         return;
       }
@@ -416,14 +469,23 @@ class _WorkspaceGitConnectionDialogState
         _lastSyncedHead = pushed.newRemoteHead;
         _commitMessageController.clear();
         _successText = pushed.committed
-            ? 'Push 成功 · HEAD ${pushed.newRemoteHead.substring(0, 7)}'
-            : 'GitHub 已经与当前 Workspace 一致，没有新的提交需要 Push。';
+            ? l10n.tr(
+                'Push 成功 · HEAD ${pushed.newRemoteHead.substring(0, 7)}',
+                'Push succeeded · HEAD ${pushed.newRemoteHead.substring(0, 7)}',
+              )
+            : l10n.tr(
+                'GitHub 已经与当前 Workspace 一致，没有新的提交需要 Push。',
+                'GitHub already matches the current Workspace. There is nothing new to Push.',
+              );
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _pushing = false;
-        _errorText = 'Git Push 失败：$error';
+        _errorText = l10n.tr(
+          'Git Push 失败：$error',
+          'Git Push failed: $error',
+        );
       });
     }
   }
@@ -434,9 +496,10 @@ class _WorkspaceGitConnectionDialogState
     final repositoryLabel = remote.repositoryFullName ??
         remote.canonicalUrl ??
         remote.repositoryUrl;
+    final l10n = context.l10n;
 
     return AlertDialog(
-      title: const Text('GitHub 同步'),
+      title: Text(l10n.tr('GitHub 同步', 'GitHub Sync')),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620),
         child: SingleChildScrollView(
@@ -457,18 +520,24 @@ class _WorkspaceGitConnectionDialogState
               const SizedBox(height: 8),
               Text(
                 _lastSyncedHead == null
-                    ? '尚未建立同步 HEAD'
-                    : '上次同步 HEAD · $_lastSyncedHead',
+                    ? l10n.tr('尚未建立同步 HEAD', 'No synchronized HEAD yet')
+                    : l10n.tr(
+                        '上次同步 HEAD · $_lastSyncedHead',
+                        'Last synchronized HEAD · $_lastSyncedHead',
+                      ),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 16),
               Text(
-                'Git 凭据',
+                l10n.tr('Git 凭据', 'Git credentials'),
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 6),
-              const Text(
-                '公开仓库可以留空。私有仓库 Token 只进入 Workspace Secret Vault，不写入仓库 URL 或 Workspace 快照。',
+              Text(
+                l10n.tr(
+                  '公开仓库可以留空。私有仓库 Token 只进入 Workspace Secret Vault，不写入仓库 URL 或 Workspace 快照。',
+                  'Leave credentials blank for public repositories. Tokens for private repositories are stored only in the Workspace Secret Vault, never in the repository URL or Workspace snapshot.',
+                ),
               ),
               const SizedBox(height: 12),
               if (_loadingSecrets)
@@ -502,10 +571,13 @@ class _WorkspaceGitConnectionDialogState
                 enabled: !_busy,
                 autocorrect: false,
                 enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: 'Secret name（可选）',
-                  hintText: '例如 GITHUB_TOKEN',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.tr(
+                    'Secret name（可选）',
+                    'Secret name (optional)',
+                  ),
+                  hintText: l10n.tr('例如 GITHUB_TOKEN', 'For example: GITHUB_TOKEN'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 10),
@@ -517,10 +589,15 @@ class _WorkspaceGitConnectionDialogState
                 autocorrect: false,
                 enableSuggestions: false,
                 decoration: InputDecoration(
-                  labelText: 'Token / password（仅保存新值时填写）',
+                  labelText: l10n.tr(
+                    'Token / password（仅保存新值时填写）',
+                    'Token / password (only when saving a new value)',
+                  ),
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    tooltip: _showSecret ? '隐藏凭据' : '显示凭据',
+                    tooltip: _showSecret
+                        ? l10n.tr('隐藏凭据', 'Hide credentials')
+                        : l10n.tr('显示凭据', 'Show credentials'),
                     onPressed: _busy
                         ? null
                         : () => setState(() => _showSecret = !_showSecret),
@@ -537,19 +614,19 @@ class _WorkspaceGitConnectionDialogState
                 enabled: !_busy,
                 autocorrect: false,
                 enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: 'Username（通常可留空）',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.tr(
+                    'Username（通常可留空）',
+                    'Username (usually optional)',
+                  ),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               if (widget.pushRemote != null) ...[
                 const SizedBox(height: 18),
                 const Divider(),
                 const SizedBox(height: 8),
-                Text(
-                  'Push',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
+                Text('Push', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 10),
                 TextField(
                   key: const ValueKey('workspace-git-push-message'),
@@ -626,11 +703,11 @@ class _WorkspaceGitConnectionDialogState
                 key: const ValueKey('workspace-git-edit-remote'),
                 onPressed: _busy ? null : widget.onEditRemote,
                 icon: const Icon(Icons.settings_outlined),
-                label: const Text('仓库设置'),
+                label: Text(l10n.tr('仓库设置', 'Repository settings')),
               ),
             TextButton(
               onPressed: _busy ? null : () => Navigator.pop(context),
-              child: const Text('关闭'),
+              child: Text(l10n.tr('关闭', 'Close')),
             ),
           ],
         ),
@@ -648,7 +725,11 @@ class _WorkspaceGitConnectionDialogState
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.network_check_outlined),
-              label: Text(_checking ? '检查中…' : '检查状态'),
+              label: Text(
+                _checking
+                    ? l10n.tr('检查中…', 'Checking…')
+                    : l10n.tr('检查状态', 'Check status'),
+              ),
             ),
             OutlinedButton.icon(
               key: const ValueKey('workspace-git-pull'),
@@ -660,7 +741,7 @@ class _WorkspaceGitConnectionDialogState
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.download_outlined),
-              label: Text(_pulling ? 'Pull 中…' : 'Pull'),
+              label: Text(_pulling ? 'Pull…' : 'Pull'),
             ),
             OutlinedButton.icon(
               key: const ValueKey('workspace-git-reset'),
@@ -675,7 +756,11 @@ class _WorkspaceGitConnectionDialogState
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.restore_rounded),
-              label: Text(_resetting ? '重置中…' : '放弃修改并重置'),
+              label: Text(
+                _resetting
+                    ? l10n.tr('重置中…', 'Resetting…')
+                    : l10n.tr('放弃修改并重置', 'Discard changes and reset'),
+              ),
             ),
             if (widget.pushRemote != null)
               FilledButton.icon(
@@ -688,7 +773,7 @@ class _WorkspaceGitConnectionDialogState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.upload_rounded),
-                label: Text(_pushing ? 'Push 中…' : 'Push'),
+                label: Text(_pushing ? 'Push…' : 'Push'),
               ),
           ],
         ),
@@ -705,9 +790,16 @@ class _GitCheckResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final branchFound = result.branchFound;
+    final l10n = context.l10n;
     final message = branchFound
-        ? '仓库可访问，分支 ${result.branch} 存在。'
-        : '仓库可访问，但找不到分支 ${result.branch}。';
+        ? l10n.tr(
+            '仓库可访问，分支 ${result.branch} 存在。',
+            'Repository is accessible and branch ${result.branch} exists.',
+          )
+        : l10n.tr(
+            '仓库可访问，但找不到分支 ${result.branch}。',
+            'Repository is accessible, but branch ${result.branch} was not found.',
+          );
     final head = result.remoteHead;
 
     return Card(
@@ -718,7 +810,8 @@ class _GitCheckResultCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
-                branchFound ? Icons.check_circle_outline : Icons.warning_amber),
+              branchFound ? Icons.check_circle_outline : Icons.warning_amber,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
