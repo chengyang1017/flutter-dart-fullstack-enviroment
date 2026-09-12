@@ -40,6 +40,7 @@ class _AdminAppState extends State<AdminApp> {
   int? _selectedLessonIndex;
   String _courseEditLanguage = 'en';
 
+  int? _editingCourseGroupIndex;
   int? _creatingCourseGroupIndex;
   String _newCourseId = '';
   String _newCourseTitle = '';
@@ -125,6 +126,7 @@ class _AdminAppState extends State<AdminApp> {
       _showFullCatalogJson = false;
       _selectedProjectIndex = null;
       _selectedLessonIndex = null;
+      _editingCourseGroupIndex = null;
       _creatingCourseGroupIndex = null;
       _courseEditLanguage = 'en';
       _section = _AdminSection.dashboard;
@@ -141,10 +143,7 @@ class _AdminAppState extends State<AdminApp> {
     final projects = await _api.projects(token);
     Map<String, dynamic>? lessons;
     try {
-      lessons = await _api.lessons(
-        token,
-        languageCode: _courseEditLanguage,
-      );
+      lessons = await _api.lessons(token, languageCode: _courseEditLanguage);
     } on AdminApiException catch (error) {
       if (error.statusCode != 404) rethrow;
     }
@@ -182,7 +181,8 @@ class _AdminAppState extends State<AdminApp> {
     if (token == null || id.isEmpty) return;
     if (!web.window.confirm(
       'Delete user "$name" and all of their Workspace projects? This cannot be undone.',
-    )) return;
+    ))
+      return;
 
     _setBusy(true);
     try {
@@ -206,15 +206,12 @@ class _AdminAppState extends State<AdminApp> {
     if (token == null || userId.isEmpty || workspaceId.isEmpty) return;
     if (!web.window.confirm(
       'Delete project "$name" from ${owner['username'] ?? userId}? This cannot be undone.',
-    )) return;
+    ))
+      return;
 
     _setBusy(true);
     try {
-      await _api.deleteProject(
-        token,
-        userId: userId,
-        workspaceId: workspaceId,
-      );
+      await _api.deleteProject(token, userId: userId, workspaceId: workspaceId);
       await _refreshAll();
       setState(() => _notice = 'Project $name deleted.');
     } catch (error) {
@@ -224,7 +221,9 @@ class _AdminAppState extends State<AdminApp> {
     }
   }
 
-  Future<void> _saveLessons({String successMessage = 'Lesson catalog saved.'}) async {
+  Future<void> _saveLessons({
+    String successMessage = 'Lesson catalog saved.',
+  }) async {
     final token = _token;
     final catalog = _lessonCatalog;
     if (token == null || catalog == null) return;
@@ -346,8 +345,23 @@ class _AdminAppState extends State<AdminApp> {
     if (groups.isEmpty) {
       _selectedProjectIndex = null;
       _selectedLessonIndex = null;
+      _editingCourseGroupIndex = null;
+      _creatingCourseGroupIndex = null;
       return;
     }
+
+    final editingGroupIndex = _editingCourseGroupIndex;
+    if (editingGroupIndex != null &&
+        (editingGroupIndex < 0 || editingGroupIndex >= groups.length)) {
+      _editingCourseGroupIndex = null;
+    }
+
+    final creatingGroupIndex = _creatingCourseGroupIndex;
+    if (creatingGroupIndex != null &&
+        (creatingGroupIndex < 0 || creatingGroupIndex >= groups.length)) {
+      _creatingCourseGroupIndex = null;
+    }
+
     var groupIndex = _selectedProjectIndex ?? 0;
     if (groupIndex < 0 || groupIndex >= groups.length) groupIndex = 0;
     final lessons = _lessonList(groups[groupIndex]);
@@ -403,10 +417,40 @@ class _AdminAppState extends State<AdminApp> {
     setState(() => _showFullCatalogJson = !_showFullCatalogJson);
   }
 
+  void _openEditCourseGroup(int groupIndex) {
+    final groups = _lessonGroups;
+    if (groupIndex < 0 || groupIndex >= groups.length) return;
+
+    setState(() {
+      _editingCourseGroupIndex = groupIndex;
+      _creatingCourseGroupIndex = null;
+      _selectedProjectIndex = groupIndex;
+      _courseDraft = '';
+      _error = null;
+      _notice = null;
+    });
+  }
+
+  void _closeEditCourseGroup() {
+    setState(() {
+      _editingCourseGroupIndex = null;
+      _syncCourseDraft();
+    });
+  }
+
+  void _updateCourseGroup(
+    Map<String, dynamic> group,
+    String key,
+    Object? value,
+  ) {
+    group[key] = value;
+  }
+
   void _openCreateCourse(int groupIndex) {
     final groups = _lessonGroups;
     if (groupIndex < 0 || groupIndex >= groups.length) return;
     setState(() {
+      _editingCourseGroupIndex = null;
       _creatingCourseGroupIndex = groupIndex;
       _selectedProjectIndex = groupIndex;
       _courseDraft = '';
@@ -512,6 +556,7 @@ class _AdminAppState extends State<AdminApp> {
     setState(() {
       _selectedProjectIndex = groupIndex;
       _selectedLessonIndex = lessons.length - 1;
+      _editingCourseGroupIndex = null;
       _creatingCourseGroupIndex = null;
       _catalogDraft = const JsonEncoder.withIndent('  ').convert(catalog);
       _syncCourseDraft();
@@ -676,11 +721,11 @@ class _AdminAppState extends State<AdminApp> {
   }
 
   String get _sectionTitle => switch (_section) {
-        _AdminSection.dashboard => 'Overview',
-        _AdminSection.lessons => 'Courses',
-        _AdminSection.users => 'User accounts',
-        _AdminSection.projects => 'Workspace projects',
-      };
+    _AdminSection.dashboard => 'Overview',
+    _AdminSection.lessons => 'Courses',
+    _AdminSection.users => 'User accounts',
+    _AdminSection.projects => 'Workspace projects',
+  };
 
   Component _nav(_AdminSection section, String labelText, String iconText) {
     return button(
@@ -704,7 +749,9 @@ class _AdminAppState extends State<AdminApp> {
           p(classes: 'eyebrow', [text('SYSTEM STATUS')]),
           h2([text('Manage the whole learning platform')]),
           p(classes: 'muted hero-copy', [
-            text('Courses, users and Workspace projects share one authenticated backend.'),
+            text(
+              'Courses, users and Workspace projects share one authenticated backend.',
+            ),
           ]),
         ]),
         div(classes: 'status-pill', [
@@ -713,12 +760,22 @@ class _AdminAppState extends State<AdminApp> {
         ]),
       ]),
       div(classes: 'stat-grid', [
-        _stat('Users', '${_overview['users'] ?? _users.length}', 'Registered accounts'),
-        _stat('Projects', '${_overview['projects'] ?? _projects.length}', 'Cloud workspaces'),
+        _stat(
+          'Users',
+          '${_overview['users'] ?? _users.length}',
+          'Registered accounts',
+        ),
+        _stat(
+          'Projects',
+          '${_overview['projects'] ?? _projects.length}',
+          'Cloud workspaces',
+        ),
         _stat('Courses', '${_overview['lessons'] ?? 0}', 'Lesson entries'),
         _stat(
           'Catalog',
-          _overview['lessonCatalogInitialized'] == true ? 'Live' : 'Seed pending',
+          _overview['lessonCatalogInitialized'] == true
+              ? 'Live'
+              : 'Seed pending',
           _overview['lessonCatalogInitialized'] == true
               ? 'Remote source of truth'
               : 'Open Lesson Mode once as admin',
@@ -730,17 +787,25 @@ class _AdminAppState extends State<AdminApp> {
           _timeline('1', 'Seed', 'Existing LessonCatalog uploads once.'),
           _timeline('2', 'Manage', 'Edit lessons from this Jaspr console.'),
           _timeline('3', 'Consume', 'Flutter reads /content/lessons.'),
-          _timeline('4', 'Fallback', 'Offline clients retain the built-in seed.'),
+          _timeline(
+            '4',
+            'Fallback',
+            'Offline clients retain the built-in seed.',
+          ),
         ]),
         div(classes: 'panel', [
           h3([text('Platform snapshot')]),
           _keyValue('Admin', _adminUsername ?? '—'),
           _keyValue('Users', '${_users.length}'),
           _keyValue('Projects', '${_projects.length}'),
-          _keyValue('Lesson groups', '${_overview['lessonProjects'] ?? _lessonGroups.length}'),
+          _keyValue(
+            'Lesson groups',
+            '${_overview['lessonProjects'] ?? _lessonGroups.length}',
+          ),
           _keyValue(
             'Last lesson update',
-            _overview['lessonCatalogUpdatedAt']?.toString() ?? 'Not initialized',
+            _overview['lessonCatalogUpdatedAt']?.toString() ??
+                'Not initialized',
           ),
         ]),
       ]),
@@ -782,14 +847,26 @@ class _AdminAppState extends State<AdminApp> {
             'After the updated backend is deployed, sign into Flutter Workbench with an admin account and open Lesson Mode once. The existing hardcoded catalog will be uploaded automatically.',
           ),
         ]),
-        button(classes: 'ghost-button', onClick: _refreshCurrent, [text('Check again')]),
+        button(classes: 'ghost-button', onClick: _refreshCurrent, [
+          text('Check again'),
+        ]),
       ]);
     }
 
     final groups = _lessonGroups;
     final lesson = _selectedLesson;
+
+    final editingGroupIndex = _editingCourseGroupIndex;
+    final editingGroup =
+        editingGroupIndex != null &&
+            editingGroupIndex >= 0 &&
+            editingGroupIndex < groups.length
+        ? groups[editingGroupIndex]
+        : null;
+
     final creatingGroupIndex = _creatingCourseGroupIndex;
-    final creatingGroup = creatingGroupIndex != null &&
+    final creatingGroup =
+        creatingGroupIndex != null &&
             creatingGroupIndex >= 0 &&
             creatingGroupIndex < groups.length
         ? groups[creatingGroupIndex]
@@ -800,7 +877,9 @@ class _AdminAppState extends State<AdminApp> {
         div([
           h2([text('Course catalog')]),
           p(classes: 'muted', [
-            text('${groups.length} groups · ${_overview['lessons'] ?? 0} lessons'),
+            text(
+              '${groups.length} groups · ${_overview['lessons'] ?? 0} lessons',
+            ),
           ]),
         ]),
         div(classes: 'topbar-actions', [
@@ -841,17 +920,23 @@ class _AdminAppState extends State<AdminApp> {
             _lessonGroup(groupIndex, groups[groupIndex]),
         ]),
         div(classes: 'lesson-editor panel', [
-          creatingGroup != null
+          editingGroup != null
+              ? _courseGroupForm(editingGroupIndex!, editingGroup)
+              : creatingGroup != null
               ? _newCourseForm(creatingGroup)
               : lesson == null
-                  ? div(classes: 'empty-editor', [
-                      h3([text('Select a lesson')]),
-                      p(classes: 'muted', [text('Choose a lesson from the left.')]),
-                    ])
-                  : _lessonForm(lesson),
+              ? div(classes: 'empty-editor', [
+                  h3([text('Select a lesson or course group')]),
+                  p(classes: 'muted', [
+                    text(
+                      'Choose a course, or use the edit button beside a group title.',
+                    ),
+                  ]),
+                ])
+              : _lessonForm(lesson),
         ]),
       ]),
-      if (creatingGroup == null && lesson != null)
+      if (editingGroup == null && creatingGroup == null && lesson != null)
         div(classes: 'panel json-panel', [
           div(classes: 'panel-heading', [
             div([
@@ -902,14 +987,22 @@ class _AdminAppState extends State<AdminApp> {
             classes: 'ghost-button',
             disabled: _busy,
             onClick: _toggleFullCatalogJson,
-            [text(_showFullCatalogJson ? 'Hide full catalog' : 'Show full catalog')],
+            [
+              text(
+                _showFullCatalogJson
+                    ? 'Hide full catalog'
+                    : 'Show full catalog',
+              ),
+            ],
           ),
         ]),
         if (_showFullCatalogJson)
           div([
             div(classes: 'panel-heading', [
               p(classes: 'muted', [
-                text('Changes here can affect every course and both languages.'),
+                text(
+                  'Changes here can affect every course and both languages.',
+                ),
               ]),
               button(
                 classes: 'ghost-button',
@@ -934,6 +1027,8 @@ class _AdminAppState extends State<AdminApp> {
 
   Component _lessonGroup(int groupIndex, Map<String, dynamic> group) {
     final lessons = _lessonList(group);
+    final isEditing = _editingCourseGroupIndex == groupIndex;
+
     return div(classes: 'lesson-group', [
       div(classes: 'lesson-group-title', [
         span(classes: 'lesson-group-dot', []),
@@ -941,18 +1036,38 @@ class _AdminAppState extends State<AdminApp> {
           strong([text(group['title']?.toString() ?? 'Untitled group')]),
           span([text('${lessons.length} lessons')]),
         ]),
-        button(
-          classes: 'ghost-button compact-button',
-          disabled: _busy,
-          onClick: () => _openCreateCourse(groupIndex),
-          [text('＋')],
-        ),
+        div(classes: 'topbar-actions', [
+          button(
+            classes: isEditing
+                ? 'primary-button compact-button'
+                : 'ghost-button compact-button',
+            disabled: _busy,
+            attributes: const {
+              'title': 'Edit course group',
+              'aria-label': 'Edit course group',
+            },
+            onClick: () => _openEditCourseGroup(groupIndex),
+            [text('✎')],
+          ),
+          button(
+            classes: 'ghost-button compact-button',
+            disabled: _busy,
+            attributes: const {
+              'title': 'Add course to this group',
+              'aria-label': 'Add course to this group',
+            },
+            onClick: () => _openCreateCourse(groupIndex),
+            [text('＋')],
+          ),
+        ]),
       ]),
       div(classes: 'lesson-list', [
         for (var lessonIndex = 0; lessonIndex < lessons.length; lessonIndex++)
           button(
-            classes: 'lesson-row${_selectedProjectIndex == groupIndex && _selectedLessonIndex == lessonIndex ? ' selected' : ''}',
+            classes:
+                'lesson-row${_selectedProjectIndex == groupIndex && _selectedLessonIndex == lessonIndex && !isEditing ? ' selected' : ''}',
             onClick: () => setState(() {
+              _editingCourseGroupIndex = null;
               _creatingCourseGroupIndex = null;
               _selectedProjectIndex = groupIndex;
               _selectedLessonIndex = lessonIndex;
@@ -961,12 +1076,15 @@ class _AdminAppState extends State<AdminApp> {
             [
               span(classes: 'lesson-number', [text('${lessonIndex + 1}')]),
               span(classes: 'lesson-row-copy', [
-                strong([text(lessons[lessonIndex]['title']?.toString() ?? 'Untitled')]),
+                strong([
+                  text(lessons[lessonIndex]['title']?.toString() ?? 'Untitled'),
+                ]),
                 span([
                   text(
                     lessons[lessonIndex]['comingSoon'] == true
                         ? (_courseEditLanguage == 'zh' ? '即将推出' : 'Coming soon')
-                        : lessons[lessonIndex]['category']?.toString() ?? 'Lesson',
+                        : lessons[lessonIndex]['category']?.toString() ??
+                              'Lesson',
                   ),
                 ]),
               ]),
@@ -976,16 +1094,103 @@ class _AdminAppState extends State<AdminApp> {
     ]);
   }
 
+  Component _courseGroupForm(int groupIndex, Map<String, dynamic> group) {
+    final languageLabel = _courseEditLanguage == 'zh' ? '中文' : 'English';
+    final title = group['title']?.toString() ?? 'Untitled group';
+    final description = group['description']?.toString() ?? '';
+    final id = group['id']?.toString() ?? '';
+    final lessons = _lessonList(group);
+
+    return div(key: Key('course-group-editor-$groupIndex-$_courseEditLanguage'), [
+      div(classes: 'editor-heading', [
+        div([
+          p(classes: 'eyebrow', [
+            text(
+              _courseEditLanguage == 'zh'
+                  ? '课程组 · 中文'
+                  : 'COURSE GROUP · ENGLISH',
+            ),
+          ]),
+          h2([text(title)]),
+          p(classes: 'muted', [
+            text(
+              _courseEditLanguage == 'zh'
+                  ? '编辑这个课程组本身，而不是组内的某一门课程。'
+                  : 'Edit this course group itself, not an individual course inside it.',
+            ),
+          ]),
+        ]),
+        span(classes: 'badge', [text(languageLabel)]),
+      ]),
+      _field(
+        _courseEditLanguage == 'zh' ? '课程组标题' : 'Group title',
+        title,
+        (value) => _updateCourseGroup(group, 'title', value),
+      ),
+      _area(
+        _courseEditLanguage == 'zh' ? '课程组简介' : 'Group description',
+        description,
+        (value) => _updateCourseGroup(group, 'description', value),
+      ),
+      div(classes: 'lesson-meta-strip', [
+        _miniMeta(
+          _courseEditLanguage == 'zh' ? '课程数量' : 'Courses',
+          '${lessons.length}',
+        ),
+        if (id.isNotEmpty) _miniMeta('ID', id),
+        _miniMeta(
+          _courseEditLanguage == 'zh' ? '语言' : 'Language',
+          languageLabel,
+        ),
+      ]),
+      p(classes: 'muted editor-note', [
+        text(
+          _courseEditLanguage == 'zh'
+              ? 'English / 中文 会分别保存课程组的标题和简介；组内课程不会受影响。'
+              : 'English / 中文 stores the group title and description separately. Courses inside the group are unaffected.',
+        ),
+      ]),
+      div(classes: 'topbar-actions', [
+        button(
+          classes: 'ghost-button',
+          disabled: _busy,
+          onClick: _closeEditCourseGroup,
+          [text(_courseEditLanguage == 'zh' ? '完成' : 'Done')],
+        ),
+        button(
+          classes: 'primary-button',
+          disabled: _busy,
+          onClick: () => _saveLessons(
+            successMessage: _courseEditLanguage == 'zh'
+                ? '课程组已保存。'
+                : 'Course group saved.',
+          ),
+          [
+            text(
+              _busy
+                  ? (_courseEditLanguage == 'zh' ? '保存中…' : 'Saving…')
+                  : (_courseEditLanguage == 'zh' ? '保存课程组' : 'Save group'),
+            ),
+          ],
+        ),
+      ]),
+    ]);
+  }
+
   Component _newCourseForm(Map<String, dynamic> group) {
     return div(key: const Key('new-course-editor'), [
       div(classes: 'editor-heading', [
         div([
           p(classes: 'eyebrow', [
-            text(_courseEditLanguage == 'zh' ? '新课程 · 中文' : 'NEW COURSE · ENGLISH'),
+            text(
+              _courseEditLanguage == 'zh' ? '新课程 · 中文' : 'NEW COURSE · ENGLISH',
+            ),
           ]),
           h2([text(_courseEditLanguage == 'zh' ? '添加课程' : 'Add course')]),
           p(classes: 'muted', [
-            text('Add a course to ${group['title']?.toString() ?? 'this group'}.'),
+            text(
+              'Add a course to ${group['title']?.toString() ?? 'this group'}.',
+            ),
           ]),
         ]),
         span(classes: 'badge', [text('Draft')]),
@@ -995,11 +1200,7 @@ class _AdminAppState extends State<AdminApp> {
         _newCourseTitle,
         (value) => _newCourseTitle = value,
       ),
-      _field(
-        'Course ID',
-        _newCourseId,
-        (value) => _newCourseId = value,
-      ),
+      _field('Course ID', _newCourseId, (value) => _newCourseId = value),
       p(classes: 'muted editor-note', [
         text('Leave the ID empty to generate it automatically.'),
       ]),
@@ -1039,13 +1240,17 @@ class _AdminAppState extends State<AdminApp> {
             'type': 'checkbox',
             if (_newCourseComingSoon) 'checked': 'checked',
           },
-          events: events<bool>(onChange: (value) {
-            setState(() => _newCourseComingSoon = value);
-          }),
+          events: events<bool>(
+            onChange: (value) {
+              setState(() => _newCourseComingSoon = value);
+            },
+          ),
         ),
         span([
           strong([text(_courseEditLanguage == 'zh' ? '即将推出' : 'Coming soon')]),
-          span(classes: 'muted', [text('Create the course but keep it unavailable to students.')]),
+          span(classes: 'muted', [
+            text('Create the course but keep it unavailable to students.'),
+          ]),
         ]),
       ]),
       div(classes: 'topbar-actions', [
@@ -1063,7 +1268,9 @@ class _AdminAppState extends State<AdminApp> {
         ),
       ]),
       p(classes: 'muted editor-note', [
-        text('The initial text is copied to both languages. After creation, switch English / 中文 above and edit each translation separately.'),
+        text(
+          'The initial text is copied to both languages. After creation, switch English / 中文 above and edit each translation separately.',
+        ),
       ]),
     ]);
   }
@@ -1114,7 +1321,8 @@ class _AdminAppState extends State<AdminApp> {
         _field(
           'Estimated minutes',
           '${lesson['estimatedMinutes'] ?? 0}',
-          (value) => _updateLesson('estimatedMinutes', int.tryParse(value) ?? 0),
+          (value) =>
+              _updateLesson('estimatedMinutes', int.tryParse(value) ?? 0),
           type: 'number',
         ),
         _field(
@@ -1122,7 +1330,11 @@ class _AdminAppState extends State<AdminApp> {
           _stringList(lesson['tags']).join(', '),
           (value) => _updateLesson(
             'tags',
-            value.split(',').map((item) => item.trim()).where((item) => item.isNotEmpty).toList(),
+            value
+                .split(',')
+                .map((item) => item.trim())
+                .where((item) => item.isNotEmpty)
+                .toList(),
           ),
         ),
       ]),
@@ -1132,11 +1344,15 @@ class _AdminAppState extends State<AdminApp> {
             'type': 'checkbox',
             if (lesson['comingSoon'] == true) 'checked': 'checked',
           },
-          events: events<bool>(onChange: (value) => _updateLesson('comingSoon', value)),
+          events: events<bool>(
+            onChange: (value) => _updateLesson('comingSoon', value),
+          ),
         ),
         span([
           strong([text(_courseEditLanguage == 'zh' ? '即将推出' : 'Coming soon')]),
-          span(classes: 'muted', [text('Prevent students from opening this lesson.')]),
+          span(classes: 'muted', [
+            text('Prevent students from opening this lesson.'),
+          ]),
         ]),
       ]),
       div(classes: 'lesson-meta-strip', [
@@ -1145,7 +1361,9 @@ class _AdminAppState extends State<AdminApp> {
         _miniMeta('ID', id),
       ]),
       p(classes: 'muted editor-note', [
-        text('Switch English / 中文 to edit the same course in both languages. Steps, code and checker requirements remain shared.'),
+        text(
+          'Switch English / 中文 to edit the same course in both languages. Steps, code and checker requirements remain shared.',
+        ),
       ]),
     ]);
   }
@@ -1165,7 +1383,11 @@ class _AdminAppState extends State<AdminApp> {
     ]);
   }
 
-  Component _area(String labelText, String value, void Function(String) onInput) {
+  Component _area(
+    String labelText,
+    String value,
+    void Function(String) onInput,
+  ) {
     return label(classes: 'field-block', [
       span(classes: 'field-label', [text(labelText)]),
       textarea(events: events<String>(onInput: onInput), [text(value)]),
@@ -1184,7 +1406,9 @@ class _AdminAppState extends State<AdminApp> {
       div(classes: 'section-toolbar', [
         div([
           h2([text('Registered accounts')]),
-          p(classes: 'muted', [text('${_users.length} accounts in Workspace Storage')]),
+          p(classes: 'muted', [
+            text('${_users.length} accounts in Workspace Storage'),
+          ]),
         ]),
       ]),
       div(classes: 'panel table-panel', [
@@ -1199,10 +1423,14 @@ class _AdminAppState extends State<AdminApp> {
           for (final user in _users)
             div(classes: 'table-row users-grid', [
               div(classes: 'user-cell', [
-                div(classes: 'avatar-dot', [text(_initial(user['username']?.toString()))]),
+                div(classes: 'avatar-dot', [
+                  text(_initial(user['username']?.toString())),
+                ]),
                 div([
                   strong([text(user['username']?.toString() ?? 'Unknown')]),
-                  span(classes: 'muted mono-small', [text(user['userId']?.toString() ?? '')]),
+                  span(classes: 'muted mono-small', [
+                    text(user['userId']?.toString() ?? ''),
+                  ]),
                 ]),
               ]),
               span([text(user['email']?.toString() ?? '—')]),
@@ -1229,7 +1457,9 @@ class _AdminAppState extends State<AdminApp> {
       div(classes: 'section-toolbar', [
         div([
           h2([text('Workspace projects')]),
-          p(classes: 'muted', [text('${_projects.length} projects across all users')]),
+          p(classes: 'muted', [
+            text('${_projects.length} projects across all users'),
+          ]),
         ]),
       ]),
       div(classes: 'project-grid', [
@@ -1239,7 +1469,9 @@ class _AdminAppState extends State<AdminApp> {
         div(classes: 'empty-state panel', [
           div(classes: 'empty-icon', [text('◇')]),
           h3([text('No projects yet')]),
-          p(classes: 'muted', [text('Projects created in Flutter Workbench will appear here.')]),
+          p(classes: 'muted', [
+            text('Projects created in Flutter Workbench will appear here.'),
+          ]),
         ]),
     ]);
   }

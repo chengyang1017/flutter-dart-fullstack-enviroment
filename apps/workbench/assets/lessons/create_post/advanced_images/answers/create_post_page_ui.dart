@@ -1,6 +1,6 @@
 Scaffold(
   appBar: AppBar(
-    title: const Text('发布帖子'),
+    title: const Text('Create Post'),
   ),
   body: Padding(
     padding: const EdgeInsets.all(16),
@@ -12,14 +12,14 @@ Scaffold(
           maxLines: 10,
           maxLength: 1000,
           decoration: InputDecoration(
-            hintText: '分享你的想法',
+            hintText: 'Share what is on your mind...',
             border: OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 16),
         ElevatedButton(
           onPressed: null,
-          child: const Text('发布'),
+          child: const Text('Publish'),
         ),
       ],
     ),

@@ -10,6 +10,7 @@ import '../../../core/navigation/monaco_route_observer.dart';
 import '../../../core/theme/workbench_palette.dart';
 import '../controllers/concept_label_controller.dart';
 import '../controllers/playground_controller.dart';
+import '../../../core/monaco/monaco_ctrl_click_bridge.dart';
 
 /// Visible Monaco editor surface that mirrors the existing PlaygroundController
 /// while the rest of the IDE migrates away from re_editor incrementally.
@@ -20,12 +21,17 @@ class MonacoCodeEditorPanel extends StatefulWidget {
     this.labels,
     this.labelModeEnabled = false,
     this.wireModeEnabled = false,
+    this.onCtrlClick,
   });
 
   final PlaygroundController controller;
   final ConceptLabelController? labels;
   final bool labelModeEnabled;
   final bool wireModeEnabled;
+  final Future<void> Function(
+    int line,
+    int column,
+  )? onCtrlClick;
 
   @override
   State<MonacoCodeEditorPanel> createState() => _MonacoCodeEditorPanelState();
@@ -35,6 +41,7 @@ class _MonacoCodeEditorPanelState extends State<MonacoCodeEditorPanel> {
   static const _darkThemeId = 'code-tutor-dark';
   static const _lightThemeId = 'code-tutor-light';
 
+  MonacoActionRegistration? _ctrlClickRegistration;
   static const _page = MonacoPageConfig(
     customCss: '''
 .monaco-editor .margin-view-overlays .line-numbers {
@@ -145,6 +152,58 @@ class _MonacoCodeEditorPanelState extends State<MonacoCodeEditorPanel> {
     _attachLabels(widget.labels);
   }
 
+  Future<void> _handleCtrlClick(
+    Position position,
+  ) async {
+    final callback = widget.onCtrlClick;
+
+    if (callback == null) {
+      return;
+    }
+
+    final editor = widget.controller.textController;
+
+    final lines = editor.text
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .split('\n');
+
+    if (lines.isEmpty) {
+      return;
+    }
+
+    final lineIndex = (position.line - 1)
+        .clamp(
+          0,
+          lines.length - 1,
+        )
+        .toInt();
+
+    final columnIndex = (position.column - 1)
+        .clamp(
+          0,
+          lines[lineIndex].length,
+        )
+        .toInt();
+
+    _syncingMirror = true;
+
+    try {
+      editor.selection =
+          CodeLineSelection.collapsed(
+        index: lineIndex,
+        offset: columnIndex,
+      );
+    } finally {
+      _syncingMirror = false;
+    }
+
+    await callback(
+      position.line,
+      position.column,
+    );
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -181,8 +240,24 @@ class _MonacoCodeEditorPanelState extends State<MonacoCodeEditorPanel> {
 
   @override
   void dispose() {
+    final monaco = _monaco;
+    final ctrlClickRegistration =
+        _ctrlClickRegistration;
+
+    if (monaco != null &&
+        ctrlClickRegistration != null) {
+      unawaited(
+        MonacoCtrlClickBridge.uninstall(
+          controller: monaco,
+          registration:
+              ctrlClickRegistration,
+        ),
+      );
+    }
+
     _detach(widget.controller);
     _detachLabels(widget.labels);
+
     super.dispose();
   }
 
@@ -254,6 +329,14 @@ class _MonacoCodeEditorPanelState extends State<MonacoCodeEditorPanel> {
     }
 
     await _applyMonacoTheme(controller);
+
+    if (widget.onCtrlClick != null) {
+      _ctrlClickRegistration =
+          await MonacoCtrlClickBridge.install(
+        controller: controller,
+        onCtrlClick: _handleCtrlClick,
+      );
+    }
 
     // Match Code Tutor Studio's Monaco gutter geometry exactly. Monaco decides
     // contentLeft from the current font metrics, line-number digits, and WebView

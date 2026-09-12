@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/l10n/app_localizations.dart';
-import '../../playground/widgets/code_editor_panel.dart';
+import '../../playground/widgets/monaco_code_editor_panel.dart';
 import '../controller/lesson_controller.dart';
 import '../models/code_reference.dart';
 import '../models/lesson_step.dart';
-import 'code_definition_navigation.dart';
 import 'code_references_panel.dart';
 
 class LessonCodePanel extends StatelessWidget {
@@ -246,21 +245,14 @@ class LessonCodePanel extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: CodeDefinitionCtrlClickRegion(
-              lessonController: controller,
-              editorController: controller.playground.textController,
-              sourceFileName: controller.currentFile,
-              sourceStepIndex: controller.currentStepIndex,
-              sourceIsStandardAnswer: false,
-              onOpenDefinition: (reference) {
-                return _openReference(
-                  context,
-                  reference,
-                );
+            child: MonacoCodeEditorPanel(
+              controller: controller.playground,
+              onCtrlClick: (
+                line,
+                column,
+              ) async {
+                await _goToDefinition(context);
               },
-              child: CodeEditorPanel(
-                controller: controller.playground,
-              ),
             ),
           ),
         ],
