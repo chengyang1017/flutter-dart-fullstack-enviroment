@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../playground/widgets/code_editor_panel.dart';
 import '../controller/lesson_controller.dart';
 import '../models/code_reference.dart';
@@ -38,7 +39,10 @@ class LessonCodePanel extends StatelessWidget {
     if (callback == null) {
       _showMessage(
         context,
-        '当前页面没有连接标准答案跳转。',
+        context.l10n.tr(
+          '当前页面没有连接标准答案跳转。',
+          'Reference-answer navigation is not connected on this page.',
+        ),
       );
       return;
     }
@@ -72,12 +76,16 @@ class LessonCodePanel extends StatelessWidget {
   Future<void> _goToDefinition(
     BuildContext context,
   ) async {
+    final l10n = context.l10n;
     final symbol = controller.selectedReferenceSymbol;
 
     if (symbol.isEmpty) {
       _showMessage(
         context,
-        '请先选中名称，或把光标放在名称中。',
+        l10n.tr(
+          '请先选中名称，或把光标放在名称中。',
+          'Select a name first, or place the cursor inside one.',
+        ),
       );
       return;
     }
@@ -91,7 +99,10 @@ class LessonCodePanel extends StatelessWidget {
     if (definition == null) {
       _showMessage(
         context,
-        '没有找到 $symbol 的定义。',
+        context.l10n.tr(
+          '没有找到 $symbol 的定义。',
+          'No definition found for $symbol.',
+        ),
       );
       return;
     }
@@ -117,8 +128,8 @@ class LessonCodePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final currentStep = controller.lesson.steps[controller.currentStepIndex];
-
     final isUiStep = currentStep.stepType == LessonStepType.ui;
 
     return CallbackShortcuts(
@@ -174,7 +185,10 @@ class LessonCodePanel extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: '查找引用（Shift + F12）',
+                    tooltip: l10n.tr(
+                      '查找引用（Shift + F12）',
+                      'Find references (Shift + F12)',
+                    ),
                     onPressed: () {
                       _showReferences(context);
                     },
@@ -183,7 +197,10 @@ class LessonCodePanel extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: '跳到定义（F12 / Ctrl + 点击）',
+                    tooltip: l10n.tr(
+                      '跳到定义（F12 / Ctrl + 点击）',
+                      'Go to definition (F12 / Ctrl + click)',
+                    ),
                     onPressed: () {
                       _goToDefinition(context);
                     },
@@ -218,7 +235,9 @@ class LessonCodePanel extends StatelessWidget {
                                 Icons.play_arrow,
                               ),
                         label: Text(
-                          controller.isRunning ? '渲染中…' : '运行',
+                          controller.isRunning
+                              ? l10n.tr('渲染中…', 'Rendering…')
+                              : l10n.tr('运行', 'Run'),
                         ),
                       ),
                     ),
@@ -320,12 +339,14 @@ class _FindReferencesDialogState extends State<_FindReferencesDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.manage_search),
-          SizedBox(width: 10),
-          Text('查找引用'),
+          const Icon(Icons.manage_search),
+          const SizedBox(width: 10),
+          Text(l10n.tr('查找引用', 'Find references')),
         ],
       ),
       content: SizedBox(
@@ -338,11 +359,14 @@ class _FindReferencesDialogState extends State<_FindReferencesDialog> {
               autofocus: true,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                labelText: 'Class、方法或变量名称',
-                hintText: '例如 Product',
+                labelText: l10n.tr(
+                  'Class、方法或变量名称',
+                  'Class, method, or variable name',
+                ),
+                hintText: l10n.tr('例如 Product', 'For example: Product'),
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: IconButton(
-                  tooltip: '搜索',
+                  tooltip: l10n.tr('搜索', 'Search'),
                   onPressed: _isSearching ? null : _search,
                   icon: const Icon(
                     Icons.arrow_forward,
@@ -359,28 +383,37 @@ class _FindReferencesDialogState extends State<_FindReferencesDialog> {
             const SizedBox(height: 12),
             Expanded(
               child: _isSearching
-                  ? const Center(
+                  ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 12),
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 12),
                           Text(
-                            '正在搜索学生代码和标准答案…',
+                            l10n.tr(
+                              '正在搜索学生代码和标准答案…',
+                              'Searching student code and reference answers…',
+                            ),
                           ),
                         ],
                       ),
                     )
                   : !_hasSearched
-                      ? const Center(
+                      ? Center(
                           child: Text(
-                            '输入名称后开始搜索。',
+                            l10n.tr(
+                              '输入名称后开始搜索。',
+                              'Enter a name to start searching.',
+                            ),
                           ),
                         )
                       : _symbol.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                                '请输入要查找的名称。',
+                                l10n.tr(
+                                  '请输入要查找的名称。',
+                                  'Enter the name you want to find.',
+                                ),
                               ),
                             )
                           : CodeReferencesPanel(
@@ -399,7 +432,7 @@ class _FindReferencesDialogState extends State<_FindReferencesDialog> {
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text('关闭'),
+          child: Text(l10n.tr('关闭', 'Close')),
         ),
       ],
     );
