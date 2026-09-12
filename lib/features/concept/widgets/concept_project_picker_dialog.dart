@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../workspace/models/workspace_snapshot.dart';
 import '../models/concept_project_context.dart';
 import '../services/concept_project_projection_service.dart';
@@ -49,10 +50,11 @@ class _ConceptProjectPickerDialogState
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return AlertDialog(
       key: const ValueKey('concept-project-picker'),
-      title: const Text('选择 Flutter 项目'),
+      title: Text(l10n.tr('选择 Flutter 项目', 'Choose Flutter project')),
       content: SizedBox(
         width: 620,
         child: candidates.isEmpty
@@ -68,8 +70,14 @@ class _ConceptProjectPickerDialogState
                   const SizedBox(height: 4),
                   Text(
                     candidates.length == 1
-                        ? '检测到 1 个可运行 Flutter App。进入后显示应用，并自动寻找同仓库后端。'
-                        : '检测到 ${candidates.length} 个可运行 Flutter App。选择主应用；后端会从同仓库自动识别。',
+                        ? l10n.tr(
+                            '检测到 1 个可运行 Flutter App。进入后显示应用，并自动寻找同仓库后端。',
+                            'Found 1 runnable Flutter app. It will open directly, and the backend will be detected from the same repository automatically.',
+                          )
+                        : l10n.tr(
+                            '检测到 ${candidates.length} 个可运行 Flutter App。选择主应用；后端会从同仓库自动识别。',
+                            'Found ${candidates.length} runnable Flutter apps. Choose the main app; the backend will be detected from the same repository automatically.',
+                          ),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -106,13 +114,13 @@ class _ConceptProjectPickerDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.tr('取消', 'Cancel')),
         ),
         FilledButton.icon(
           key: const ValueKey('concept-project-open'),
           onPressed: candidates.isEmpty ? null : _openSelected,
           icon: const Icon(Icons.arrow_forward_rounded),
-          label: const Text('打开概念模式'),
+          label: Text(l10n.tr('打开概念模式', 'Open Concept Mode')),
         ),
       ],
     );
@@ -167,16 +175,19 @@ class _NoFlutterProject extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 18),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline_rounded),
-          SizedBox(width: 10),
+          const Icon(Icons.error_outline_rounded),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '这个仓库里没有检测到同时包含 pubspec.yaml、Flutter SDK 依赖和 lib/main.dart 的可运行 Flutter App。',
+              context.l10n.tr(
+                '这个仓库里没有检测到同时包含 pubspec.yaml、Flutter SDK 依赖和 lib/main.dart 的可运行 Flutter App。',
+                'No runnable Flutter app was found with pubspec.yaml, a Flutter SDK dependency, and lib/main.dart.',
+              ),
             ),
           ),
         ],
