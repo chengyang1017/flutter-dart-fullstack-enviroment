@@ -34,6 +34,8 @@ class _AdminAppState extends State<AdminApp> {
   List<Map<String, dynamic>> _projects = <Map<String, dynamic>>[];
   Map<String, dynamic>? _lessonCatalog;
   String _catalogDraft = '';
+  String _courseDraft = '';
+  bool _showFullCatalogJson = false;
   int? _selectedProjectIndex;
   int? _selectedLessonIndex;
   String _courseEditLanguage = 'en';
@@ -119,6 +121,8 @@ class _AdminAppState extends State<AdminApp> {
       _projects = <Map<String, dynamic>>[];
       _lessonCatalog = null;
       _catalogDraft = '';
+      _courseDraft = '';
+      _showFullCatalogJson = false;
       _selectedProjectIndex = null;
       _selectedLessonIndex = null;
       _creatingCourseGroupIndex = null;
@@ -154,6 +158,7 @@ class _AdminAppState extends State<AdminApp> {
           ? ''
           : const JsonEncoder.withIndent('  ').convert(lessons);
       _normalizeLessonSelection();
+      _syncCourseDraft();
     });
   }
 
@@ -238,6 +243,7 @@ class _AdminAppState extends State<AdminApp> {
         _catalogDraft = const JsonEncoder.withIndent('  ').convert(saved);
         _notice = successMessage;
         _normalizeLessonSelection();
+        _syncCourseDraft();
       });
     } catch (error) {
       setState(() => _error = _message(error));
@@ -266,12 +272,52 @@ class _AdminAppState extends State<AdminApp> {
         _lessonCatalog = saved;
         _overview = overview;
         _catalogDraft = const JsonEncoder.withIndent('  ').convert(saved);
-        _notice = 'Full lesson JSON saved.';
+        _notice = 'Full catalog JSON saved.';
         _normalizeLessonSelection();
+        _syncCourseDraft();
       });
     } catch (error) {
       setState(() => _error = _message(error));
     } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> _saveCourseJson() async {
+    final catalog = _lessonCatalog;
+    final groupIndex = _selectedProjectIndex;
+    final lessonIndex = _selectedLessonIndex;
+    if (catalog == null || groupIndex == null || lessonIndex == null) return;
+
+    _setBusy(true);
+    _clearMessages();
+    try {
+      final decoded = jsonDecode(_courseDraft);
+      if (decoded is! Map) {
+        throw const FormatException('Course JSON must be an object.');
+      }
+      final course = Map<String, dynamic>.from(decoded);
+      final id = course['id']?.toString().trim() ?? '';
+      if (id.isEmpty) {
+        throw const FormatException('Course JSON must contain a non-empty id.');
+      }
+
+      final groups = _lessonGroups;
+      if (groupIndex < 0 || groupIndex >= groups.length) {
+        throw const FormatException('Selected course group no longer exists.');
+      }
+      final rawLessons = groups[groupIndex]['lessons'];
+      if (rawLessons is! List ||
+          lessonIndex < 0 ||
+          lessonIndex >= rawLessons.length) {
+        throw const FormatException('Selected course no longer exists.');
+      }
+
+      rawLessons[lessonIndex] = course;
+      _catalogDraft = const JsonEncoder.withIndent('  ').convert(catalog);
+      await _saveLessons(successMessage: 'Course JSON saved.');
+    } catch (error) {
+      setState(() => _error = _message(error));
       _setBusy(false);
     }
   }
@@ -289,6 +335,7 @@ class _AdminAppState extends State<AdminApp> {
     setState(() {
       _courseEditLanguage = languageCode;
       _catalogDraft = const JsonEncoder.withIndent('  ').convert(catalog);
+      _syncCourseDraft();
       _error = null;
       _notice = null;
     });
@@ -337,12 +384,32 @@ class _AdminAppState extends State<AdminApp> {
     return lessons[lessonIndex];
   }
 
+  void _syncCourseDraft() {
+    final lesson = _selectedLesson;
+    _courseDraft = lesson == null
+        ? ''
+        : const JsonEncoder.withIndent('  ').convert(lesson);
+  }
+
+  void _reloadCourseDraft() {
+    setState(() {
+      _syncCourseDraft();
+      _error = null;
+      _notice = 'Current course JSON reloaded.';
+    });
+  }
+
+  void _toggleFullCatalogJson() {
+    setState(() => _showFullCatalogJson = !_showFullCatalogJson);
+  }
+
   void _openCreateCourse(int groupIndex) {
     final groups = _lessonGroups;
     if (groupIndex < 0 || groupIndex >= groups.length) return;
     setState(() {
       _creatingCourseGroupIndex = groupIndex;
       _selectedProjectIndex = groupIndex;
+      _courseDraft = '';
       _newCourseId = '';
       _newCourseTitle = '';
       _newCourseDescription = '';
@@ -357,7 +424,10 @@ class _AdminAppState extends State<AdminApp> {
   }
 
   void _cancelCreateCourse() {
-    setState(() => _creatingCourseGroupIndex = null);
+    setState(() {
+      _creatingCourseGroupIndex = null;
+      _syncCourseDraft();
+    });
   }
 
   Future<void> _createCourse() async {
@@ -444,6 +514,7 @@ class _AdminAppState extends State<AdminApp> {
       _selectedLessonIndex = lessons.length - 1;
       _creatingCourseGroupIndex = null;
       _catalogDraft = const JsonEncoder.withIndent('  ').convert(catalog);
+      _syncCourseDraft();
     });
 
     await _saveLessons(successMessage: 'Course "$title" created.');
@@ -780,27 +851,83 @@ class _AdminAppState extends State<AdminApp> {
                   : _lessonForm(lesson),
         ]),
       ]),
+      if (creatingGroup == null && lesson != null)
+        div(classes: 'panel json-panel', [
+          div(classes: 'panel-heading', [
+            div([
+              h3([text('Advanced course JSON')]),
+              p(classes: 'muted', [
+                text(
+                  'Only the selected course is shown here. Edit steps, starter code, answer assets, translations and checker requirements without searching through the whole catalog.',
+                ),
+              ]),
+            ]),
+            div(classes: 'topbar-actions', [
+              button(
+                classes: 'ghost-button',
+                disabled: _busy,
+                onClick: _reloadCourseDraft,
+                [text('↻ Reload course JSON')],
+              ),
+              button(
+                classes: 'primary-button',
+                disabled: _busy,
+                onClick: _saveCourseJson,
+                [text('Validate & save course JSON')],
+              ),
+            ]),
+          ]),
+          textarea(
+            key: Key('course-json-${lesson['id']}-$_courseEditLanguage'),
+            classes: 'json-editor',
+            attributes: const {
+              'spellcheck': 'false',
+              'aria-label': 'Current course JSON',
+            },
+            events: events<String>(onInput: (value) => _courseDraft = value),
+            [text(_courseDraft)],
+          ),
+        ]),
       div(classes: 'panel json-panel', [
         div(classes: 'panel-heading', [
           div([
-            h3([text('Advanced catalog JSON')]),
+            h3([text('Developer tools · Full catalog JSON')]),
             p(classes: 'muted', [
-              text('Translations for English and Chinese are stored together with steps, starter code, answer assets and AST requirements.'),
+              text(
+                'The complete catalog is hidden by default. Use it only for migrations, bulk fixes or schema-level changes across multiple courses.',
+              ),
             ]),
           ]),
           button(
             classes: 'ghost-button',
             disabled: _busy,
-            onClick: _saveCatalogJson,
-            [text('Validate & save JSON')],
+            onClick: _toggleFullCatalogJson,
+            [text(_showFullCatalogJson ? 'Hide full catalog' : 'Show full catalog')],
           ),
         ]),
-        textarea(
-          classes: 'json-editor',
-          attributes: const {'spellcheck': 'false', 'aria-label': 'Lesson catalog JSON'},
-          events: events<String>(onInput: (value) => _catalogDraft = value),
-          [text(_catalogDraft)],
-        ),
+        if (_showFullCatalogJson)
+          div([
+            div(classes: 'panel-heading', [
+              p(classes: 'muted', [
+                text('Changes here can affect every course and both languages.'),
+              ]),
+              button(
+                classes: 'ghost-button',
+                disabled: _busy,
+                onClick: _saveCatalogJson,
+                [text('Validate & save full catalog')],
+              ),
+            ]),
+            textarea(
+              classes: 'json-editor',
+              attributes: const {
+                'spellcheck': 'false',
+                'aria-label': 'Full lesson catalog JSON',
+              },
+              events: events<String>(onInput: (value) => _catalogDraft = value),
+              [text(_catalogDraft)],
+            ),
+          ]),
       ]),
     ]);
   }
@@ -829,6 +956,7 @@ class _AdminAppState extends State<AdminApp> {
               _creatingCourseGroupIndex = null;
               _selectedProjectIndex = groupIndex;
               _selectedLessonIndex = lessonIndex;
+              _syncCourseDraft();
             }),
             [
               span(classes: 'lesson-number', [text('${lessonIndex + 1}')]),
