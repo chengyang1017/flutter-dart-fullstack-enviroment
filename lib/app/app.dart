@@ -7,6 +7,7 @@ import '../core/theme/app_theme.dart';
 import '../features/auth/screens/workspace_auth_screen.dart';
 import '../features/auth/widgets/claim_existing_account_dialog.dart';
 import '../features/home/screens/home_screen.dart';
+import '../features/lessons/data/lesson_catalog_repository.dart';
 import '../features/workspace/services/workspace_auth_runtime.dart';
 
 class PlaygroundApp extends StatefulWidget {
@@ -45,6 +46,7 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
       email: email,
       password: password,
     );
+    await _bootstrapManagedLessons();
     if (mounted) setState(() {});
   }
 
@@ -58,6 +60,7 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
       email: email,
       password: password,
     );
+    await _bootstrapManagedLessons();
     if (mounted) setState(() {});
   }
 
@@ -80,15 +83,26 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
       barrierDismissible: false,
       builder: (_) => ClaimExistingAccountDialog(
         username: identity.accountNamespace,
-        onClaim: ({required String email, required String password}) =>
-            WorkspaceAuthRuntime.claimExistingAccount(
-          email: email,
-          password: password,
-        ),
+        onClaim: ({required String email, required String password}) async {
+          await WorkspaceAuthRuntime.claimExistingAccount(
+            email: email,
+            password: password,
+          );
+          await _bootstrapManagedLessons();
+        },
       ),
     );
     if (claimed == true && mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _bootstrapManagedLessons() async {
+    final repository = LessonCatalogRepository();
+    try {
+      await repository.loadProjects();
+    } finally {
+      repository.close();
     }
   }
 
