@@ -67,6 +67,8 @@ Future<void> main() async {
 
   final authenticator = CompositeWorkspaceAuthenticator(authenticators);
   final allowedOrigin = environment['ALLOWED_ORIGIN'] ?? '*';
+  final adminAllowedOrigin =
+      environment['WORKSPACE_ADMIN_ALLOWED_ORIGIN'] ?? '*';
   final workspaceStore = FileWorkspaceStore(
     root,
     temporaryWorkspaceTtl: Duration(hours: temporaryTtlHours),
@@ -103,7 +105,7 @@ Future<void> main() async {
     authenticator: authenticator,
     fallback: authHandler.handle,
     adminUsernames: adminUsernames,
-    allowedOrigin: allowedOrigin,
+    allowedOrigin: adminAllowedOrigin,
   );
 
   final server = await HttpServer.bind(host, port);
@@ -120,6 +122,7 @@ Future<void> main() async {
         ? 'Workspace admin API: disabled (WORKSPACE_ADMIN_USERNAMES is empty)'
         : 'Workspace admin API: enabled for ${adminUsernames.join(', ')}',
   );
+  stdout.writeln('Workspace admin API CORS: $adminAllowedOrigin');
   if (authTokens != null && authTokens.trim().isNotEmpty) {
     stdout.writeln('Static development bearer identities: enabled');
     stdout.writeln('Legacy account claiming: enabled');
