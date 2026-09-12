@@ -160,6 +160,10 @@ Uint8List _packageBytes(Map<String, String> files) {
   final archive = Archive();
   final payloadFiles = files.keys.toList()..sort();
   final changes = <Map<String, String>>[
+    const <String, String>{
+      'type': 'deleted',
+      'path': 'test/widget_test.dart',
+    },
     for (final path in payloadFiles)
       <String, String>{
         'type': path == 'pubspec.yaml' || path == 'lib/main.dart'
