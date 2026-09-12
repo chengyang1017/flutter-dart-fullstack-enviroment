@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+
 class CreateFlutterProjectRequest {
   const CreateFlutterProjectRequest({
     required this.projectName,
@@ -84,20 +86,24 @@ class _CreateFlutterProjectDialogState
   }
 
   void _create() {
+    final l10n = context.l10n;
     final name = _nameController.text.trim();
 
     if (!RegExp(
       r'^[a-z][a-z0-9_]*$',
     ).hasMatch(name)) {
       setState(() {
-        _error = '项目名称只能使用小写字母、数字和下划线，例如 my_app';
+        _error = l10n.tr(
+          '项目名称只能使用小写字母、数字和下划线，例如 my_app',
+          'Project names can contain only lowercase letters, numbers, and underscores, for example my_app.',
+        );
       });
       return;
     }
 
     if (_platforms.isEmpty) {
       setState(() {
-        _error = '至少选择一个平台';
+        _error = l10n.tr('至少选择一个平台', 'Select at least one platform.');
       });
       return;
     }
@@ -114,9 +120,11 @@ class _CreateFlutterProjectDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
     return AlertDialog(
-      title: const Text(
-        '创建 Flutter 项目',
+      title: Text(
+        l10n.tr('创建 Flutter 项目', 'Create Flutter project'),
       ),
       content: SizedBox(
         width: 520,
@@ -194,11 +202,11 @@ class _CreateFlutterProjectDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.tr('取消', 'Cancel')),
         ),
         FilledButton(
           onPressed: _create,
-          child: const Text('创建'),
+          child: Text(l10n.tr('创建', 'Create')),
         ),
       ],
     );
