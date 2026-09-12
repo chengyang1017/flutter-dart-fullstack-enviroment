@@ -6,8 +6,11 @@ on:
   pull_request:
 
 jobs:
-  flutter-app:
+  workbench:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/workbench
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -16,46 +19,66 @@ jobs:
           cache: true
       - name: Flutter version
         run: flutter --version
-      - name: Install Flutter dependencies
+      - name: Install dependencies
         run: flutter pub get
-      - name: Run Flutter tests
+      - name: Analyze workbench
+        run: flutter analyze
+      - name: Run tests
         run: flutter test
 
-  runner-server:
+  admin:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: flutter-runner-server
+        working-directory: apps/admin
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
       - name: Dart version
         run: dart --version
-      - name: Install runner dependencies
+      - name: Install dependencies
         run: dart pub get
-      - name: Analyze runner server
+      - name: Analyze admin app
         run: dart analyze
 
-  workspace-storage-server:
+  runner:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: workspace-storage-server
+        working-directory: services/flutter-runner
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
       - name: Dart version
         run: dart --version
-      - name: Install storage dependencies
+      - name: Install dependencies
         run: dart pub get
-      - name: Analyze workspace storage server
+      - name: Analyze runner
         run: dart analyze
-      - name: Run workspace storage tests
+
+  workspace-storage:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/workspace-storage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - name: Dart version
+        run: dart --version
+      - name: Install dependencies
+        run: dart pub get
+      - name: Analyze storage service
+        run: dart analyze
+      - name: Run storage tests
         run: dart test
 
   serverpod-mini-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/workbench
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -64,9 +87,9 @@ jobs:
           cache: true
       - name: Flutter version
         run: flutter --version
-      - name: Install Flutter dependencies
+      - name: Install dependencies
         run: flutter pub get
       - name: Install Serverpod CLI 3.4.13
         run: dart pub global activate serverpod_cli 3.4.13
-      - name: Run real Serverpod Mini smoke test
+      - name: Run Serverpod Mini smoke test
         run: flutter test tool/serverpod_mini_smoke_test.dart

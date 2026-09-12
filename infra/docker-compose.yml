@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  flutter-app:
+    build:
+      context: ../apps/workbench
+      dockerfile: Dockerfile
+    container_name: flutter-playground-app
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      - RUNNER_API_URL=http://flutter-runner:8787
+      - NODE_ENV=production
+    depends_on:
+      flutter-runner:
+        condition: service_healthy
+    networks:
+      - flutter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.flutter-playground.service=app"
+
+  flutter-runner:
+    build:
+      context: ../services/flutter-runner/docker
+      dockerfile: Dockerfile
+      args:
+        FLUTTER_VERSION: ${FLUTTER_VERSION:-3.24.1}
+        RUNNER_UID: 10001
+        RUNNER_GID: 10001
+    container_name: flutter-practice-runner
+    environment:
+      - RUNNER_EXECUTION_MODE=${RUNNER_MODE:-local}
+      - RUNNER_HOST=0.0.0.0
+      - RUNNER_PORT=8787
+      - RUNNER_IDLE_MINUTES=30
+      - FLUTTER_EXECUTABLE=/opt/flutter/bin/flutter
+      - RUNNER_DOCKER_IMAGE=flutter-practice-runner:local
+      - RUNNER_DOCKER_MEMORY=2048m
+      - RUNNER_DOCKER_CPUS=2
+      - RUNNER_ALLOWED_ORIGIN=*
+      - PUB_CACHE=/home/runner/.pub-cache
+    ports:
+      - "${RUNNER_PORT:-8787}:8787"
+    volumes:
+      - flutter-pub-cache:/home/runner/.pub-cache
+    networks:
+      - flutter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8787/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "com.flutter-playground.service=runner"
+
+networks:
+  flutter-network:
+    driver: bridge
+    name: flutter-playground-net
+
+volumes:
+  flutter-pub-cache:
+    name: flutter-pub-cache

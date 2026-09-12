@@ -5,6 +5,7 @@
       "name": "Flutter Web (fixed localhost:7357)",
       "request": "launch",
       "type": "dart",
+      "cwd": "${workspaceFolder}/apps/workbench",
       "deviceId": "chrome",
       "toolArgs": [
         "--web-hostname=localhost",

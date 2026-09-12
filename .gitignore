@@ -1,6 +1,7 @@
 .dart_tool/
 .flutter-plugins*
 .packages
+.pub/
 build/
 pubspec.lock
 Pub/
@@ -12,21 +13,13 @@ Pub/
 .flutter_tool_state
 Dart/
 .workspace-storage/
-workspace-storage-server/.workspace-storage/
-
-# Flutter/Dart generated files
-.dart_tool/
-.packages
-.pub/
-build/
-.flutter-plugins
-.flutter-plugins-dependencies
+services/workspace-storage/.workspace-storage/
 
 # IDE files
 .idea/
 *.iml
 
-# Platform generated files
-android/.gradle/
-android/local.properties
-android/key.properties
+# Flutter platform generated files
+apps/workbench/android/.gradle/
+apps/workbench/android/local.properties
+apps/workbench/android/key.properties

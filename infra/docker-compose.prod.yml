@@ -1,0 +1,39 @@
+# Production overrides for infra/docker-compose.yml
+# Usage: docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  flutter-app:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "com.flutter-playground.service=app"
+
+  flutter-runner:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+        labels: "com.flutter-playground.service=runner"

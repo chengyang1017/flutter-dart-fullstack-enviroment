@@ -1,0 +1,10 @@
+name = "flutter-dart-fullstack-enviroment"
+main = "../../services/cloudflare-share-proxy/worker.js"
+compatibility_date = "2026-09-11"
+compatibility_flags = ["global_fetch_strictly_public"]
+
+[assets]
+directory = "../../apps/workbench/build/web"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/view/*", "/webmcp.js", "/health", "/shares/*"]
