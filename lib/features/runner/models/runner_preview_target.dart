@@ -1,3 +1,5 @@
+import '../../../core/l10n/app_localizations.dart';
+
 enum RunnerPreviewTarget {
   phone,
   tablet,
@@ -9,24 +11,36 @@ enum RunnerPreviewOrientation {
   landscape,
 }
 
+String _localized(String zh, String en) =>
+    AppLocaleController.locale.value.languageCode == 'en' ? en : zh;
+
 extension RunnerPreviewOrientationInfo on RunnerPreviewOrientation {
   String get label => switch (this) {
-        RunnerPreviewOrientation.portrait => '竖屏',
-        RunnerPreviewOrientation.landscape => '横屏',
+        RunnerPreviewOrientation.portrait => _localized('竖屏', 'Portrait'),
+        RunnerPreviewOrientation.landscape => _localized('横屏', 'Landscape'),
       };
 }
 
 extension RunnerPreviewTargetInfo on RunnerPreviewTarget {
   String get label => switch (this) {
-        RunnerPreviewTarget.phone => '手机',
-        RunnerPreviewTarget.tablet => '平板',
-        RunnerPreviewTarget.web => '网页',
+        RunnerPreviewTarget.phone => _localized('手机', 'Phone'),
+        RunnerPreviewTarget.tablet => _localized('平板', 'Tablet'),
+        RunnerPreviewTarget.web => _localized('网页', 'Web'),
       };
 
   String get description => switch (this) {
-        RunnerPreviewTarget.phone => '在 IDE 内以 390 × 844 的手机视口运行',
-        RunnerPreviewTarget.tablet => '在 IDE 内以 820 × 1180 的平板视口运行',
-        RunnerPreviewTarget.web => '运行完成后在新的浏览器标签页打开',
+        RunnerPreviewTarget.phone => _localized(
+            '在 IDE 内以 390 × 844 的手机视口运行',
+            'Run inside the IDE with a 390 × 844 phone viewport',
+          ),
+        RunnerPreviewTarget.tablet => _localized(
+            '在 IDE 内以 820 × 1180 的平板视口运行',
+            'Run inside the IDE with an 820 × 1180 tablet viewport',
+          ),
+        RunnerPreviewTarget.web => _localized(
+            '运行完成后在新的浏览器标签页打开',
+            'Open in a new browser tab after the run starts',
+          ),
       };
 
   bool get opensExternalTab => this == RunnerPreviewTarget.web;
