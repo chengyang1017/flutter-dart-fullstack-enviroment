@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../../workspace/controllers/workspace_controller.dart';
 import '../../workspace/models/workspace_entry.dart';
 import '../../workspace/widgets/workspace_file_visuals.dart';
@@ -16,25 +18,20 @@ class ConceptLibExplorer extends StatelessWidget {
   static const appRootPath = 'lib';
   static const backendRootPath = 'backend';
   static const serverpodBackendRootPath = 'serverpod/practice_server/lib';
-
-  /// Kept for callers/tests that still refer to the old concept root constant.
   static const rootPath = appRootPath;
 
   final WorkspaceController workspace;
   final ValueChanged<String> onOpenFile;
 
-  static const _background = _ConceptExplorerPalette.background;
-  static const _textColor = _ConceptExplorerPalette.text;
-  static const _mutedColor = _ConceptExplorerPalette.muted;
-
   @override
   Widget build(BuildContext context) {
     final appRoot = _appRoot();
     final backendRoot = _backendRoot(appRoot);
+    final palette = WorkbenchPalette.of(context);
 
     return Material(
       key: const ValueKey('concept-lib-explorer'),
-      color: _background,
+      color: palette.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -51,10 +48,10 @@ class ConceptLibExplorer extends StatelessWidget {
               type: WorkspaceEntryType.directory,
             ),
           ),
-          const Divider(
+          Divider(
             height: 1,
             thickness: 1,
-            color: _ConceptExplorerPalette.border,
+            color: palette.border,
           ),
           Expanded(
             child: ListView(
@@ -64,7 +61,7 @@ class ConceptLibExplorer extends StatelessWidget {
                   context,
                   path: appRoot,
                   stableKey: 'app',
-                  label: '应用',
+                  label: context.l10n.tr('应用', 'App'),
                   icon: Icons.flutter_dash_rounded,
                 ),
                 if (backendRoot != null)
@@ -72,7 +69,7 @@ class ConceptLibExplorer extends StatelessWidget {
                     context,
                     path: backendRoot,
                     stableKey: 'backend',
-                    label: '后端',
+                    label: context.l10n.tr('后端', 'Backend'),
                     icon: Icons.dns_outlined,
                   ),
               ],
@@ -222,6 +219,8 @@ class ConceptLibExplorer extends StatelessWidget {
     required String label,
     required IconData icon,
   }) {
+    final palette = WorkbenchPalette.of(context);
+
     return ExpansionTile(
       key: ValueKey('concept-root-$stableKey'),
       initiallyExpanded: true,
@@ -234,14 +233,14 @@ class ConceptLibExplorer extends StatelessWidget {
       childrenPadding: EdgeInsets.zero,
       dense: true,
       visualDensity: VisualDensity.compact,
-      textColor: _textColor,
-      collapsedTextColor: _textColor,
-      iconColor: _mutedColor,
-      collapsedIconColor: _mutedColor,
+      textColor: palette.text,
+      collapsedTextColor: palette.text,
+      iconColor: palette.muted,
+      collapsedIconColor: palette.muted,
       leading: Icon(
         icon,
         size: 18,
-        color: _ConceptExplorerPalette.folder,
+        color: const Color(0xffd7aa5c),
       ),
       title: _EntryLabel(
         name: label,
@@ -274,6 +273,10 @@ class ConceptLibExplorer extends StatelessWidget {
     WorkspaceEntry entry,
     int depth,
   ) {
+    final palette = WorkbenchPalette.of(context);
+    final selected = Theme.of(context).colorScheme.primaryContainer;
+    final hover = Theme.of(context).colorScheme.surfaceContainerHigh;
+
     if (entry.isDirectory) {
       final expanded = workspace.isDirectoryExpanded(entry.path);
       return ExpansionTile(
@@ -289,14 +292,14 @@ class ConceptLibExplorer extends StatelessWidget {
         childrenPadding: EdgeInsets.zero,
         dense: true,
         visualDensity: VisualDensity.compact,
-        textColor: _textColor,
-        collapsedTextColor: _textColor,
-        iconColor: _mutedColor,
-        collapsedIconColor: _mutedColor,
+        textColor: palette.text,
+        collapsedTextColor: palette.text,
+        iconColor: palette.muted,
+        collapsedIconColor: palette.muted,
         leading: const Icon(
           Icons.folder_outlined,
           size: 18,
-          color: _ConceptExplorerPalette.folder,
+          color: Color(0xffd7aa5c),
         ),
         title: _EntryLabel(
           name: entry.name,
@@ -334,10 +337,10 @@ class ConceptLibExplorer extends StatelessWidget {
         right: 2,
       ),
       selected: !entry.isBinary && workspace.activePath == entry.path,
-      selectedTileColor: _ConceptExplorerPalette.selected,
-      hoverColor: _ConceptExplorerPalette.hover,
-      textColor: _textColor,
-      selectedColor: _textColor,
+      selectedTileColor: selected,
+      hoverColor: hover,
+      textColor: palette.text,
+      selectedColor: palette.text,
       leading: Builder(
         builder: (context) {
           final visual = WorkspaceFileVisual.forName(
@@ -372,10 +375,12 @@ class ConceptLibExplorer extends StatelessWidget {
         _insideConceptSource(directory) ? directory : _appRoot();
     final name = await _askForName(
       context,
-      title: type == WorkspaceEntryType.file ? '新建 Dart 文件' : '新建文件夹',
+      title: type == WorkspaceEntryType.file
+          ? context.l10n.tr('新建 Dart 文件', 'New Dart file')
+          : context.l10n.tr('新建文件夹', 'New folder'),
       hint: type == WorkspaceEntryType.file
-          ? '例如 home_screen.dart'
-          : '例如 screens',
+          ? context.l10n.tr('例如 home_screen.dart', 'For example, home_screen.dart')
+          : context.l10n.tr('例如 screens', 'For example, screens'),
     );
     if (name == null) return;
 
@@ -394,7 +399,7 @@ class ConceptLibExplorer extends StatelessWidget {
 
     final name = await _askForName(
       context,
-      title: '重命名',
+      title: context.l10n.tr('重命名', 'Rename'),
       hint: entry.name,
       initialValue: entry.name,
     );
@@ -406,22 +411,35 @@ class ConceptLibExplorer extends StatelessWidget {
   Future<void> _delete(BuildContext context, WorkspaceEntry entry) async {
     if (!_insideConceptSource(entry.path)) return;
 
-    final area = _areaLabel(entry.path);
+    final area = _areaLabel(context, entry.path);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('删除 ${entry.name}？'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          dialogContext.l10n.tr(
+            '删除 ${entry.name}？',
+            'Delete ${entry.name}?',
+          ),
+        ),
         content: Text(
-          entry.isDirectory ? '这个文件夹以及里面的文件都会从 $area 删除。' : '这个文件会从 $area 删除。',
+          entry.isDirectory
+              ? dialogContext.l10n.tr(
+                  '这个文件夹以及里面的文件都会从 $area 删除。',
+                  'This folder and all files inside it will be removed from $area.',
+                )
+              : dialogContext.l10n.tr(
+                  '这个文件会从 $area 删除。',
+                  'This file will be removed from $area.',
+                ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.tr('取消', 'Cancel')),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.tr('删除', 'Delete')),
           ),
         ],
       ),
@@ -440,10 +458,12 @@ class ConceptLibExplorer extends StatelessWidget {
         (path == backendRoot || path.startsWith('$backendRoot/'));
   }
 
-  String _areaLabel(String path) {
+  String _areaLabel(BuildContext context, String path) {
     final appRoot = _appRoot();
-    if (path == appRoot || path.startsWith('$appRoot/')) return '应用';
-    return '后端';
+    if (path == appRoot || path.startsWith('$appRoot/')) {
+      return context.l10n.tr('应用', 'the app');
+    }
+    return context.l10n.tr('后端', 'the backend');
   }
 
   Future<String?> _askForName(
@@ -456,7 +476,7 @@ class ConceptLibExplorer extends StatelessWidget {
 
     final value = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(title),
         content: TextFormField(
           initialValue: initialValue,
@@ -464,17 +484,17 @@ class ConceptLibExplorer extends StatelessWidget {
           decoration: InputDecoration(hintText: hint),
           onChanged: (value) => currentValue = value,
           onFieldSubmitted: (value) {
-            Navigator.pop(context, value.trim());
+            Navigator.pop(dialogContext, value.trim());
           },
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(dialogContext.l10n.tr('取消', 'Cancel')),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, currentValue.trim()),
-            child: const Text('确定'),
+            onPressed: () => Navigator.pop(dialogContext, currentValue.trim()),
+            child: Text(dialogContext.l10n.tr('确定', 'Confirm')),
           ),
         ],
       ),
@@ -508,45 +528,53 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+
     return Container(
       height: 38,
-      color: _ConceptExplorerPalette.section,
+      color: palette.surfaceRaised,
       padding: const EdgeInsets.only(left: 10, right: 4),
       child: Row(
         children: [
           const Icon(
             Icons.folder_special_outlined,
             size: 15,
-            color: _ConceptExplorerPalette.folder,
+            color: Color(0xffd7aa5c),
           ),
           const SizedBox(width: 7),
-          const Expanded(
+          Expanded(
             child: Text(
-              '应用 / 后端',
+              context.l10n.tr('应用 / 后端', 'APP / BACKEND'),
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
                 letterSpacing: .7,
-                color: _ConceptExplorerPalette.text,
+                color: palette.text,
               ),
             ),
           ),
           if (dirty)
-            const Padding(
-              padding: EdgeInsets.only(right: 5),
+            Padding(
+              padding: const EdgeInsets.only(right: 5),
               child: Icon(
                 Icons.circle,
                 size: 7,
-                color: _ConceptExplorerPalette.accent,
+                color: palette.accent,
               ),
             ),
           _HeaderAction(
-            tooltip: '在当前应用 / 后端区域新建文件',
+            tooltip: context.l10n.tr(
+              '在当前应用 / 后端区域新建文件',
+              'Create a file in the current app / backend area',
+            ),
             icon: Icons.note_add_outlined,
             onPressed: onCreateFile,
           ),
           _HeaderAction(
-            tooltip: '在当前应用 / 后端区域新建文件夹',
+            tooltip: context.l10n.tr(
+              '在当前应用 / 后端区域新建文件夹',
+              'Create a folder in the current app / backend area',
+            ),
             icon: Icons.create_new_folder_outlined,
             onPressed: onCreateDirectory,
           ),
@@ -569,6 +597,7 @@ class _HeaderAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
@@ -578,7 +607,7 @@ class _HeaderAction extends StatelessWidget {
       icon: Icon(
         icon,
         size: 16,
-        color: _ConceptExplorerPalette.muted,
+        color: palette.muted,
       ),
     );
   }
@@ -595,6 +624,7 @@ class _EntryLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return Row(
       children: [
         Flexible(
@@ -602,19 +632,19 @@ class _EntryLabel extends StatelessWidget {
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
-              color: _ConceptExplorerPalette.text,
+              color: palette.text,
             ),
           ),
         ),
         if (dirty)
-          const Padding(
-            padding: EdgeInsets.only(left: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
             child: Icon(
               Icons.circle,
               size: 7,
-              color: _ConceptExplorerPalette.accent,
+              color: palette.accent,
             ),
           ),
       ],
@@ -637,13 +667,14 @@ class _EntryMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return PopupMenuButton<String>(
-      tooltip: '更多',
+      tooltip: context.l10n.tr('更多', 'More'),
       padding: EdgeInsets.zero,
       iconSize: 17,
-      icon: const Icon(
+      icon: Icon(
         Icons.more_vert,
-        color: _ConceptExplorerPalette.muted,
+        color: palette.muted,
       ),
       onSelected: (value) {
         switch (value) {
@@ -663,24 +694,24 @@ class _EntryMenu extends StatelessWidget {
       },
       itemBuilder: (_) => [
         if (onCreateFile != null)
-          const PopupMenuItem(value: 'file', child: Text('新建文件')),
+          PopupMenuItem(
+            value: 'file',
+            child: Text(context.l10n.tr('新建文件', 'New file')),
+          ),
         if (onCreateDirectory != null)
-          const PopupMenuItem(value: 'folder', child: Text('新建文件夹')),
-        const PopupMenuItem(value: 'rename', child: Text('重命名')),
-        const PopupMenuItem(value: 'delete', child: Text('删除')),
+          PopupMenuItem(
+            value: 'folder',
+            child: Text(context.l10n.tr('新建文件夹', 'New folder')),
+          ),
+        PopupMenuItem(
+          value: 'rename',
+          child: Text(context.l10n.tr('重命名', 'Rename')),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: Text(context.l10n.tr('删除', 'Delete')),
+        ),
       ],
     );
   }
-}
-
-abstract final class _ConceptExplorerPalette {
-  static const background = Color(0xff111318);
-  static const section = Color(0xff15191f);
-  static const border = Color(0xff272d36);
-  static const text = Color(0xffd7dce5);
-  static const muted = Color(0xff8b93a1);
-  static const accent = Color(0xff82aaff);
-  static const selected = Color(0xff202733);
-  static const hover = Color(0xff191e26);
-  static const folder = Color(0xffd7aa5c);
 }
