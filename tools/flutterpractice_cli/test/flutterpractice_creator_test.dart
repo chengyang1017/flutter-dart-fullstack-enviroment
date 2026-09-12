@@ -160,12 +160,15 @@ Uint8List _packageBytes(Map<String, String> files) {
   final archive = Archive();
   final payloadFiles = files.keys.toList()..sort();
   final manifest = jsonEncode({
-    'formatVersion': 1,
+    'formatVersion': 2,
     'projectType': 'flutter',
     'template': 'flutter-playground',
+    'projectName': 'recreated_practice',
+    'flutterPlatforms': const <String>['android', 'web'],
     'exportedAt': DateTime.utc(2026, 9, 3).toIso8601String(),
     'changes': const <Object>[],
     'payloadFiles': payloadFiles,
+    'basePayloadFiles': const <String>[],
   });
   _addText(archive, 'manifest.json', manifest);
   for (final entry in files.entries) {
