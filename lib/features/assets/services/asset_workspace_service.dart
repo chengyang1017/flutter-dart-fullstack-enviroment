@@ -1,6 +1,10 @@
+import '../../../core/l10n/app_localizations.dart';
 import '../../workspace/controllers/workspace_controller.dart';
 import '../../workspace/models/workspace_entry.dart';
 import '../../workspace/models/workspace_snapshot.dart';
+
+String _localized(String zh, String en) =>
+    AppLocaleController.locale.value.languageCode == 'en' ? en : zh;
 
 class AssetWorkspaceService {
   AssetWorkspaceService(this.workspace);
@@ -26,8 +30,7 @@ class AssetWorkspaceService {
         .where(
           (entry) =>
               entry.isDirectory &&
-              (entry.path == rootPath ||
-                  entry.path.startsWith('$rootPath/')),
+              (entry.path == rootPath || entry.path.startsWith('$rootPath/')),
         )
         .toList()
       ..sort((a, b) => a.path.compareTo(b.path));
@@ -65,7 +68,12 @@ class AssetWorkspaceService {
     _assertAssetDirectoryOrRoot(path);
     final pubspec = workspace.entryAt('pubspec.yaml');
     if (pubspec == null || !pubspec.isText) {
-      throw StateError('当前 Workspace 缺少可编辑的 pubspec.yaml。');
+      throw StateError(
+        _localized(
+          '当前 Workspace 缺少可编辑的 pubspec.yaml。',
+          'The current Workspace does not contain an editable pubspec.yaml.',
+        ),
+      );
     }
     if (isDirectoryDeclared(path)) return;
 
@@ -92,7 +100,9 @@ class AssetWorkspaceService {
 
     final path = '$parentPath/$name';
     if (workspace.entryAt(path) != null) {
-      throw ArgumentError('资源已存在：$path');
+      throw ArgumentError(
+        _localized('资源已存在：$path', 'Asset already exists: $path'),
+      );
     }
 
     final snapshot = workspace.createSnapshot();
@@ -130,34 +140,64 @@ class AssetWorkspaceService {
   void deleteAsset(String path) {
     _assertAssetPath(path);
     if (path == rootPath) {
-      throw ArgumentError('Assets 根目录由概念模式管理，不能直接删除。');
+      throw ArgumentError(
+        _localized(
+          'Assets 根目录由概念模式管理，不能直接删除。',
+          'The Assets root is managed by Concept Mode and cannot be deleted directly.',
+        ),
+      );
     }
     workspace.deleteEntry(path);
   }
 
   void _assertAssetDirectory(String path) {
     if (path != rootPath && !path.startsWith('$rootPath/')) {
-      throw ArgumentError('Assets 只能写入 assets/ 范围。');
+      throw ArgumentError(
+        _localized(
+          'Assets 只能写入 assets/ 范围。',
+          'Assets can only be written inside assets/.',
+        ),
+      );
     }
     final entry = workspace.entryAt(path);
     if (entry == null || !entry.isDirectory) {
-      throw ArgumentError('Assets 文件夹不存在：$path');
+      throw ArgumentError(
+        _localized(
+          'Assets 文件夹不存在：$path',
+          'Assets folder does not exist: $path',
+        ),
+      );
     }
   }
 
   void _assertAssetDirectoryOrRoot(String path) {
     if (path != rootPath && !path.startsWith('$rootPath/')) {
-      throw ArgumentError('Assets 只能声明 assets/ 范围。');
+      throw ArgumentError(
+        _localized(
+          'Assets 只能声明 assets/ 范围。',
+          'Asset declarations must stay inside assets/.',
+        ),
+      );
     }
     final entry = workspace.entryAt(path);
     if (entry == null || !entry.isDirectory) {
-      throw ArgumentError('Assets 文件夹不存在：$path');
+      throw ArgumentError(
+        _localized(
+          'Assets 文件夹不存在：$path',
+          'Assets folder does not exist: $path',
+        ),
+      );
     }
   }
 
   void _assertAssetPath(String path) {
     if (!path.startsWith('$rootPath/')) {
-      throw ArgumentError('只能管理 assets/ 范围内的资源。');
+      throw ArgumentError(
+        _localized(
+          '只能管理 assets/ 范围内的资源。',
+          'Only assets inside assets/ can be managed here.',
+        ),
+      );
     }
   }
 
@@ -194,8 +234,11 @@ class AssetWorkspaceService {
         lines[assetsIndex] = '${List<String>.filled(indent, ' ').join()}assets:';
         lines.insert(assetsIndex + 1, '$spaces- $declaration');
       } else {
-        throw const FormatException(
-          '当前 pubspec 的 flutter.assets 使用了概念模式暂不支持的行内写法。',
+        throw FormatException(
+          _localized(
+            '当前 pubspec 的 flutter.assets 使用了概念模式暂不支持的行内写法。',
+            'The current pubspec uses an inline flutter.assets syntax that Concept Mode does not support yet.',
+          ),
         );
       }
     } else {
