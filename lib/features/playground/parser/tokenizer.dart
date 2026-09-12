@@ -1,5 +1,9 @@
 import '../../../core/errors/parse_exception.dart';
+import '../../../core/l10n/app_localizations.dart';
 import '../models/token.dart';
+
+String _localized(String zh, String en) =>
+    AppLocaleController.locale.value.languageCode == 'en' ? en : zh;
 
 class Tokenizer {
   List<Token> tokenize(String source) {
@@ -38,7 +42,17 @@ class Tokenizer {
                 source[i + 1] == '/')) {
           next();
         }
-        if (end()) throw ParseException('多行注释缺少 */', sl, sc, '/*');
+        if (end()) {
+          throw ParseException(
+            _localized(
+              '多行注释缺少 */',
+              'The block comment is missing */',
+            ),
+            sl,
+            sc,
+            '/*',
+          );
+        }
         next();
         next();
         continue;
@@ -80,7 +94,17 @@ class Tokenizer {
             next();
           }
         }
-        if (end()) throw ParseException('字符串缺少结束引号', sl, sc, quote);
+        if (end()) {
+          throw ParseException(
+            _localized(
+              '字符串缺少结束引号',
+              'The string is missing a closing quote',
+            ),
+            sl,
+            sc,
+            quote,
+          );
+        }
         next();
         out.add(Token(TokenType.string, value.toString(), sl, sc));
         continue;
@@ -115,7 +139,15 @@ class Tokenizer {
         );
         continue;
       }
-      throw ParseException('无法识别的字符', line, col, ch);
+      throw ParseException(
+        _localized(
+          '无法识别的字符',
+          'Unrecognized character',
+        ),
+        line,
+        col,
+        ch,
+      );
     }
     out.add(Token(TokenType.eof, '', line, col));
     return out;
