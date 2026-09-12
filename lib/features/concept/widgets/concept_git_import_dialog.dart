@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../services/concept_git_import_service.dart';
 
 Future<ConceptGitImportRequest?> showConceptGitImportDialog(
@@ -39,6 +40,7 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
   }
 
   void _submit() {
+    final l10n = context.l10n;
     final repository = repositoryController.text.trim();
     final branch = branchController.text.trim();
     final secretName = secretNameController.text.trim();
@@ -46,15 +48,24 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
     final username = usernameController.text.trim();
 
     if (repository.isEmpty) {
-      setState(() => errorText = '请输入 Git repository URL。');
+      setState(() => errorText = l10n.tr(
+            '请输入 Git repository URL。',
+            'Enter a Git repository URL.',
+          ));
       return;
     }
     if (branch.isEmpty) {
-      setState(() => errorText = '请输入 Git branch。');
+      setState(() => errorText = l10n.tr(
+            '请输入 Git branch。',
+            'Enter a Git branch.',
+          ));
       return;
     }
     if (secretValue.isNotEmpty && secretName.isEmpty) {
-      setState(() => errorText = '输入 Token 时必须填写 Secret name。');
+      setState(() => errorText = l10n.tr(
+            '输入 Token 时必须填写 Secret name。',
+            'A Secret name is required when a token is provided.',
+          ));
       return;
     }
 
@@ -72,10 +83,14 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return AlertDialog(
       key: const ValueKey('concept-git-import-dialog'),
-      title: const Text('从 Git 打开 Flutter 项目'),
+      title: Text(l10n.tr(
+        '从 Git 打开 Flutter 项目',
+        'Open Flutter project from Git',
+      )),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620),
         child: SingleChildScrollView(
@@ -83,8 +98,11 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '直接输入仓库即可。系统会自动扫描可运行 Flutter App：只有一个时直接打开；检测到多个时再让你选择，不需要手写 monorepo 子项目路径。',
+              Text(
+                l10n.tr(
+                  '直接输入仓库即可。系统会自动扫描可运行 Flutter App：只有一个时直接打开；检测到多个时再让你选择，不需要手写 monorepo 子项目路径。',
+                  'Enter the repository URL. The system will scan for runnable Flutter apps automatically: one app opens directly; multiple apps are shown for selection, so you do not need to type a monorepo subproject path.',
+                ),
               ),
               const SizedBox(height: 14),
               TextField(
@@ -106,15 +124,21 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
                 controller: branchController,
                 autocorrect: false,
                 enableSuggestions: false,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Branch',
-                  helperText: '默认 main；Flutter 子项目由系统自动检测',
-                  border: OutlineInputBorder(),
+                  helperText: l10n.tr(
+                    '默认 main；Flutter 子项目由系统自动检测',
+                    'Defaults to main; Flutter subprojects are detected automatically.',
+                  ),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 18),
               Text(
-                'Git 凭据（公开仓库可全部留空）',
+                l10n.tr(
+                  'Git 凭据（公开仓库可全部留空）',
+                  'Git credentials (leave blank for public repositories)',
+                ),
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
@@ -123,10 +147,10 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
                 controller: secretNameController,
                 autocorrect: false,
                 enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: 'Secret name（可选）',
+                decoration: InputDecoration(
+                  labelText: l10n.tr('Secret name（可选）', 'Secret name (optional)'),
                   hintText: 'GITHUB_TOKEN',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 10),
@@ -137,10 +161,15 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
                 autocorrect: false,
                 enableSuggestions: false,
                 decoration: InputDecoration(
-                  labelText: 'Token / password（可选）',
+                  labelText: l10n.tr(
+                    'Token / password（可选）',
+                    'Token / password (optional)',
+                  ),
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    tooltip: showSecret ? '隐藏凭据' : '显示凭据',
+                    tooltip: showSecret
+                        ? l10n.tr('隐藏凭据', 'Hide credentials')
+                        : l10n.tr('显示凭据', 'Show credentials'),
                     onPressed: () => setState(() => showSecret = !showSecret),
                     icon: Icon(
                       showSecret ? Icons.visibility_off : Icons.visibility,
@@ -154,9 +183,12 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
                 controller: usernameController,
                 autocorrect: false,
                 enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: 'Username（通常可留空）',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.tr(
+                    'Username（通常可留空）',
+                    'Username (usually optional)',
+                  ),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               if (errorText != null) ...[
@@ -174,13 +206,13 @@ class _ConceptGitImportDialogState extends State<ConceptGitImportDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.tr('取消', 'Cancel')),
         ),
         FilledButton.icon(
           key: const ValueKey('concept-git-import-submit'),
           onPressed: _submit,
           icon: const Icon(Icons.download_rounded),
-          label: const Text('扫描并打开'),
+          label: Text(l10n.tr('扫描并打开', 'Scan and open')),
         ),
       ],
     );
