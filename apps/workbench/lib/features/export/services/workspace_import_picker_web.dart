@@ -1,7 +1,7 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-import 'package:js/js_util.dart' as js_util;
+import 'package:universal_html/js_util.dart' as js_util;
 
 const bool supportsWorkspaceImportPicker = true;
 const bool supportsWorkspaceDirectoryPicker = true;
