@@ -1,10 +1,9 @@
 import 'dart:convert';
 
+import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:test/test.dart';
-
-import '../lib/features/workspace/services/workspace_share_service.dart';
+import 'package:flutter_ui_playground/features/workspace/services/workspace_share_service.dart';
 
 void main() {
   test('creates a fixed read-only share URL from server response', () async {
