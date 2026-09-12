@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../core/l10n/app_localizations.dart';
+
 class DartFrogApiLabDialog extends StatefulWidget {
   const DartFrogApiLabDialog({
     super.key,
@@ -27,7 +29,7 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
   bool _sending = false;
   int? _statusCode;
   int? _elapsedMilliseconds;
-  String _responseBody = 'Run the Dart Frog session, then send a request.';
+  String? _responseBody;
 
   @override
   void initState() {
@@ -59,7 +61,7 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
       _sending = true;
       _statusCode = null;
       _elapsedMilliseconds = null;
-      _responseBody = 'Sending...';
+      _responseBody = context.l10n.tr('正在发送…', 'Sending…');
     });
 
     final stopwatch = Stopwatch()..start();
@@ -97,7 +99,10 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
       setState(() {
         _sending = false;
         _elapsedMilliseconds = stopwatch.elapsedMilliseconds;
-        _responseBody = 'Request failed: $error';
+        _responseBody = context.l10n.tr(
+          '请求失败：$error',
+          'Request failed: $error',
+        );
       });
     }
   }
@@ -114,7 +119,9 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
   }
 
   String _prettyBody(String source) {
-    if (source.trim().isEmpty) return '<empty response body>';
+    if (source.trim().isEmpty) {
+      return context.l10n.tr('<空响应体>', '<empty response body>');
+    }
 
     try {
       final decoded = jsonDecode(source);
@@ -126,7 +133,13 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final scheme = Theme.of(context).colorScheme;
+    final responseBody = _responseBody ??
+        l10n.tr(
+          '先运行 Dart Frog 会话，然后发送请求。',
+          'Run the Dart Frog session, then send a request.',
+        );
 
     return AlertDialog(
       title: const Row(
@@ -176,10 +189,10 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
                   child: TextField(
                     controller: _pathController,
                     enabled: !_sending,
-                    decoration: const InputDecoration(
-                      labelText: 'Path',
+                    decoration: InputDecoration(
+                      labelText: l10n.tr('路径', 'Path'),
                       hintText: '/api/status or /api/echo',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                     ),
                     onSubmitted: (_) => _send(),
                   ),
@@ -194,7 +207,7 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.send),
-                  label: const Text('Send'),
+                  label: Text(l10n.tr('发送', 'Send')),
                 ),
               ],
             ),
@@ -206,10 +219,10 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
                 minLines: 5,
                 maxLines: 8,
                 style: const TextStyle(fontFamily: 'monospace'),
-                decoration: const InputDecoration(
-                  labelText: 'JSON Body',
+                decoration: InputDecoration(
+                  labelText: l10n.tr('JSON 请求体', 'JSON Body'),
                   alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -233,7 +246,7 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
                 ),
                 child: SingleChildScrollView(
                   child: SelectableText(
-                    _responseBody,
+                    responseBody,
                     style: const TextStyle(fontFamily: 'monospace'),
                   ),
                 ),
@@ -245,7 +258,7 @@ class _DartFrogApiLabDialogState extends State<DartFrogApiLabDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(l10n.tr('关闭', 'Close')),
         ),
       ],
     );
