@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:re_editor/re_editor.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../controller/lesson_controller.dart';
 import '../models/code_reference.dart';
 import 'code_references_panel.dart';
@@ -131,13 +132,17 @@ class _CodeDefinitionCtrlClickRegionState
   }
 
   Future<void> _openDefinitionOrReferences() async {
+    final l10n = context.l10n;
     final symbol = widget.lessonController.symbolAtEditor(
       widget.editorController,
     );
 
     if (symbol.isEmpty) {
       _showMessage(
-        '请按住 Ctrl，并点击 Class、方法或变量名称。',
+        l10n.tr(
+          '请按住 Ctrl，并点击 Class、方法或变量名称。',
+          'Hold Ctrl and click a class, method, or variable name.',
+        ),
       );
       return;
     }
@@ -158,7 +163,10 @@ class _CodeDefinitionCtrlClickRegionState
 
       if (definition == null) {
         _showMessage(
-          '没有找到 $symbol 的定义。',
+          context.l10n.tr(
+            '没有找到 $symbol 的定义。',
+            'No definition found for $symbol.',
+          ),
         );
         return;
       }
@@ -202,7 +210,10 @@ class _CodeDefinitionCtrlClickRegionState
 
     if (usageReferences.isEmpty) {
       _showMessage(
-        '$symbol 暂时没有被其他地方使用。',
+        context.l10n.tr(
+          '$symbol 暂时没有被其他地方使用。',
+          '$symbol is not currently used elsewhere.',
+        ),
       );
       return;
     }
@@ -284,6 +295,8 @@ class _ClassUsageReferencesDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
     return AlertDialog(
       title: Row(
         children: [
@@ -293,7 +306,10 @@ class _ClassUsageReferencesDialog extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '$symbol 的使用位置',
+              l10n.tr(
+                '$symbol 的使用位置',
+                'Usages of $symbol',
+              ),
             ),
           ),
         ],
@@ -316,7 +332,7 @@ class _ClassUsageReferencesDialog extends StatelessWidget {
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text('关闭'),
+          child: Text(l10n.tr('关闭', 'Close')),
         ),
       ],
     );
