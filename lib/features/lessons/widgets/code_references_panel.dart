@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../models/code_reference.dart';
 
 class CodeReferencesPanel extends StatelessWidget {
@@ -16,12 +17,17 @@ class CodeReferencesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
     if (references.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            '没有找到 $symbol 的引用。',
+            l10n.tr(
+              '没有找到 $symbol 的引用。',
+              'No references found for $symbol.',
+            ),
             textAlign: TextAlign.center,
           ),
         ),
@@ -34,7 +40,10 @@ class CodeReferencesPanel extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Text(
-            '$symbol · ${references.length} 个结果',
+            l10n.tr(
+              '$symbol · ${references.length} 个结果',
+              '$symbol · ${references.length} results',
+            ),
             style: Theme.of(context).textTheme.titleSmall,
           ),
         ),
@@ -77,13 +86,13 @@ class CodeReferencesPanel extends StatelessWidget {
                   spacing: 6,
                   children: [
                     if (reference.isStandardAnswer)
-                      const Chip(
-                        label: Text('标准答案'),
+                      Chip(
+                        label: Text(l10n.tr('标准答案', 'Reference answer')),
                         visualDensity: VisualDensity.compact,
                       ),
                     if (reference.isDefinition)
-                      const Chip(
-                        label: Text('定义'),
+                      Chip(
+                        label: Text(l10n.tr('定义', 'Definition')),
                         visualDensity: VisualDensity.compact,
                       ),
                   ],

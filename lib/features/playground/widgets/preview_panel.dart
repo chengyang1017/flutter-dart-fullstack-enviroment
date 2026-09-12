@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../controllers/playground_controller.dart';
 import '../renderer/widget_renderer.dart';
@@ -24,7 +25,12 @@ class PreviewPanel extends StatelessWidget {
                   child: Builder(
                     builder: (innerContext) {
                       if (controller.root == null) {
-                        return const EmptyState(message: '输入代码并点击运行');
+                        return EmptyState(
+                          message: innerContext.l10n.tr(
+                            '输入代码并点击运行',
+                            'Enter code and click Run',
+                          ),
+                        );
                       }
                       final renderer = WidgetRenderer(
                         onWarning: controller.addWarning,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../models/runner_preview_target.dart';
 
 class RunnerTargetDialog extends StatelessWidget {
@@ -13,7 +14,7 @@ class RunnerTargetDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SimpleDialog(
-      title: const Text('选择运行设备'),
+      title: Text(context.l10n.tr('选择运行设备', 'Choose run target')),
       children: [
         _TargetOption(
           key: const ValueKey('runner-target-phone'),

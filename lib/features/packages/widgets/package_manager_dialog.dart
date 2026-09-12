@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../runner/controllers/flutter_runner_controller.dart';
 import '../models/package_models.dart';
 import '../services/pub_dev_package_service.dart';
@@ -18,10 +19,7 @@ Future<void> showPackageManagerDialog(
 }
 
 class PackageManagerDialog extends StatefulWidget {
-  const PackageManagerDialog({
-    super.key,
-    required this.runner,
-  });
+  const PackageManagerDialog({super.key, required this.runner});
 
   final FlutterRunnerController runner;
 
@@ -78,7 +76,14 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('读取 pubspec.yaml 失败：$error')),
+          SnackBar(
+            content: Text(
+              context.l10n.tr(
+                '读取 pubspec.yaml 失败：$error',
+                'Failed to read pubspec.yaml: $error',
+              ),
+            ),
+          ),
         );
       });
     }
@@ -89,13 +94,11 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
         (dependency) => dependency.source == PackageDependencySource.hosted,
       );
 
-  int get _updateCount =>
-      _hostedDependencies.where(_hasUpdate).length;
+  int get _updateCount => _hostedDependencies.where(_hasUpdate).length;
 
   bool _hasUpdate(PackageDependencyInfo dependency) {
     final latest = _packageInfo[dependency.name]?.latestVersion;
     if (latest == null) return false;
-
     final current = dependency.resolvedVersion ??
         _simpleDeclaredVersion(dependency.constraint);
     return current != null && current != latest;
@@ -130,7 +133,6 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
 
     final fetched = <String, PubDevPackageInfo>{};
     final failed = <String>[];
-
     for (final dependency in hosted) {
       if (!force && _packageInfo.containsKey(dependency.name)) continue;
       try {
@@ -142,12 +144,16 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
     }
 
     if (!mounted) return;
+    final l10n = context.l10n;
     setState(() {
       _packageInfo.addAll(fetched);
       _checkingUpdates = false;
       _updateError = failed.isEmpty
           ? null
-          : '以下 package 暂时无法读取最新版本：${failed.join(', ')}';
+          : l10n.tr(
+              '以下 package 暂时无法读取最新版本：${failed.join(', ')}',
+              'Latest versions are temporarily unavailable for: ${failed.join(', ')}',
+            );
     });
   }
 
@@ -162,7 +168,6 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
       });
       return;
     }
-
     _searchDebounce = Timer(
       const Duration(milliseconds: 280),
       () => unawaited(_search(query)),
@@ -174,7 +179,6 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
       _searching = true;
       _searchError = null;
     });
-
     try {
       final results = await _pubDev.search(query);
       if (!mounted || _searchController.text.trim() != query) return;
@@ -203,16 +207,13 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
     final cached = _packageInfo[packageName];
     if (cached != null) return cached;
     final info = await _pubDev.packageInfo(packageName);
-    if (mounted) {
-      setState(() => _packageInfo[packageName] = info);
-    }
+    if (mounted) setState(() => _packageInfo[packageName] = info);
     return info;
   }
 
   Future<void> _choosePackage(String packageName) async {
     if (_loadingPackage != null) return;
     setState(() => _loadingPackage = packageName);
-
     try {
       final info = await _loadPackageInfo(packageName);
       if (!mounted) return;
@@ -231,14 +232,18 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
         compatibleRange: selection.compatibleRange,
       );
       setState(_refreshDependencies);
-
-      if (selection.runPubGet) {
-        await _runPubGet();
-      }
+      if (selection.runPubGet) await _runPubGet();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('读取 $packageName 失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '读取 $packageName 失败：$error',
+              'Failed to load $packageName: $error',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _loadingPackage = null);
@@ -267,7 +272,10 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${dependency.name} 已写入 ${info.latestVersion}，请稍后执行 Pub Get。',
+              context.l10n.tr(
+                '${dependency.name} 已写入 ${info.latestVersion}，请稍后执行 Pub Get。',
+                '${dependency.name} was updated to ${info.latestVersion}. Run Pub Get later.',
+              ),
             ),
           ),
         );
@@ -275,7 +283,14 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('升级 ${dependency.name} 失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '升级 ${dependency.name} 失败：$error',
+              'Failed to upgrade ${dependency.name}: $error',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _upgradingPackage = null);
@@ -283,26 +298,29 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
   }
 
   Future<void> _upgradeAll() async {
-    if (_upgradingAll || _upgradingPackage != null) return;
-
-    if (_checkingUpdates) return;
+    if (_upgradingAll || _upgradingPackage != null || _checkingUpdates) return;
     if (_packageInfo.isEmpty) {
       await _checkForUpdates();
       if (!mounted) return;
     }
 
-    final candidates = _hostedDependencies
-        .where(_hasUpdate)
-        .toList(growable: false);
+    final candidates =
+        _hostedDependencies.where(_hasUpdate).toList(growable: false);
     if (candidates.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前没有可升级的 hosted package。')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '当前没有可升级的 hosted package。',
+              'There are no hosted packages to upgrade.',
+            ),
+          ),
+        ),
       );
       return;
     }
 
     setState(() => _upgradingAll = true);
-
     try {
       for (final dependency in candidates) {
         final info = _packageInfo[dependency.name];
@@ -318,14 +336,16 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
 
       if (!mounted) return;
       setState(_refreshDependencies);
-
       if (widget.runner.canPubGet) {
         await _runPubGet();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '已把 ${candidates.length} 个 package 写入最新版本，请稍后执行 Pub Get。',
+              context.l10n.tr(
+                '已把 ${candidates.length} 个 package 写入最新版本，请稍后执行 Pub Get。',
+                '${candidates.length} packages were updated to their latest versions. Run Pub Get later.',
+              ),
             ),
           ),
         );
@@ -333,7 +353,14 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('全部升级失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '全部升级失败：$error',
+              'Upgrade all failed: $error',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _upgradingAll = false);
@@ -344,141 +371,147 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
     PubDevPackageInfo info, {
     PackageDependencyInfo? existing,
   }) {
-    final existingVersion = existing == null
-        ? null
-        : _simpleDeclaredVersion(existing.constraint);
-    var selectedVersion = existingVersion != null &&
-            info.versions.contains(existingVersion)
-        ? existingVersion
-        : info.latestVersion;
+    final existingVersion =
+        existing == null ? null : _simpleDeclaredVersion(existing.constraint);
+    var selectedVersion =
+        existingVersion != null && info.versions.contains(existingVersion)
+            ? existingVersion
+            : info.latestVersion;
     var group = existing?.group ?? PackageDependencyGroup.dependencies;
-    var compatibleRange = existing == null ||
-        _useCompatibleRange(existing.constraint);
+    var compatibleRange =
+        existing == null || _useCompatibleRange(existing.constraint);
+    final l10n = context.l10n;
 
     return showDialog<_PackageSelection>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final versions = <String>{
-              info.latestVersion,
-              ...info.versions.take(80),
-            }.toList(growable: false);
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final versions = <String>{
+            info.latestVersion,
+            ...info.versions.take(80),
+          }.toList(growable: false);
 
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Expanded(child: Text(info.name)),
-                  _LatestBadge(version: info.latestVersion),
-                ],
-              ),
-              content: SizedBox(
-                width: 540,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (info.description.trim().isNotEmpty) ...[
-                        Text(info.description),
-                        const SizedBox(height: 18),
-                      ],
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedVersion,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: '选择版本',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: versions
-                            .map(
-                              (version) => DropdownMenuItem<String>(
-                                value: version,
-                                child: Text(
-                                  version == info.latestVersion
-                                      ? '$version  · latest'
-                                      : version,
-                                ),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setDialogState(() => selectedVersion = value);
-                        },
-                      ),
-                      const SizedBox(height: 14),
-                      SegmentedButton<PackageDependencyGroup>(
-                        segments: const [
-                          ButtonSegment(
-                            value: PackageDependencyGroup.dependencies,
-                            icon: Icon(Icons.extension_outlined),
-                            label: Text('dependencies'),
-                          ),
-                          ButtonSegment(
-                            value: PackageDependencyGroup.devDependencies,
-                            icon: Icon(Icons.build_outlined),
-                            label: Text('dev_dependencies'),
-                          ),
-                        ],
-                        selected: <PackageDependencyGroup>{group},
-                        onSelectionChanged: (values) {
-                          setDialogState(() => group = values.first);
-                        },
-                      ),
-                      const SizedBox(height: 6),
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: compatibleRange,
-                        title: Text('使用兼容范围  ^$selectedVersion'),
-                        subtitle: const Text(
-                          '关闭后写入精确版本；默认使用 Dart/Flutter 常见的 ^ 约束。',
-                        ),
-                        onChanged: (value) {
-                          setDialogState(() => compatibleRange = value ?? true);
-                        },
-                      ),
+          return AlertDialog(
+            title: Row(
+              children: [
+                Expanded(child: Text(info.name)),
+                _LatestBadge(version: info.latestVersion),
+              ],
+            ),
+            content: SizedBox(
+              width: 540,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (info.description.trim().isNotEmpty) ...[
+                      Text(info.description),
+                      const SizedBox(height: 18),
                     ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('取消'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(
-                    dialogContext,
-                    _PackageSelection(
-                      version: selectedVersion,
-                      group: group,
-                      compatibleRange: compatibleRange,
-                      runPubGet: false,
-                    ),
-                  ),
-                  child: const Text('仅写入 pubspec'),
-                ),
-                FilledButton.icon(
-                  onPressed: widget.runner.canPubGet
-                      ? () => Navigator.pop(
-                            dialogContext,
-                            _PackageSelection(
-                              version: selectedVersion,
-                              group: group,
-                              compatibleRange: compatibleRange,
-                              runPubGet: true,
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedVersion,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: l10n.tr('选择版本', 'Choose version'),
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: versions
+                          .map(
+                            (version) => DropdownMenuItem<String>(
+                              value: version,
+                              child: Text(
+                                version == info.latestVersion
+                                    ? '$version  · latest'
+                                    : version,
+                              ),
                             ),
                           )
-                      : null,
-                  icon: const Icon(Icons.download_rounded),
-                  label: const Text('添加并 Pub Get'),
+                          .toList(growable: false),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setDialogState(() => selectedVersion = value);
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    SegmentedButton<PackageDependencyGroup>(
+                      segments: const [
+                        ButtonSegment(
+                          value: PackageDependencyGroup.dependencies,
+                          icon: Icon(Icons.extension_outlined),
+                          label: Text('dependencies'),
+                        ),
+                        ButtonSegment(
+                          value: PackageDependencyGroup.devDependencies,
+                          icon: Icon(Icons.build_outlined),
+                          label: Text('dev_dependencies'),
+                        ),
+                      ],
+                      selected: <PackageDependencyGroup>{group},
+                      onSelectionChanged: (values) {
+                        setDialogState(() => group = values.first);
+                      },
+                    ),
+                    const SizedBox(height: 6),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: compatibleRange,
+                      title: Text(
+                        l10n.tr(
+                          '使用兼容范围  ^$selectedVersion',
+                          'Use compatible range  ^$selectedVersion',
+                        ),
+                      ),
+                      subtitle: Text(
+                        l10n.tr(
+                          '关闭后写入精确版本；默认使用 Dart/Flutter 常见的 ^ 约束。',
+                          'Turn this off to write an exact version. The common Dart/Flutter ^ constraint is used by default.',
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setDialogState(() => compatibleRange = value ?? true);
+                      },
+                    ),
+                  ],
                 ),
-              ],
-            );
-          },
-        );
-      },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(l10n.tr('取消', 'Cancel')),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _PackageSelection(
+                    version: selectedVersion,
+                    group: group,
+                    compatibleRange: compatibleRange,
+                    runPubGet: false,
+                  ),
+                ),
+                child: Text(l10n.tr('仅写入 pubspec', 'Write pubspec only')),
+              ),
+              FilledButton.icon(
+                onPressed: widget.runner.canPubGet
+                    ? () => Navigator.pop(
+                          dialogContext,
+                          _PackageSelection(
+                            version: selectedVersion,
+                            group: group,
+                            compatibleRange: compatibleRange,
+                            runPubGet: true,
+                          ),
+                        )
+                    : null,
+                icon: const Icon(Icons.download_rounded),
+                label: Text(l10n.tr('添加并 Pub Get', 'Add and Pub Get')),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -494,15 +527,25 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
         SnackBar(
           content: Text(
             result.hasPackageConfig
-                ? 'Pub Get 完成：依赖已解析，package_config.json 已生成。'
-                : 'Pub Get 完成。',
+                ? context.l10n.tr(
+                    'Pub Get 完成：依赖已解析，package_config.json 已生成。',
+                    'Pub Get complete: dependencies resolved and package_config.json generated.',
+                  )
+                : context.l10n.tr('Pub Get 完成。', 'Pub Get complete.'),
           ),
         ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pub Get 失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              'Pub Get 失败：$error',
+              'Pub Get failed: $error',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _pubGetting = false);
@@ -545,15 +588,9 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          flex: 6,
-                          child: _buildInstalledList(),
-                        ),
+                        Expanded(flex: 6, child: _buildInstalledList()),
                         const VerticalDivider(width: 1),
-                        Expanded(
-                          flex: 5,
-                          child: _buildSearchPanel(),
-                        ),
+                        Expanded(flex: 5, child: _buildSearchPanel()),
                       ],
                     );
                   }
@@ -574,6 +611,7 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
   }
 
   Widget _buildHeader() {
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 8, 12),
       child: Row(
@@ -596,7 +634,7 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
             ),
           ),
           IconButton(
-            tooltip: '关闭',
+            tooltip: l10n.tr('关闭', 'Close'),
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.close),
           ),
@@ -606,6 +644,7 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
   }
 
   Widget _buildPubGetStatus() {
+    final l10n = context.l10n;
     final lockExists = widget.runner.workspace.entryAt('pubspec.lock') != null;
     final verified = widget.runner.isPubGetVerifiedForCurrentPubspec;
 
@@ -615,23 +654,38 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
 
     if (widget.runner.isMock) {
       title = 'Mock Runner';
-      subtitle = '可以测试界面和状态流，但不会真实下载 package。';
+      subtitle = l10n.tr(
+        '可以测试界面和状态流，但不会真实下载 package。',
+        'You can test the UI and state flow, but packages are not actually downloaded.',
+      );
       icon = Icons.science_outlined;
     } else if (verified && lockExists) {
-      title = 'Pub Get 已完成';
-      subtitle = '当前 pubspec 已成功解析，pubspec.lock 已同步，可查看实际版本。';
+      title = l10n.tr('Pub Get 已完成', 'Pub Get complete');
+      subtitle = l10n.tr(
+        '当前 pubspec 已成功解析，pubspec.lock 已同步，可查看实际版本。',
+        'The current pubspec was resolved successfully and pubspec.lock is synchronized, so resolved versions are available.',
+      );
       icon = Icons.check_circle_outline_rounded;
     } else if (verified) {
-      title = 'Runner 已执行 Pub Get';
-      subtitle = 'Run 时已解析当前 pubspec；再点一次 Pub Get 可把 lock 版本同步回 Workspace。';
+      title = l10n.tr('Runner 已执行 Pub Get', 'Runner executed Pub Get');
+      subtitle = l10n.tr(
+        'Run 时已解析当前 pubspec；再点一次 Pub Get 可把 lock 版本同步回 Workspace。',
+        'The current pubspec was resolved during Run. Run Pub Get once more to sync lock versions back to the Workspace.',
+      );
       icon = Icons.check_circle_outline_rounded;
     } else if (lockExists) {
-      title = '需要重新 Pub Get';
-      subtitle = '存在 pubspec.lock，但当前 pubspec 尚未在本次 Runner 会话验证。';
+      title = l10n.tr('需要重新 Pub Get', 'Pub Get required');
+      subtitle = l10n.tr(
+        '存在 pubspec.lock，但当前 pubspec 尚未在本次 Runner 会话验证。',
+        'pubspec.lock exists, but the current pubspec has not been verified in this Runner session.',
+      );
       icon = Icons.info_outline_rounded;
     } else {
-      title = '尚未确认 Pub Get';
-      subtitle = '没有可确认的依赖解析结果。添加或改版本后执行 Pub Get。';
+      title = l10n.tr('尚未确认 Pub Get', 'Pub Get not verified');
+      subtitle = l10n.tr(
+        '没有可确认的依赖解析结果。添加或改版本后执行 Pub Get。',
+        'No dependency resolution result is available yet. Run Pub Get after adding or changing a version.',
+      );
       icon = Icons.download_for_offline_outlined;
     }
 
@@ -671,6 +725,7 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
   }
 
   Widget _buildInstalledList() {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -678,10 +733,13 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
           padding: const EdgeInsets.fromLTRB(16, 10, 10, 8),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  '当前依赖',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  l10n.tr('当前依赖', 'Current dependencies'),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               if (_updateCount > 0) ...[
@@ -698,12 +756,20 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.upgrade_rounded, size: 17),
-                  label: Text('全部升级 $_updateCount'),
+                  label: Text(
+                    l10n.tr(
+                      '全部升级 $_updateCount',
+                      'Upgrade all $_updateCount',
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 4),
               ],
               IconButton(
-                tooltip: '重新检查最新版本',
+                tooltip: l10n.tr(
+                  '重新检查最新版本',
+                  'Check latest versions again',
+                ),
                 visualDensity: VisualDensity.compact,
                 onPressed: _checkingUpdates
                     ? null
@@ -729,7 +795,14 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
           ),
         Expanded(
           child: _dependencies.isEmpty
-              ? const Center(child: Text('pubspec.yaml 中没有可显示的依赖。'))
+              ? Center(
+                  child: Text(
+                    l10n.tr(
+                      'pubspec.yaml 中没有可显示的依赖。',
+                      'There are no dependencies to display in pubspec.yaml.',
+                    ),
+                  ),
+                )
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                   itemCount: _dependencies.length,
@@ -739,7 +812,6 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
                     final latest = _packageInfo[dependency.name]?.latestVersion;
                     final updateAvailable = _hasUpdate(dependency);
                     final upgrading = _upgradingPackage == dependency.name;
-
                     return _DependencyTile(
                       dependency: dependency,
                       latestVersion: latest,
@@ -749,12 +821,14 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
                       onUpgrade: updateAvailable
                           ? () => unawaited(_upgradePackage(dependency))
                           : null,
-                      onManage: dependency.source == PackageDependencySource.hosted
-                          ? () => unawaited(_choosePackage(dependency.name))
-                          : null,
-                      onRemove: dependency.source == PackageDependencySource.hosted
-                          ? () => _removeDependency(dependency)
-                          : null,
+                      onManage:
+                          dependency.source == PackageDependencySource.hosted
+                              ? () => unawaited(_choosePackage(dependency.name))
+                              : null,
+                      onRemove:
+                          dependency.source == PackageDependencySource.hosted
+                              ? () => _removeDependency(dependency)
+                              : null,
                     );
                   },
                 ),
@@ -764,8 +838,8 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
   }
 
   Widget _buildSearchPanel() {
+    final l10n = context.l10n;
     final query = _searchController.text.trim();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -775,7 +849,7 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
             controller: _searchController,
             onChanged: _onSearchChanged,
             decoration: InputDecoration(
-              labelText: '搜索 pub.dev',
+              labelText: l10n.tr('搜索 pub.dev', 'Search pub.dev'),
               hintText: 'provider, dio, go_router...',
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: _searching
@@ -796,23 +870,36 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '搜索失败：$_searchError',
+              l10n.tr(
+                '搜索失败：$_searchError',
+                'Search failed: $_searchError',
+              ),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
         Expanded(
           child: query.isEmpty
-              ? const Center(
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(24),
                     child: Text(
-                      '输入 package 名称，在 pub.dev 中查找依赖。选择后默认最新版本，也可以切换历史版本。',
+                      l10n.tr(
+                        '输入 package 名称，在 pub.dev 中查找依赖。选择后默认最新版本，也可以切换历史版本。',
+                        'Enter a package name to search pub.dev. The latest version is selected by default, and older versions remain available.',
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),
                 )
               : _searchResults.isEmpty && !_searching
-                  ? const Center(child: Text('没有匹配的 package。'))
+                  ? Center(
+                      child: Text(
+                        l10n.tr(
+                          '没有匹配的 package。',
+                          'No matching packages.',
+                        ),
+                      ),
+                    )
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                       itemCount: _searchResults.length,
@@ -826,7 +913,12 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
                           title: Text(name),
                           subtitle: Text(
                             latest == null
-                                ? (installed ? '当前项目已声明' : 'pub.dev package')
+                                ? (installed
+                                    ? l10n.tr(
+                                        '当前项目已声明',
+                                        'Already declared in this project',
+                                      )
+                                    : 'pub.dev package')
                                 : 'latest $latest',
                           ),
                           trailing: FilledButton.tonal(
@@ -839,7 +931,11 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
                                     height: 16,
                                     child: CircularProgressIndicator(strokeWidth: 2),
                                   )
-                                : Text(installed ? '管理' : '选择'),
+                                : Text(
+                                    installed
+                                        ? l10n.tr('管理', 'Manage')
+                                        : l10n.tr('选择', 'Select'),
+                                  ),
                           ),
                         );
                       },
@@ -850,10 +946,7 @@ class _PackageManagerDialogState extends State<PackageManagerDialog> {
   }
 }
 
-enum _DependencyAction {
-  manage,
-  remove,
-}
+enum _DependencyAction { manage, remove }
 
 class _DependencyTile extends StatelessWidget {
   const _DependencyTile({
@@ -878,6 +971,7 @@ class _DependencyTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final group = dependency.group == PackageDependencyGroup.dependencies
         ? 'dependencies'
         : 'dev_dependencies';
@@ -914,12 +1008,12 @@ class _DependencyTile extends StatelessWidget {
             _InfoChip(label: 'Declared ${dependency.constraint}'),
             _InfoChip(
               label: dependency.resolvedVersion == null
-                  ? 'Resolved 未解析/未同步'
+                  ? l10n.tr('Resolved 未解析/未同步', 'Resolved — not resolved/synced')
                   : 'Resolved ${dependency.resolvedVersion}',
             ),
             _InfoChip(
               label: checkingLatest
-                  ? 'Latest 检查中...'
+                  ? l10n.tr('Latest 检查中...', 'Latest — checking...')
                   : latestVersion == null
                       ? 'Latest —'
                       : 'Latest $latestVersion',
@@ -937,8 +1031,11 @@ class _DependencyTile extends StatelessWidget {
                 if (onUpgrade != null)
                   IconButton.filledTonal(
                     tooltip: latestVersion == null
-                        ? '升级'
-                        : '升级到 $latestVersion',
+                        ? l10n.tr('升级', 'Upgrade')
+                        : l10n.tr(
+                            '升级到 $latestVersion',
+                            'Upgrade to $latestVersion',
+                          ),
                     visualDensity: VisualDensity.compact,
                     onPressed: upgrading ? null : onUpgrade,
                     icon: upgrading
@@ -950,7 +1047,7 @@ class _DependencyTile extends StatelessWidget {
                         : const Icon(Icons.upgrade_rounded, size: 18),
                   ),
                 PopupMenuButton<_DependencyAction>(
-                  tooltip: '依赖操作',
+                  tooltip: l10n.tr('依赖操作', 'Dependency actions'),
                   onSelected: (action) {
                     switch (action) {
                       case _DependencyAction.manage:
@@ -961,14 +1058,14 @@ class _DependencyTile extends StatelessWidget {
                         break;
                     }
                   },
-                  itemBuilder: (context) => const [
+                  itemBuilder: (context) => [
                     PopupMenuItem(
                       value: _DependencyAction.manage,
                       child: ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.tune_rounded),
-                        title: Text('选择版本'),
+                        leading: const Icon(Icons.tune_rounded),
+                        title: Text(l10n.tr('选择版本', 'Choose version')),
                       ),
                     ),
                     PopupMenuItem(
@@ -976,8 +1073,8 @@ class _DependencyTile extends StatelessWidget {
                       child: ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.delete_outline_rounded),
-                        title: Text('移除依赖'),
+                        leading: const Icon(Icons.delete_outline_rounded),
+                        title: Text(l10n.tr('移除依赖', 'Remove dependency')),
                       ),
                     ),
                   ],
@@ -1018,7 +1115,7 @@ class _UpdateBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        'Update available',
+        context.l10n.tr('可升级', 'Update available'),
         style: Theme.of(context).textTheme.labelSmall,
       ),
     );

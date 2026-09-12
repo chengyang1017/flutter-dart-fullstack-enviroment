@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
 
 import '../../workspace/services/http_workspace_auth_service.dart';
@@ -88,16 +89,22 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
   String _messageFor(Object error) {
     if (error is WorkspaceAuthRequestException) {
       return switch (error.code) {
-        'username_taken' => '这个用户名已经被使用。',
-        'email_taken' => '这个邮箱已经注册过。',
-        _ when error.statusCode == 401 => '邮箱或密码不正确。',
+        'username_taken' =>
+          context.l10n.tr('这个用户名已经被使用。', 'This username is already in use.'),
+        'email_taken' => context.l10n
+            .tr('这个邮箱已经注册过。', 'This email is already registered.'),
+        _ when error.statusCode == 401 =>
+          context.l10n.tr('邮箱或密码不正确。', 'Incorrect email or password.'),
         _ => error.message,
       };
     }
     if (error is FormatException) {
       return error.message;
     }
-    return '无法连接账号服务：$error';
+    return context.l10n.tr(
+      '无法连接账号服务：$error',
+      'Unable to connect to the account service: $error',
+    );
   }
 
   void _setMode(bool register) {
@@ -111,6 +118,7 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return Scaffold(
       key: const ValueKey('workspace-auth-screen'),
@@ -130,7 +138,13 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                       children: [
                         const Align(
                           alignment: Alignment.centerRight,
-                          child: AppThemeToggleButton(),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AppLanguageToggleButton(),
+                              AppThemeToggleButton(),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Icon(
@@ -150,8 +164,14 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                         const SizedBox(height: 6),
                         Text(
                           _registerMode
-                              ? '创建账号后，项目会保存在你的云端命名空间。'
-                              : '登录后继续访问你名下的云端项目。',
+                              ? l10n.tr(
+                                  '创建账号后，项目会保存在你的云端命名空间。',
+                                  'After creating an account, projects are stored in your cloud namespace.',
+                                )
+                              : l10n.tr(
+                                  '登录后继续访问你名下的云端项目。',
+                                  'Sign in to continue accessing your cloud projects.',
+                                ),
                           textAlign: TextAlign.center,
                           style:
                               Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -160,16 +180,16 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                         ),
                         const SizedBox(height: 24),
                         SegmentedButton<bool>(
-                          segments: const <ButtonSegment<bool>>[
+                          segments: <ButtonSegment<bool>>[
                             ButtonSegment<bool>(
                               value: false,
-                              label: Text('登录'),
-                              icon: Icon(Icons.login_rounded),
+                              label: Text(l10n.tr('登录', 'Sign in')),
+                              icon: const Icon(Icons.login_rounded),
                             ),
                             ButtonSegment<bool>(
                               value: true,
-                              label: Text('注册'),
-                              icon: Icon(Icons.person_add_alt_1_rounded),
+                              label: Text(l10n.tr('注册', 'Register')),
+                              icon: const Icon(Icons.person_add_alt_1_rounded),
                             ),
                           ],
                           selected: <bool>{_registerMode},
@@ -187,19 +207,25 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                             autofillHints: const <String>[
                               AutofillHints.username
                             ],
-                            decoration: const InputDecoration(
-                              labelText: '用户名',
-                              hintText: '例如 alice',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.alternate_email_rounded),
+                            decoration: InputDecoration(
+                              labelText: l10n.tr('用户名', 'Username'),
+                              hintText: l10n.tr('例如 alice', 'For example, alice'),
+                              border: const OutlineInputBorder(),
+                              prefixIcon:
+                                  const Icon(Icons.alternate_email_rounded),
                             ),
                             validator: (value) {
                               if (!_registerMode) return null;
                               final username = value?.trim() ?? '';
-                              if (username.isEmpty) return '请输入用户名';
+                              if (username.isEmpty) {
+                                return l10n.tr('请输入用户名', 'Enter a username');
+                              }
                               if (!RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$')
                                   .hasMatch(username)) {
-                                return '只能使用字母、数字和连字符，最多 39 个字符';
+                                return l10n.tr(
+                                  '只能使用字母、数字和连字符，最多 39 个字符',
+                                  'Use only letters, numbers, and hyphens, up to 39 characters',
+                                );
                               }
                               return null;
                             },
@@ -213,15 +239,19 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
                           autofillHints: const <String>[AutofillHints.email],
-                          decoration: const InputDecoration(
-                            labelText: '邮箱',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.mail_outline_rounded),
+                          decoration: InputDecoration(
+                            labelText: l10n.tr('邮箱', 'Email'),
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.mail_outline_rounded),
                           ),
                           validator: (value) {
                             final email = value?.trim() ?? '';
-                            if (email.isEmpty) return '请输入邮箱';
-                            if (!email.contains('@')) return '请输入有效邮箱';
+                            if (email.isEmpty) {
+                              return l10n.tr('请输入邮箱', 'Enter your email');
+                            }
+                            if (!email.contains('@')) {
+                              return l10n.tr('请输入有效邮箱', 'Enter a valid email');
+                            }
                             return null;
                           },
                         ),
@@ -237,11 +267,13 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                               : const <String>[AutofillHints.password],
                           onFieldSubmitted: (_) => _submit(),
                           decoration: InputDecoration(
-                            labelText: '密码',
+                            labelText: l10n.tr('密码', 'Password'),
                             border: const OutlineInputBorder(),
                             prefixIcon: const Icon(Icons.lock_outline_rounded),
                             suffixIcon: IconButton(
-                              tooltip: _obscurePassword ? '显示密码' : '隐藏密码',
+                              tooltip: _obscurePassword
+                                  ? l10n.tr('显示密码', 'Show password')
+                                  : l10n.tr('隐藏密码', 'Hide password'),
                               onPressed: _submitting
                                   ? null
                                   : () => setState(
@@ -257,9 +289,14 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                           ),
                           validator: (value) {
                             final password = value ?? '';
-                            if (password.isEmpty) return '请输入密码';
+                            if (password.isEmpty) {
+                              return l10n.tr('请输入密码', 'Enter your password');
+                            }
                             if (_registerMode && password.length < 8) {
-                              return '密码至少需要 8 个字符';
+                              return l10n.tr(
+                                '密码至少需要 8 个字符',
+                                'Password must be at least 8 characters',
+                              );
                             }
                             return null;
                           },
@@ -298,15 +335,18 @@ class _WorkspaceAuthScreenState extends State<WorkspaceAuthScreen> {
                                 ),
                           label: Text(
                             _submitting
-                                ? '处理中...'
+                                ? l10n.tr('处理中...', 'Processing...')
                                 : _registerMode
-                                    ? '创建账号'
-                                    : '登录',
+                                    ? l10n.tr('创建账号', 'Create account')
+                                    : l10n.tr('登录', 'Sign in'),
                           ),
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '你的项目由登录账号隔离保存。浏览器只保留当前账号的本地缓存。',
+                          l10n.tr(
+                            '你的项目由登录账号隔离保存。浏览器只保留当前账号的本地缓存。',
+                            'Projects are isolated by account. The browser keeps only the local cache for the current account.',
+                          ),
                           textAlign: TextAlign.center,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(

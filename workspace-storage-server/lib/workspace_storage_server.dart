@@ -1,4 +1,6 @@
 export 'src/workspace_account_store.dart';
+export 'src/workspace_admin_http_handler.dart';
+export 'src/workspace_admin_store.dart';
 export 'src/workspace_auth_http_handler.dart';
 export 'src/workspace_authenticator.dart';
 export 'src/workspace_git_pull_service.dart';

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
+import '../l10n/app_localizations.dart';
+
 abstract final class AppThemeController {
   static const String _boxName = 'app_preferences';
   static const String _deepNightKey = 'deep_night_mode';
@@ -227,7 +229,9 @@ class AppThemeToggleButton extends StatelessWidget {
 
         return IconButton(
           key: const ValueKey('app-theme-toggle'),
-          tooltip: deepNight ? '切换浅色模式' : '切换深夜模式',
+          tooltip: deepNight
+              ? context.l10n.tr('切换浅色模式', 'Switch to light mode')
+              : context.l10n.tr('切换深夜模式', 'Switch to dark mode'),
           onPressed: () {
             AppThemeController.toggle();
           },

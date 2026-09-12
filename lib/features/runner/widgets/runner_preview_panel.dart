@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../../playground/controllers/playground_controller.dart';
 import '../../playground/widgets/preview_panel.dart';
 import '../controllers/flutter_runner_controller.dart';
@@ -17,15 +19,6 @@ class RunnerPreviewPanel extends StatelessWidget {
   final PlaygroundController playground;
   final FlutterRunnerController runner;
 
-  static const _workbench = Color(0xff0d1015);
-  static const _surface = Color(0xff111318);
-  static const _surfaceRaised = Color(0xff15191f);
-  static const _border = Color(0xff272d36);
-  static const _text = Color(0xffcbd3df);
-  static const _muted = Color(0xff8f98a8);
-  static const _accent = Color(0xff82aaff);
-  static const _success = Color(0xff76c893);
-
   @override
   Widget build(BuildContext context) {
     final previewUrl = runner.previewUrl;
@@ -33,9 +26,10 @@ class RunnerPreviewPanel extends StatelessWidget {
         previewUrl != null &&
         runner.status == RunnerStatus.running;
     final target = runner.previewTarget;
+    final palette = WorkbenchPalette.of(context);
 
     return ColoredBox(
-      color: _workbench,
+      color: palette.background,
       child: Column(
         children: [
           if (!runner.isMock)
@@ -61,30 +55,30 @@ class RunnerPreviewPanel extends StatelessWidget {
 
   Widget _buildIdlePreview(BuildContext context) {
     final inherited = Theme.of(context);
-    final darkScheme = inherited.colorScheme.copyWith(
-      surface: _surface,
-      surfaceContainerLowest: _workbench,
-      surfaceContainerLow: _surface,
-      surfaceContainer: _surface,
-      surfaceContainerHigh: _surfaceRaised,
-      surfaceContainerHighest: _surfaceRaised,
-      outline: const Color(0xff39414c),
-      outlineVariant: _border,
-      onSurface: _text,
-      onSurfaceVariant: _muted,
-      primary: _accent,
+    final palette = WorkbenchPalette.of(context);
+    final scheme = inherited.colorScheme.copyWith(
+      surface: palette.surface,
+      surfaceContainerLowest: palette.background,
+      surfaceContainerLow: palette.surface,
+      surfaceContainer: palette.surface,
+      surfaceContainerHigh: palette.surfaceRaised,
+      surfaceContainerHighest: palette.surfaceRaised,
+      outlineVariant: palette.border,
+      onSurface: palette.text,
+      onSurfaceVariant: palette.muted,
+      primary: palette.accent,
     );
 
     return Theme(
       data: inherited.copyWith(
-        colorScheme: darkScheme,
-        scaffoldBackgroundColor: _workbench,
-        dividerColor: _border,
+        colorScheme: scheme,
+        scaffoldBackgroundColor: palette.background,
+        dividerColor: palette.border,
         textTheme: inherited.textTheme.apply(
-          bodyColor: _text,
-          displayColor: _text,
+          bodyColor: palette.text,
+          displayColor: palette.text,
         ),
-        iconTheme: const IconThemeData(color: _muted),
+        iconTheme: IconThemeData(color: palette.muted),
       ),
       child: PreviewPanel(controller: playground),
     );
@@ -104,17 +98,17 @@ class _RunnerStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = ready
-        ? RunnerPreviewPanel._success
-        : RunnerPreviewPanel._muted;
+    final palette = WorkbenchPalette.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final statusColor = ready ? scheme.primary : palette.muted;
 
     return Container(
       height: 38,
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: const BoxDecoration(
-        color: RunnerPreviewPanel._surfaceRaised,
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
         border: Border(
-          bottom: BorderSide(color: RunnerPreviewPanel._border),
+          bottom: BorderSide(color: palette.border),
         ),
       ),
       child: Row(
@@ -139,12 +133,18 @@ class _RunnerStatusBar extends StatelessWidget {
           Expanded(
             child: Text(
               ready
-                  ? '真实 Flutter SDK · ${target.label} · ${status.label}'
-                  : '真实 Runner · ${target.label} · ${status.label} · 等待 Preview 就绪',
+                  ? context.l10n.tr(
+                      '真实 Flutter SDK · ${target.label} · ${status.label}',
+                      'Real Flutter SDK · ${target.label} · ${status.label}',
+                    )
+                  : context.l10n.tr(
+                      '真实 Runner · ${target.label} · ${status.label} · 等待 Preview 就绪',
+                      'Real Runner · ${target.label} · ${status.label} · Waiting for Preview',
+                    ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: RunnerPreviewPanel._text,
+              style: TextStyle(
+                color: palette.text,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w500,
               ),
@@ -179,9 +179,11 @@ class _EmbeddedDevicePreview extends StatelessWidget {
     final width = target.viewportWidth!;
     final height = target.viewportHeight!;
     final radius = target == RunnerPreviewTarget.phone ? 28.0 : 20.0;
+    final palette = WorkbenchPalette.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
 
     return ColoredBox(
-      color: RunnerPreviewPanel._workbench,
+      color: palette.background,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(18),
@@ -194,16 +196,14 @@ class _EmbeddedDevicePreview extends StatelessWidget {
               height: height,
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: const Color(0xff050607),
+                color: dark ? const Color(0xff050607) : const Color(0xffd8dee8),
                 borderRadius: BorderRadius.circular(radius + 6),
-                border: Border.all(
-                  color: const Color(0xff303640),
-                ),
-                boxShadow: const [
+                border: Border.all(color: palette.border),
+                boxShadow: [
                   BoxShadow(
-                    color: Color(0x66000000),
+                    color: Theme.of(context).shadowColor,
                     blurRadius: 24,
-                    offset: Offset(0, 10),
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
@@ -224,17 +224,19 @@ class _ExternalWebPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: RunnerPreviewPanel._workbench,
+    final palette = WorkbenchPalette.of(context);
+
+    return ColoredBox(
+      color: palette.background,
       child: Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: RunnerPreviewPanel._surfaceRaised,
+                  color: palette.surfaceRaised,
                   shape: BoxShape.circle,
                 ),
                 child: SizedBox(
@@ -243,26 +245,32 @@ class _ExternalWebPreview extends StatelessWidget {
                   child: Icon(
                     Icons.open_in_new_rounded,
                     size: 23,
-                    color: RunnerPreviewPanel._accent,
+                    color: palette.accent,
                   ),
                 ),
               ),
-              SizedBox(height: 14),
+              const SizedBox(height: 14),
               Text(
-                '网页预览使用独立浏览器标签页',
+                context.l10n.tr(
+                  '网页预览使用独立浏览器标签页',
+                  'Web preview opens in a separate browser tab',
+                ),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: RunnerPreviewPanel._text,
+                  color: palette.text,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              SizedBox(height: 7),
+              const SizedBox(height: 7),
               Text(
-                '运行完成后会自动打开。若浏览器阻止新标签页，请允许本站打开弹窗后重新运行。',
+                context.l10n.tr(
+                  '运行完成后会自动打开。若浏览器阻止新标签页，请允许本站打开弹窗后重新运行。',
+                  'It opens automatically after the run completes. If the browser blocks the new tab, allow pop-ups for this site and run again.',
+                ),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: RunnerPreviewPanel._muted,
+                  color: palette.muted,
                   fontSize: 11.5,
                   height: 1.45,
                 ),

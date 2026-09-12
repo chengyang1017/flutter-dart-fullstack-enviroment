@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../workspace/services/http_workspace_auth_service.dart';
 
 typedef ClaimExistingAccountCallback = Future<void> Function({
@@ -45,15 +46,27 @@ class _ClaimExistingAccountDialogState
     final password = _passwordController.text;
     final confirm = _confirmController.text;
     if (email.isEmpty) {
-      setState(() => _error = '请输入邮箱。');
+      setState(
+        () => _error = context.l10n.tr('请输入邮箱。', 'Enter your email.'),
+      );
       return;
     }
     if (password.length < 8) {
-      setState(() => _error = '密码至少需要 8 个字符。');
+      setState(
+        () => _error = context.l10n.tr(
+          '密码至少需要 8 个字符。',
+          'Password must be at least 8 characters.',
+        ),
+      );
       return;
     }
     if (password != confirm) {
-      setState(() => _error = '两次输入的密码不一致。');
+      setState(
+        () => _error = context.l10n.tr(
+          '两次输入的密码不一致。',
+          'The passwords do not match.',
+        ),
+      );
       return;
     }
 
@@ -75,9 +88,11 @@ class _ClaimExistingAccountDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
     return AlertDialog(
       key: const ValueKey('claim-existing-account-dialog'),
-      title: const Text('绑定正式登录账号'),
+      title: Text(l10n.tr('绑定正式登录账号', 'Link a permanent login account')),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -86,7 +101,10 @@ class _ClaimExistingAccountDialogState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '当前开发身份：${widget.username}\n绑定后会保留原来的 userId、项目和云端数据，只新增邮箱密码登录。',
+                l10n.tr(
+                  '当前开发身份：${widget.username}\n绑定后会保留原来的 userId、项目和云端数据，只新增邮箱密码登录。',
+                  'Current development identity: ${widget.username}\nLinking keeps the existing userId, projects, and cloud data, and only adds email/password login.',
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -94,9 +112,9 @@ class _ClaimExistingAccountDialogState
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.email],
-                decoration: const InputDecoration(
-                  labelText: '邮箱',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.tr('邮箱', 'Email'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -105,9 +123,9 @@ class _ClaimExistingAccountDialogState
                 controller: _passwordController,
                 obscureText: true,
                 autofillHints: const [AutofillHints.newPassword],
-                decoration: const InputDecoration(
-                  labelText: '新密码',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.tr('新密码', 'New password'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -115,9 +133,9 @@ class _ClaimExistingAccountDialogState
                 key: const ValueKey('claim-existing-password-confirm'),
                 controller: _confirmController,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: '确认密码',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.tr('确认密码', 'Confirm password'),
+                  border: const OutlineInputBorder(),
                 ),
                 onSubmitted: (_) => _submit(),
               ),
@@ -138,7 +156,7 @@ class _ClaimExistingAccountDialogState
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.tr('取消', 'Cancel')),
         ),
         FilledButton.icon(
           key: const ValueKey('claim-existing-submit'),
@@ -149,7 +167,11 @@ class _ClaimExistingAccountDialogState
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.verified_user_outlined),
-          label: Text(_submitting ? '绑定中...' : '绑定账号'),
+          label: Text(
+            _submitting
+                ? l10n.tr('绑定中...', 'Linking...')
+                : l10n.tr('绑定账号', 'Link account'),
+          ),
         ),
       ],
     );

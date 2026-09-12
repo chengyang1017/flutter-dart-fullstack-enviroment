@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../assets/widgets/asset_manager_dialog.dart';
 import '../../concept/widgets/concept_lib_explorer.dart';
 import '../../export/services/workspace_export_download.dart';
@@ -25,23 +27,8 @@ import 'monaco_code_editor_panel.dart';
 import 'source_control_panel.dart';
 import 'supported_widgets_dialog.dart';
 
-enum _TabletDestination {
-  code,
-  files,
-  preview,
-  wire,
-  terminal,
-}
+enum _TabletDestination { code, files, preview, wire, terminal }
 
-/// Android-tablet shell for the playground.
-///
-/// This intentionally does not shrink the desktop workbench. It follows an
-/// Android large-screen structure instead:
-/// - Material 3 top app bar
-/// - NavigationRail for 3-7 top-level destinations
-/// - touch-sized controls
-/// - a supporting preview pane beside the editor on expanded landscape windows
-/// - modal bottom sheets for project and workspace actions
 class TabletPlaygroundLayout extends StatefulWidget {
   const TabletPlaygroundLayout({
     super.key,
@@ -98,69 +85,54 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xff6f9cff),
-      brightness: Brightness.dark,
-    );
-    final tabletTheme = ThemeData(
-      useMaterial3: true,
-      colorScheme: scheme,
-      brightness: Brightness.dark,
-      visualDensity: VisualDensity.standard,
-    );
+    final scheme = Theme.of(context).colorScheme;
 
-    return Theme(
-      data: tabletTheme,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final extendedRail = constraints.maxWidth >= 1200;
-          final showSupportingPreview = constraints.maxWidth >= 1050 &&
-              constraints.maxWidth > constraints.maxHeight &&
-              _destination == _TabletDestination.code;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final extendedRail = constraints.maxWidth >= 1200;
+        final showSupportingPreview = constraints.maxWidth >= 1050 &&
+            constraints.maxWidth > constraints.maxHeight &&
+            _destination == _TabletDestination.code;
 
-          return ColoredBox(
-            color: scheme.surface,
-            child: Row(
-              children: [
-                _buildNavigationRail(
-                  context,
-                  extended: extendedRail,
-                ),
-                VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  color: scheme.outlineVariant,
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildTopAppBar(
-                        context,
-                        compact: constraints.maxWidth < 900,
-                      ),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: scheme.outlineVariant,
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: _buildDestination(
-                            context,
-                            showSupportingPreview: showSupportingPreview,
-                          ),
+        return ColoredBox(
+          color: scheme.surface,
+          child: Row(
+            children: [
+              _buildNavigationRail(context, extended: extendedRail),
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: scheme.outlineVariant,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildTopAppBar(
+                      context,
+                      compact: constraints.maxWidth < 900,
+                    ),
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: scheme.outlineVariant,
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: _buildDestination(
+                          context,
+                          showSupportingPreview: showSupportingPreview,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          );
-        },
-      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -169,13 +141,12 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
     required bool extended,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return NavigationRail(
       selectedIndex: _destination.index,
       onDestinationSelected: (index) {
-        setState(() {
-          _destination = _TabletDestination.values[index];
-        });
+        setState(() => _destination = _TabletDestination.values[index]);
       },
       extended: extended,
       minWidth: 82,
@@ -189,7 +160,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
       leading: Padding(
         padding: const EdgeInsets.only(top: 8, bottom: 18),
         child: Tooltip(
-          message: '运行 Flutter 项目',
+          message: l10n.tr('运行 Flutter 项目', 'Run Flutter project'),
           child: FloatingActionButton.small(
             heroTag: 'tablet-run-fab',
             onPressed: widget.runner.canRun ? widget.onRun : null,
@@ -197,31 +168,31 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
           ),
         ),
       ),
-      destinations: const [
+      destinations: [
         NavigationRailDestination(
-          icon: Icon(Icons.code_outlined),
-          selectedIcon: Icon(Icons.code_rounded),
-          label: Text('代码'),
+          icon: const Icon(Icons.code_outlined),
+          selectedIcon: const Icon(Icons.code_rounded),
+          label: Text(l10n.tr('代码', 'Code')),
         ),
         NavigationRailDestination(
-          icon: Icon(Icons.folder_outlined),
-          selectedIcon: Icon(Icons.folder_rounded),
-          label: Text('文件'),
+          icon: const Icon(Icons.folder_outlined),
+          selectedIcon: const Icon(Icons.folder_rounded),
+          label: Text(l10n.tr('文件', 'Files')),
         ),
         NavigationRailDestination(
-          icon: Icon(Icons.phone_android_outlined),
-          selectedIcon: Icon(Icons.phone_android_rounded),
-          label: Text('预览'),
+          icon: const Icon(Icons.phone_android_outlined),
+          selectedIcon: const Icon(Icons.phone_android_rounded),
+          label: Text(l10n.tr('预览', 'Preview')),
         ),
         NavigationRailDestination(
-          icon: Icon(Icons.account_tree_outlined),
-          selectedIcon: Icon(Icons.account_tree_rounded),
-          label: Text('电线'),
+          icon: const Icon(Icons.account_tree_outlined),
+          selectedIcon: const Icon(Icons.account_tree_rounded),
+          label: Text(l10n.tr('电线', 'Wire')),
         ),
         NavigationRailDestination(
-          icon: Icon(Icons.terminal_outlined),
-          selectedIcon: Icon(Icons.terminal_rounded),
-          label: Text('终端'),
+          icon: const Icon(Icons.terminal_outlined),
+          selectedIcon: const Icon(Icons.terminal_rounded),
+          label: Text(l10n.tr('终端', 'Terminal')),
         ),
       ],
     );
@@ -233,6 +204,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
   }) {
     final scheme = Theme.of(context).colorScheme;
     final project = widget.activeProject;
+    final l10n = context.l10n;
 
     return Material(
       color: scheme.surface,
@@ -281,7 +253,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  _topBarSubtitle(),
+                                  _topBarSubtitle(context),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context)
@@ -330,14 +302,16 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                   icon: const Icon(Icons.restart_alt_rounded),
                 ),
                 IconButton(
-                  tooltip: '停止',
+                  tooltip: l10n.tr('停止', 'Stop'),
                   onPressed: widget.runner.canStop ? widget.runner.stop : null,
                   icon: const Icon(Icons.stop_rounded),
                 ),
               ],
+              const AppLanguageToggleButton(compact: true),
+              const AppThemeToggleButton(compact: true),
               const SizedBox(width: 2),
               IconButton(
-                tooltip: '工作区工具',
+                tooltip: l10n.tr('工作区工具', 'Workspace tools'),
                 onPressed: () => _showWorkspaceToolsSheet(context),
                 icon: const Icon(Icons.more_vert_rounded),
               ),
@@ -348,15 +322,19 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
     );
   }
 
-  String _topBarSubtitle() {
-    final destination = switch (_destination) {
-      _TabletDestination.code => '代码 · ${widget.controller.activeFilePath}',
-      _TabletDestination.files => '项目文件 · ${widget.viewMode.label}',
-      _TabletDestination.preview => '设备预览',
-      _TabletDestination.wire => '函数调用关系',
-      _TabletDestination.terminal => 'Flutter Runner 终端',
+  String _topBarSubtitle(BuildContext context) {
+    final l10n = context.l10n;
+    return switch (_destination) {
+      _TabletDestination.code =>
+        '${l10n.tr('代码', 'Code')} · ${widget.controller.activeFilePath}',
+      _TabletDestination.files =>
+        '${l10n.tr('项目文件', 'Project files')} · ${widget.viewMode.label}',
+      _TabletDestination.preview => l10n.tr('设备预览', 'Device preview'),
+      _TabletDestination.wire =>
+        l10n.tr('函数调用关系', 'Function call relationships'),
+      _TabletDestination.terminal =>
+        l10n.tr('Flutter Runner 终端', 'Flutter Runner terminal'),
     };
-    return destination;
   }
 
   Widget _buildDestination(
@@ -386,9 +364,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
           child: CodeFlowPanel(
             controller: widget.controller,
             onNavigate: () {
-              setState(() {
-                _destination = _TabletDestination.code;
-              });
+              setState(() => _destination = _TabletDestination.code);
             },
           ),
         ),
@@ -402,6 +378,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
     BuildContext context, {
     required bool showSupportingPreview,
   }) {
+    final l10n = context.l10n;
     final editor = _TabletPane(
       child: Column(
         children: [
@@ -409,30 +386,18 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
             controller: widget.controller,
             viewMode: widget.viewMode,
           ),
-          Expanded(
-            child: MonacoCodeEditorPanel(
-              controller: widget.controller,
-            ),
-          ),
-          ErrorPanel(
-            controller: widget.controller,
-            maxHeight: 150,
-          ),
+          Expanded(child: MonacoCodeEditorPanel(controller: widget.controller)),
+          ErrorPanel(controller: widget.controller, maxHeight: 150),
         ],
       ),
     );
 
-    if (!showSupportingPreview) {
-      return editor;
-    }
+    if (!showSupportingPreview) return editor;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          flex: 2,
-          child: editor,
-        ),
+        Expanded(flex: 2, child: editor),
         const SizedBox(width: 12),
         Expanded(
           child: _TabletPane(
@@ -441,13 +406,11 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
               children: [
                 _PaneHeader(
                   icon: Icons.phone_android_rounded,
-                  title: '运行预览',
+                  title: l10n.tr('运行预览', 'Run preview'),
                   trailing: IconButton(
-                    tooltip: '打开完整预览',
+                    tooltip: l10n.tr('打开完整预览', 'Open full preview'),
                     onPressed: () {
-                      setState(() {
-                        _destination = _TabletDestination.preview;
-                      });
+                      setState(() => _destination = _TabletDestination.preview);
                     },
                     icon: const Icon(Icons.open_in_full_rounded),
                   ),
@@ -478,6 +441,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
       isScrollControlled: true,
       builder: (sheetContext) {
         final scheme = Theme.of(sheetContext).colorScheme;
+        final l10n = sheetContext.l10n;
         final canDelete = projects.length > 1 && widget.onDeleteProject != null;
 
         void closeThen(VoidCallback? callback) {
@@ -494,12 +458,15 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    '项目',
+                    l10n.tr('项目', 'Projects'),
                     style: Theme.of(sheetContext).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '选择 Workspace 或管理当前项目',
+                    l10n.tr(
+                      '选择 Workspace 或管理当前项目',
+                      'Choose a Workspace or manage the current project',
+                    ),
                     style:
                         Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
                               color: scheme.onSurfaceVariant,
@@ -516,7 +483,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                       ),
                       leading: Icon(_projectIcon(item)),
                       title: Text(item.name),
-                      subtitle: Text(_projectSubtitle(item)),
+                      subtitle: Text(_projectSubtitle(sheetContext, item)),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -526,7 +493,10 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                               child: Icon(Icons.check_rounded),
                             ),
                           IconButton(
-                            tooltip: '删除 ${item.name}',
+                            tooltip: l10n.tr(
+                              '删除 ${item.name}',
+                              'Delete ${item.name}',
+                            ),
                             onPressed: canDelete
                                 ? () {
                                     Navigator.of(sheetContext).pop();
@@ -549,7 +519,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                     ),
                   const SizedBox(height: 18),
                   Text(
-                    '项目操作',
+                    l10n.tr('项目操作', 'Project actions'),
                     style: Theme.of(sheetContext).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
@@ -559,21 +529,21 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                     children: [
                       _SheetActionButton(
                         icon: Icons.add_rounded,
-                        label: '新建',
+                        label: l10n.tr('新建', 'New'),
                         onPressed: widget.onCreateProject == null
                             ? null
                             : () => closeThen(widget.onCreateProject),
                       ),
                       _SheetActionButton(
                         icon: Icons.folder_open_rounded,
-                        label: '打开文件夹',
+                        label: l10n.tr('打开文件夹', 'Open folder'),
                         onPressed: widget.onOpenFolder == null
                             ? null
                             : () => closeThen(widget.onOpenFolder),
                       ),
                       _SheetActionButton(
                         icon: Icons.archive_outlined,
-                        label: '导入 ZIP',
+                        label: l10n.tr('导入 ZIP', 'Import ZIP'),
                         onPressed: widget.onImportZip == null
                             ? null
                             : () => closeThen(widget.onImportZip),
@@ -587,7 +557,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                       ),
                       _SheetActionButton(
                         icon: Icons.ios_share_rounded,
-                        label: '分享',
+                        label: l10n.tr('分享', 'Share'),
                         onPressed: widget.onShare == null
                             ? null
                             : () => closeThen(widget.onShare),
@@ -599,8 +569,13 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                   ListTile(
                     minTileHeight: 56,
                     leading: const Icon(Icons.bookmark_add_outlined),
-                    title: const Text('保留项目'),
-                    subtitle: const Text('把临时 Workspace 标记为长期保留'),
+                    title: Text(l10n.tr('保留项目', 'Keep project')),
+                    subtitle: Text(
+                      l10n.tr(
+                        '把临时 Workspace 标记为长期保留',
+                        'Keep this temporary Workspace permanently',
+                      ),
+                    ),
                     enabled: widget.onKeep != null,
                     onTap: widget.onKeep == null
                         ? null
@@ -609,7 +584,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                   ListTile(
                     minTileHeight: 56,
                     leading: const Icon(Icons.edit_outlined),
-                    title: const Text('重命名'),
+                    title: Text(l10n.tr('重命名', 'Rename')),
                     enabled: widget.onRename != null,
                     onTap: widget.onRename == null
                         ? null
@@ -622,14 +597,22 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                       color: canDelete ? scheme.error : null,
                     ),
                     title: Text(
-                      '删除当前项目',
-                      style: TextStyle(
-                        color: canDelete ? scheme.error : null,
-                      ),
+                      l10n.tr('删除当前项目', 'Delete current project'),
+                      style: TextStyle(color: canDelete ? scheme.error : null),
                     ),
                     subtitle: projects.length <= 1
-                        ? const Text('至少需要保留一个 Workspace')
-                        : const Text('删除项目数据与 Workspace 快照'),
+                        ? Text(
+                            l10n.tr(
+                              '至少需要保留一个 Workspace',
+                              'At least one Workspace must remain',
+                            ),
+                          )
+                        : Text(
+                            l10n.tr(
+                              '删除项目数据与 Workspace 快照',
+                              'Delete project data and Workspace snapshots',
+                            ),
+                          ),
                     enabled: canDelete,
                     onTap: canDelete
                         ? () => closeThen(
@@ -656,11 +639,9 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 720),
             child: AnimatedBuilder(
-              animation: Listenable.merge([
-                widget.controller,
-                widget.runner,
-              ]),
+              animation: Listenable.merge([widget.controller, widget.runner]),
               builder: (context, _) {
+                final l10n = context.l10n;
                 const dartFrog = DartFrogWorkspaceService();
                 const serverpod = ServerpodWorkspaceService();
                 final dartFrogEnabled =
@@ -674,11 +655,13 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
                   children: [
                     Text(
-                      '工作区工具',
+                      l10n.tr('工作区工具', 'Workspace tools'),
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 16),
-                    _ToolSectionLabel(label: '运行与预览'),
+                    _ToolSectionLabel(
+                      label: l10n.tr('运行与预览', 'Run & Preview'),
+                    ),
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.refresh_rounded),
@@ -700,65 +683,68 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.stop_rounded),
-                      title: const Text('停止 Runner'),
+                      title: Text(l10n.tr('停止 Runner', 'Stop Runner')),
                       enabled: widget.runner.canStop,
                       onTap: widget.runner.canStop ? widget.runner.stop : null,
                     ),
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.bolt_rounded),
-                      title: const Text('快速预览'),
-                      subtitle: const Text('运行轻量预览并切换到预览页'),
+                      title: Text(l10n.tr('快速预览', 'Quick Preview')),
+                      subtitle: Text(
+                        l10n.tr(
+                          '运行轻量预览并切换到预览页',
+                          'Run the lightweight preview and open the Preview page',
+                        ),
+                      ),
                       onTap: () {
                         Navigator.of(sheetContext).pop();
                         widget.controller.runCode();
-                        setState(() {
-                          _destination = _TabletDestination.preview;
-                        });
+                        setState(() => _destination = _TabletDestination.preview);
                       },
                     ),
                     SwitchListTile(
                       minTileHeight: 56,
                       secondary: const Icon(Icons.flash_auto_rounded),
-                      title: const Text('自动预览'),
+                      title: Text(l10n.tr('自动预览', 'Auto Preview')),
                       value: widget.controller.autoRun,
                       onChanged: (_) => widget.controller.toggleAutoRun(),
                     ),
                     SwitchListTile(
                       minTileHeight: 56,
                       secondary: const Icon(Icons.dark_mode_outlined),
-                      title: const Text('深色预览'),
+                      title: Text(l10n.tr('深色预览', 'Dark Preview')),
                       value: widget.controller.darkPreview,
                       onChanged: (_) => widget.controller.togglePreviewTheme(),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '预览设备',
+                      l10n.tr('预览设备', 'Preview device'),
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
                     const SizedBox(height: 8),
                     SegmentedButton<PreviewDevice>(
                       showSelectedIcon: false,
-                      segments: const [
+                      segments: [
                         ButtonSegment(
                           value: PreviewDevice.androidPhone,
-                          icon: Icon(Icons.phone_android_rounded),
-                          label: Text('手机'),
+                          icon: const Icon(Icons.phone_android_rounded),
+                          label: Text(l10n.tr('手机', 'Phone')),
                         ),
                         ButtonSegment(
                           value: PreviewDevice.smallPhone,
-                          icon: Icon(Icons.smartphone_rounded),
-                          label: Text('小屏'),
+                          icon: const Icon(Icons.smartphone_rounded),
+                          label: Text(l10n.tr('小屏', 'Small')),
                         ),
                         ButtonSegment(
                           value: PreviewDevice.tablet,
-                          icon: Icon(Icons.tablet_android_rounded),
-                          label: Text('平板'),
+                          icon: const Icon(Icons.tablet_android_rounded),
+                          label: Text(l10n.tr('平板', 'Tablet')),
                         ),
                         ButtonSegment(
                           value: PreviewDevice.responsive,
-                          icon: Icon(Icons.devices_rounded),
-                          label: Text('响应式'),
+                          icon: const Icon(Icons.devices_rounded),
+                          label: Text(l10n.tr('响应式', 'Responsive')),
                         ),
                       ],
                       selected: {widget.controller.device},
@@ -768,7 +754,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                       },
                     ),
                     const SizedBox(height: 22),
-                    _ToolSectionLabel(label: '后端'),
+                    _ToolSectionLabel(label: l10n.tr('后端', 'Backend')),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -807,7 +793,10 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                         title: const Text('Dart Frog API Lab'),
                         subtitle: Text(
                           widget.runner.session?.backendUrl == null
-                              ? 'Runner 尚未提供后端 URL'
+                              ? l10n.tr(
+                                  'Runner 尚未提供后端 URL',
+                                  'Runner has not provided a backend URL yet',
+                                )
                               : widget.runner.session!.backendUrl!,
                         ),
                         enabled: widget.runner.canHotReload &&
@@ -827,11 +816,11 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                       ),
                     ],
                     const SizedBox(height: 22),
-                    _ToolSectionLabel(label: 'Workspace'),
+                    const _ToolSectionLabel(label: 'Workspace'),
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.upload_file_outlined),
-                      title: const Text('导入 ApplyKit'),
+                      title: Text(l10n.tr('导入 ApplyKit', 'Import ApplyKit')),
                       enabled: supportsWorkspaceImportPicker,
                       onTap: supportsWorkspaceImportPicker
                           ? () => unawaited(_importWorkspace(sheetContext))
@@ -840,7 +829,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.download_outlined),
-                      title: const Text('导出 ApplyKit'),
+                      title: Text(l10n.tr('导出 ApplyKit', 'Export ApplyKit')),
                       enabled: canExport,
                       onTap: canExport
                           ? () => unawaited(_exportWorkspace(sheetContext))
@@ -860,7 +849,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.extension_outlined),
-                      title: const Text('依赖管理'),
+                      title: Text(l10n.tr('依赖管理', 'Package manager')),
                       onTap: () {
                         showPackageManagerDialog(
                           sheetContext,
@@ -872,19 +861,24 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.clear_rounded),
-                      title: const Text('清空代码'),
+                      title: Text(l10n.tr('清空代码', 'Clear code')),
                       onTap: widget.controller.clearCode,
                     ),
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.restore_rounded),
-                      title: const Text('恢复示例'),
+                      title: Text(l10n.tr('恢复示例', 'Restore example')),
                       onTap: widget.controller.resetExample,
                     ),
                     ListTile(
                       minTileHeight: 56,
                       leading: const Icon(Icons.help_outline_rounded),
-                      title: const Text('Quick Preview 支持组件'),
+                      title: Text(
+                        l10n.tr(
+                          'Quick Preview 支持组件',
+                          'Quick Preview supported widgets',
+                        ),
+                      ),
                       onTap: () {
                         showDialog<void>(
                           context: sheetContext,
@@ -921,9 +915,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
       widget.controller.selectWorkspaceFile(
         DartFrogWorkspaceService.backendRoutePath,
       );
-      setState(() {
-        _destination = _TabletDestination.code;
-      });
+      setState(() => _destination = _TabletDestination.code);
     } catch (error) {
       _showFrameworkError(context, error);
     }
@@ -948,9 +940,7 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
       widget.controller.selectWorkspaceFile(
         ServerpodWorkspaceService.greetingEndpointPath,
       );
-      setState(() {
-        _destination = _TabletDestination.code;
-      });
+      setState(() => _destination = _TabletDestination.code);
     } catch (error) {
       _showFrameworkError(context, error);
     }
@@ -964,7 +954,10 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '当前 Workspace 已启用 $current。请新建或重置练习后再启用 $requested。',
+          context.l10n.tr(
+            '当前 Workspace 已启用 $current。请新建或重置练习后再启用 $requested。',
+            'This Workspace already uses $current. Create or reset a practice Workspace before enabling $requested.',
+          ),
         ),
       ),
     );
@@ -972,32 +965,42 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
 
   void _showFrameworkError(BuildContext context, Object error) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('全栈环境创建失败：$error')),
+      SnackBar(
+        content: Text(
+          context.l10n.tr(
+            '全栈环境创建失败：$error',
+            'Failed to create the full-stack environment: $error',
+          ),
+        ),
+      ),
     );
   }
 
   Future<void> _importWorkspace(BuildContext context) async {
+    final l10n = context.l10n;
     if (widget.controller.workspace.isDirty) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('导入新的 ApplyKit？'),
-          content: const Text(
-            '当前 Workspace 有未导出的修改。导入会恢复基线后应用 ApplyKit 中的修改。',
+          title: Text(l10n.tr('导入新的 ApplyKit？', 'Import a new ApplyKit?')),
+          content: Text(
+            l10n.tr(
+              '当前 Workspace 有未导出的修改。导入会恢复基线后应用 ApplyKit 中的修改。',
+              'The current Workspace has unexported changes. Importing restores the baseline before applying the ApplyKit changes.',
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: Text(l10n.tr('取消', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('继续导入'),
+              child: Text(l10n.tr('继续导入', 'Continue import')),
             ),
           ],
         ),
       );
-
       if (confirmed != true || !context.mounted) return;
     }
 
@@ -1015,63 +1018,71 @@ class _TabletPlaygroundLayoutState extends State<TabletPlaygroundLayout> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '已导入 ${manifest.changes.length} 个 Workspace 修改。',
+            l10n.tr(
+              '已导入 ${manifest.changes.length} 个 Workspace 修改。',
+              'Imported ${manifest.changes.length} Workspace changes.',
+            ),
           ),
         ),
       );
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导入失败：$error')),
+        SnackBar(
+          content: Text(l10n.tr('导入失败：$error', 'Import failed: $error')),
+        ),
       );
     }
   }
 
   Future<void> _exportWorkspace(BuildContext context) async {
+    final l10n = context.l10n;
     try {
       final bundle = const WorkspaceExportService().build(
         widget.controller.workspace,
       );
-
-      await downloadWorkspaceExport(
-        bundle.bytes,
-        bundle.fileName,
-      );
+      await downloadWorkspaceExport(bundle.bytes, bundle.fileName);
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '已导出 ${bundle.manifest.changes.length} 个修改：${bundle.fileName}',
+            l10n.tr(
+              '已导出 ${bundle.manifest.changes.length} 个修改：${bundle.fileName}',
+              'Exported ${bundle.manifest.changes.length} changes: ${bundle.fileName}',
+            ),
           ),
         ),
       );
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败：$error')),
+        SnackBar(
+          content: Text(l10n.tr('导出失败：$error', 'Export failed: $error')),
+        ),
       );
     }
   }
 
-  IconData _projectIcon(WorkspaceProject project) {
-    return switch (project.kind) {
-      WorkspaceProjectKind.generatedFlutter => Icons.flutter_dash_rounded,
-      WorkspaceProjectKind.importedFlutter => Icons.folder_zip_outlined,
-      WorkspaceProjectKind.practice => Icons.folder_copy_outlined,
-    };
-  }
+  IconData _projectIcon(WorkspaceProject project) => switch (project.kind) {
+        WorkspaceProjectKind.generatedFlutter => Icons.flutter_dash_rounded,
+        WorkspaceProjectKind.importedFlutter => Icons.folder_zip_outlined,
+        WorkspaceProjectKind.practice => Icons.folder_copy_outlined,
+      };
 
-  String _projectSubtitle(WorkspaceProject project) {
+  String _projectSubtitle(BuildContext context, WorkspaceProject project) {
+    final l10n = context.l10n;
     if (project.kind == WorkspaceProjectKind.generatedFlutter) {
       final platforms = project.flutterPlatforms.join(' · ');
-      return platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
+      return platforms.isEmpty
+          ? l10n.tr('Flutter 项目', 'Flutter project')
+          : 'Flutter · $platforms';
     }
     if (project.kind == WorkspaceProjectKind.importedFlutter) {
-      return '导入的 Flutter 项目';
+      return l10n.tr('导入的 Flutter 项目', 'Imported Flutter project');
     }
     return project.lifecycle == WorkspaceLifecycle.temporary
-        ? '临时 Workspace'
+        ? l10n.tr('临时 Workspace', 'Temporary Workspace')
         : 'Workspace';
   }
 }
@@ -1092,6 +1103,7 @@ class _TabletWorkspaceFiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1103,18 +1115,18 @@ class _TabletWorkspaceFiles extends StatelessWidget {
             children: [
               SegmentedButton<WorkspaceViewMode>(
                 showSelectedIcon: false,
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: WorkspaceViewMode.project,
-                    icon: Icon(Icons.account_tree_outlined),
-                    label: Text('项目'),
+                    icon: const Icon(Icons.account_tree_outlined),
+                    label: Text(l10n.tr('项目', 'Project')),
                   ),
                   ButtonSegment(
                     value: WorkspaceViewMode.concept,
-                    icon: Icon(Icons.hub_outlined),
-                    label: Text('概念'),
+                    icon: const Icon(Icons.hub_outlined),
+                    label: Text(l10n.tr('概念', 'Concept')),
                   ),
-                  ButtonSegment(
+                  const ButtonSegment(
                     value: WorkspaceViewMode.sourceControl,
                     icon: Icon(Icons.commit_rounded),
                     label: Text('Git'),
@@ -1161,13 +1173,10 @@ class _TabletWorkspaceFiles extends StatelessWidget {
                     ),
                     TextButton.icon(
                       onPressed: () {
-                        showPackageManagerDialog(
-                          context,
-                          runner: runner,
-                        );
+                        showPackageManagerDialog(context, runner: runner);
                       },
                       icon: const Icon(Icons.extension_outlined),
-                      label: const Text('依赖'),
+                      label: Text(l10n.tr('依赖', 'Packages')),
                     ),
                   ],
                 ],
@@ -1213,6 +1222,7 @@ class _TabletEditorTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return AnimatedBuilder(
       animation: controller.workspace,
@@ -1231,10 +1241,7 @@ class _TabletEditorTabs extends StatelessWidget {
             height: 58,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               itemCount: openFiles.length,
               separatorBuilder: (_, __) => const SizedBox(width: 6),
               itemBuilder: (context, index) {
@@ -1293,7 +1300,10 @@ class _TabletEditorTabs extends StatelessWidget {
                               ),
                             ],
                             IconButton(
-                              tooltip: '关闭 ${entry.name}',
+                              tooltip: l10n.tr(
+                                '关闭 ${entry.name}',
+                                'Close ${entry.name}',
+                              ),
                               iconSize: 18,
                               onPressed: () =>
                                   controller.closeWorkspaceFile(path),
@@ -1341,10 +1351,11 @@ class _ViewModeMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return PopupMenuButton<WorkspaceViewMode>(
       initialValue: value,
-      tooltip: 'Workspace 视角',
+      tooltip: l10n.tr('Workspace 视角', 'Workspace view'),
       onSelected: onChanged,
       itemBuilder: (context) => WorkspaceViewMode.values
           .map(
@@ -1398,26 +1409,21 @@ class _ViewModeMenu extends StatelessWidget {
     );
   }
 
-  IconData _iconFor(WorkspaceViewMode mode) {
-    return switch (mode) {
-      WorkspaceViewMode.project => Icons.account_tree_outlined,
-      WorkspaceViewMode.concept => Icons.hub_outlined,
-      WorkspaceViewMode.sourceControl => Icons.commit_rounded,
-    };
-  }
+  IconData _iconFor(WorkspaceViewMode mode) => switch (mode) {
+        WorkspaceViewMode.project => Icons.account_tree_outlined,
+        WorkspaceViewMode.concept => Icons.hub_outlined,
+        WorkspaceViewMode.sourceControl => Icons.commit_rounded,
+      };
 }
 
 class _TabletPane extends StatelessWidget {
-  const _TabletPane({
-    required this.child,
-  });
+  const _TabletPane({required this.child});
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
     return Material(
       color: scheme.surfaceContainerLow,
       clipBehavior: Clip.antiAlias,
@@ -1484,9 +1490,7 @@ class _SheetActionButton extends StatelessWidget {
 }
 
 class _ToolSectionLabel extends StatelessWidget {
-  const _ToolSectionLabel({
-    required this.label,
-  });
+  const _ToolSectionLabel({required this.label});
 
   final String label;
 
@@ -1494,10 +1498,7 @@ class _ToolSectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.titleSmall,
-      ),
+      child: Text(label, style: Theme.of(context).textTheme.titleSmall),
     );
   }
 }

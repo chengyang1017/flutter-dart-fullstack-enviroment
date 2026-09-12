@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
+import '../core/l10n/app_localizations.dart';
 import '../core/navigation/monaco_route_observer.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/screens/workspace_auth_screen.dart';
@@ -20,16 +22,18 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
   @override
   void initState() {
     super.initState();
-    AppThemeController.deepNight.addListener(_handleThemeChanged);
+    AppThemeController.deepNight.addListener(_handleAppearanceChanged);
+    AppLocaleController.locale.addListener(_handleAppearanceChanged);
   }
 
-  void _handleThemeChanged() {
+  void _handleAppearanceChanged() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    AppThemeController.deepNight.removeListener(_handleThemeChanged);
+    AppThemeController.deepNight.removeListener(_handleAppearanceChanged);
+    AppLocaleController.locale.removeListener(_handleAppearanceChanged);
     super.dispose();
   }
 
@@ -96,12 +100,20 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       navigatorObservers: [monacoRouteObserver],
-      title: 'Flutter UI Playground',
+      title: 'Flutter Workbench',
       debugShowCheckedModeBanner: false,
       theme: AppThemeData.light,
       darkTheme: AppThemeData.deepNight,
       themeMode:
           AppThemeController.deepNight.value ? ThemeMode.dark : ThemeMode.light,
+      locale: AppLocaleController.locale.value,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: cloudConfigured && identity == null
           ? WorkspaceAuthScreen(
               initialError: WorkspaceAuthRuntime.startupError?.toString(),

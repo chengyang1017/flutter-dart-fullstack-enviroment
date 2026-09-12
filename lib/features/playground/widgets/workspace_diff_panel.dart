@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../../workspace/controllers/workspace_controller.dart';
 import '../../workspace/models/workspace_change.dart';
 import '../../workspace/widgets/workspace_file_visuals.dart';
@@ -18,13 +20,6 @@ class WorkspaceDiffPanel extends StatelessWidget {
   final String path;
   final VoidCallback onClose;
 
-  static const _background = Color(0xff111318);
-  static const _header = Color(0xff15191f);
-  static const _border = Color(0xff272d36);
-  static const _text = Color(0xffd7dce5);
-  static const _muted = Color(0xff8b93a1);
-  static const _accent = Color(0xff82aaff);
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -35,6 +30,7 @@ class WorkspaceDiffPanel extends StatelessWidget {
           return _EmptyDiff(path: path, onClose: onClose);
         }
 
+        final palette = WorkbenchPalette.of(context);
         final before = workspace.baseContentForChange(change);
         final after = workspace.currentContentForChange(change);
         final current = workspace.entryAt(change.path);
@@ -51,16 +47,16 @@ class WorkspaceDiffPanel extends StatelessWidget {
         );
 
         return ColoredBox(
-          color: _background,
+          color: palette.surface,
           child: Column(
             children: [
               Container(
                 height: 40,
                 padding: const EdgeInsets.only(left: 12, right: 5),
-                decoration: const BoxDecoration(
-                  color: _header,
+                decoration: BoxDecoration(
+                  color: palette.surfaceRaised,
                   border: Border(
-                    bottom: BorderSide(color: _border),
+                    bottom: BorderSide(color: palette.border),
                   ),
                 ),
                 child: Row(
@@ -74,8 +70,8 @@ class WorkspaceDiffPanel extends StatelessWidget {
                             : '${change.previousPath}  →  ${change.path}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _text,
+                        style: TextStyle(
+                          color: palette.text,
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -92,13 +88,13 @@ class WorkspaceDiffPanel extends StatelessWidget {
                       },
                     ),
                     IconButton(
-                      tooltip: '关闭 Diff',
+                      tooltip: context.l10n.tr('关闭 Diff', 'Close Diff'),
                       visualDensity: VisualDensity.compact,
                       onPressed: onClose,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.close_rounded,
                         size: 17,
-                        color: _muted,
+                        color: palette.muted,
                       ),
                     ),
                   ],
@@ -125,41 +121,48 @@ class _DiffLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return Container(
       height: 30,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: Color(0xff13171d),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
         border: Border(
-          bottom: BorderSide(color: WorkspaceDiffPanel._border),
+          bottom: BorderSide(color: palette.border),
         ),
       ),
       child: Row(
         children: [
           Text(
-            _label(change.type),
-            style: const TextStyle(
-              color: WorkspaceDiffPanel._muted,
+            _label(context, change.type),
+            style: TextStyle(
+              color: palette.muted,
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
             ),
           ),
           const Spacer(),
-          const _LegendDot(color: Color(0xff7ec699), label: '新增'),
+          _LegendDot(
+            color: const Color(0xff3f8f5d),
+            label: context.l10n.tr('新增', 'Added'),
+          ),
           const SizedBox(width: 12),
-          const _LegendDot(color: Color(0xffff757f), label: '删除'),
+          _LegendDot(
+            color: const Color(0xffd84a57),
+            label: context.l10n.tr('删除', 'Deleted'),
+          ),
         ],
       ),
     );
   }
 
-  String _label(WorkspaceChangeType type) {
+  String _label(BuildContext context, WorkspaceChangeType type) {
     return switch (type) {
-      WorkspaceChangeType.created => 'ADDED',
-      WorkspaceChangeType.modified => 'MODIFIED',
-      WorkspaceChangeType.deleted => 'DELETED',
-      WorkspaceChangeType.renamed => 'RENAMED',
-      WorkspaceChangeType.moved => 'MOVED',
+      WorkspaceChangeType.created => context.l10n.tr('新增', 'ADDED'),
+      WorkspaceChangeType.modified => context.l10n.tr('已修改', 'MODIFIED'),
+      WorkspaceChangeType.deleted => context.l10n.tr('已删除', 'DELETED'),
+      WorkspaceChangeType.renamed => context.l10n.tr('已重命名', 'RENAMED'),
+      WorkspaceChangeType.moved => context.l10n.tr('已移动', 'MOVED'),
     };
   }
 }
@@ -172,6 +175,7 @@ class _LegendDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -183,8 +187,8 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(
-            color: WorkspaceDiffPanel._muted,
+          style: TextStyle(
+            color: palette.muted,
             fontSize: 10,
           ),
         ),
@@ -201,11 +205,11 @@ class _UnifiedDiffList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          '没有文本差异',
+          context.l10n.tr('没有文本差异', 'No text differences'),
           style: TextStyle(
-            color: WorkspaceDiffPanel._muted,
+            color: WorkbenchPalette.of(context).muted,
             fontSize: 12,
           ),
         ),
@@ -228,15 +232,17 @@ class _DiffLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final palette = WorkbenchPalette.of(context);
     final background = switch (row.kind) {
-      _DiffKind.added => const Color(0xff173323),
-      _DiffKind.deleted => const Color(0xff3a1f25),
+      _DiffKind.added => dark ? const Color(0xff173323) : const Color(0xffe7f6ec),
+      _DiffKind.deleted => dark ? const Color(0xff3a1f25) : const Color(0xffffe8eb),
       _DiffKind.same => Colors.transparent,
     };
     final markerColor = switch (row.kind) {
-      _DiffKind.added => const Color(0xff7ec699),
-      _DiffKind.deleted => const Color(0xffff757f),
-      _DiffKind.same => const Color(0xff596272),
+      _DiffKind.added => const Color(0xff3f8f5d),
+      _DiffKind.deleted => const Color(0xffd84a57),
+      _DiffKind.same => palette.lineNumber,
     };
     final marker = switch (row.kind) {
       _DiffKind.added => '+',
@@ -255,15 +261,15 @@ class _DiffLine extends StatelessWidget {
               width: 46,
               alignment: Alignment.centerRight,
               padding: const EdgeInsets.only(right: 7),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(
-                  right: BorderSide(color: WorkspaceDiffPanel._border),
+                  right: BorderSide(color: palette.border),
                 ),
               ),
               child: Text(
                 row.oldLine == null ? '' : '${row.oldLine}',
-                style: const TextStyle(
-                  color: Color(0xff596272),
+                style: TextStyle(
+                  color: palette.lineNumber,
                   fontSize: 10,
                   fontFamily: 'monospace',
                 ),
@@ -273,15 +279,15 @@ class _DiffLine extends StatelessWidget {
               width: 46,
               alignment: Alignment.centerRight,
               padding: const EdgeInsets.only(right: 7),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(
-                  right: BorderSide(color: WorkspaceDiffPanel._border),
+                  right: BorderSide(color: palette.border),
                 ),
               ),
               child: Text(
                 row.newLine == null ? '' : '${row.newLine}',
-                style: const TextStyle(
-                  color: Color(0xff596272),
+                style: TextStyle(
+                  color: palette.lineNumber,
                   fontSize: 10,
                   fontFamily: 'monospace',
                 ),
@@ -308,8 +314,8 @@ class _DiffLine extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     row.text.isEmpty ? ' ' : row.text,
-                    style: const TextStyle(
-                      color: Color(0xffcbd3df),
+                    style: TextStyle(
+                      color: palette.text,
                       fontSize: 12,
                       height: 1.25,
                       fontFamily: 'monospace',
@@ -333,11 +339,10 @@ class _StageButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return TextButton.icon(
       style: TextButton.styleFrom(
-        foregroundColor: staged
-            ? const Color(0xffffc777)
-            : WorkspaceDiffPanel._accent,
+        foregroundColor: staged ? const Color(0xffc98600) : palette.accent,
         visualDensity: VisualDensity.compact,
         padding: const EdgeInsets.symmetric(horizontal: 8),
       ),
@@ -347,7 +352,9 @@ class _StageButton extends StatelessWidget {
         size: 15,
       ),
       label: Text(
-        staged ? 'Unstage' : 'Stage',
+        staged
+            ? context.l10n.tr('取消 Stage', 'Unstage')
+            : context.l10n.tr('Stage', 'Stage'),
         style: const TextStyle(fontSize: 10.5),
       ),
     );
@@ -362,27 +369,34 @@ class _EmptyDiff extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return ColoredBox(
-      color: WorkspaceDiffPanel._background,
+      color: palette.surface,
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
               Icons.check_circle_outline_rounded,
-              color: Color(0xff7ec699),
+              color: Color(0xff3f8f5d),
               size: 30,
             ),
             const SizedBox(height: 10),
             Text(
-              '$path 已没有未提交差异',
-              style: const TextStyle(
-                color: WorkspaceDiffPanel._text,
+              context.l10n.tr(
+                '$path 已没有未提交差异',
+                '$path has no uncommitted differences',
+              ),
+              style: TextStyle(
+                color: palette.text,
                 fontSize: 12,
               ),
             ),
             const SizedBox(height: 10),
-            TextButton(onPressed: onClose, child: const Text('返回编辑器')),
+            TextButton(
+              onPressed: onClose,
+              child: Text(context.l10n.tr('返回编辑器', 'Back to editor')),
+            ),
           ],
         ),
       ),
@@ -395,20 +409,24 @@ class _BinaryDiffState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final palette = WorkbenchPalette.of(context);
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             Icons.image_outlined,
             size: 32,
-            color: WorkspaceDiffPanel._muted,
+            color: palette.muted,
           ),
-          SizedBox(height: 9),
+          const SizedBox(height: 9),
           Text(
-            '二进制文件暂不显示文本 Diff',
+            context.l10n.tr(
+              '二进制文件暂不显示文本 Diff',
+              'Text Diff is not available for binary files',
+            ),
             style: TextStyle(
-              color: WorkspaceDiffPanel._muted,
+              color: palette.muted,
               fontSize: 12,
             ),
           ),
@@ -438,8 +456,6 @@ List<_DiffRow> _buildDiffRows(String before, String after) {
   final oldLines = before.split('\n');
   final newLines = after.split('\n');
 
-  // Bound the dynamic-programming matrix. Flutter scaffold files normally stay
-  // well below this; large generated files still receive a useful compact diff.
   if (oldLines.length * newLines.length > 360000) {
     return _buildLargeFileDiff(oldLines, newLines);
   }

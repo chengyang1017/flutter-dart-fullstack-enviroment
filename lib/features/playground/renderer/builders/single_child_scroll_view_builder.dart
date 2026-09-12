@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/utils/edge_insets_parser.dart';
 import '../../../../core/utils/enum_parser.dart';
 import '../../../../core/utils/value_parser.dart';
@@ -21,7 +22,12 @@ Widget buildSingleChildScrollView(
     'physics',
   });
   if (node.namedArguments.containsKey('physics')) {
-    renderer.onWarning('SingleChildScrollView.physics 暂未支持，已忽略。');
+    renderer.onWarning(
+      context.l10n.tr(
+        'SingleChildScrollView.physics 暂未支持，已忽略。',
+        'SingleChildScrollView.physics is not supported yet and was ignored.',
+      ),
+    );
   }
   return SingleChildScrollView(
     scrollDirection:

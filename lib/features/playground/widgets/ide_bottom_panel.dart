@@ -5,15 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_monaco/flutter_monaco.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../../runner/controllers/flutter_runner_controller.dart';
 import '../../runner/models/run_session.dart';
 import '../../runner/widgets/runner_console_panel.dart';
 
 /// A VS Code-style horizontal sash between the editor and bottom panel.
-///
-/// The sash updates a layout notifier directly. [CustomMultiChildLayout]
-/// listens to that notifier through its delegate, so dragging relayouts the
-/// two panes without rebuilding Monaco, the terminal, or the surrounding IDE.
 class IdeEditorPanelSplit extends StatefulWidget {
   const IdeEditorPanelSplit({
     super.key,
@@ -43,7 +41,6 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
   late final ValueNotifier<bool> _sashHighlighted;
   final FocusNode _sashFocusNode =
       FocusNode(debugLabel: 'IDE bottom panel sash');
-
   final GlobalKey _splitSurfaceKey = GlobalKey();
 
   int? _activePointerId;
@@ -96,12 +93,6 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
     _previewPanelHeight.value = _dragStartPanelHeight;
     _sashHighlighted.value = true;
     _sashFocusNode.requestFocus();
-
-    // Flutter Monaco 3.4.3 hosts Monaco in an iframe on Flutter Web. The
-    // iframe wins browser hit testing unless we install the package's own DOM
-    // overlay shield. Keep a global Flutter pointer route for the active drag,
-    // then reveal a MonacoOverlayBoundary over the whole split surface so
-    // pointer move/up events continue reaching Flutter even above the editor.
     _installGlobalPointerRoute();
     if (!_dragShieldVisible && mounted) {
       setState(() => _dragShieldVisible = true);
@@ -155,9 +146,6 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
         _availableHeight - localY - _sashHeight + _dragPointerOffsetInSash;
     final next = _clampPanelHeight(requested);
 
-    // Match IDE sash behavior: update only the split layout notifier while the
-    // pointer moves. This relayouts the editor and terminal without rebuilding
-    // Monaco, the terminal widget tree, or the surrounding workbench.
     if (next != _panelHeight.value) {
       _panelHeight.value = next;
       _previewPanelHeight.value = next;
@@ -209,6 +197,7 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
   }
 
   Widget _buildSash() {
+    final palette = WorkbenchPalette.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.resizeUpDown,
       onEnter: (_) => _sashHighlighted.value = true,
@@ -230,15 +219,13 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
               valueListenable: _sashHighlighted,
               builder: (context, highlighted, _) {
                 return ColoredBox(
-                  color: const Color(0xff15191f),
+                  color: palette.surfaceRaised,
                   child: Center(
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 90),
                       width: double.infinity,
                       height: 2,
-                      color: highlighted
-                          ? const Color(0xff6a7b94)
-                          : const Color(0xff303641),
+                      color: highlighted ? palette.accent : palette.border,
                     ),
                   ),
                 );
@@ -252,6 +239,7 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         _availableHeight = constraints.maxHeight;
@@ -316,9 +304,9 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
                                     right: 0,
                                     top: top,
                                     bottom: 0,
-                                    child: const IgnorePointer(
+                                    child: IgnorePointer(
                                       child: ColoredBox(
-                                        color: Color(0x0d6a7b94),
+                                        color: palette.accent.withValues(alpha: .05),
                                       ),
                                     ),
                                   ),
@@ -326,11 +314,11 @@ class _IdeEditorPanelSplitState extends State<IdeEditorPanelSplit> {
                                     left: 0,
                                     right: 0,
                                     top: top,
-                                    child: const IgnorePointer(
+                                    child: IgnorePointer(
                                       child: SizedBox(
                                         height: 2,
                                         child: ColoredBox(
-                                          color: Color(0xff8b9db8),
+                                          color: palette.accent,
                                         ),
                                       ),
                                     ),
@@ -441,7 +429,6 @@ class _IdeEditorPanelLayoutDelegate extends MultiChildLayoutDelegate {
   }
 }
 
-/// VS Code-like bottom panel for Flutter Runner output.
 class IdeBottomPanel extends StatefulWidget {
   const IdeBottomPanel({
     super.key,
@@ -459,13 +446,6 @@ class IdeBottomPanel extends StatefulWidget {
 }
 
 class _IdeBottomPanelState extends State<IdeBottomPanel> {
-  static const background = Color(0xff111318);
-  static const header = Color(0xff15181e);
-  static const border = Color(0xff262a32);
-  static const muted = Color(0xff7f8795);
-  static const text = Color(0xffd7dae0);
-  static const accent = Color(0xff7c5cff);
-
   final List<_ConsoleView> _views = <_ConsoleView>[
     const _ConsoleView(id: 1, startIndex: 0),
   ];
@@ -513,10 +493,11 @@ class _IdeBottomPanelState extends State<IdeBottomPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: header,
-        border: Border(top: BorderSide(color: border)),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border(top: BorderSide(color: palette.border)),
       ),
       child: Column(
         children: [
@@ -534,7 +515,7 @@ class _IdeBottomPanelState extends State<IdeBottomPanel> {
             Expanded(
               child: RepaintBoundary(
                 child: ColoredBox(
-                  color: background,
+                  color: palette.surface,
                   child: ClipRect(
                     child: Column(
                       children: [
@@ -591,15 +572,16 @@ class _PanelHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return SizedBox(
       height: 36,
       child: Row(
         children: [
           const SizedBox(width: 8),
-          const Icon(
+          Icon(
             Icons.terminal_outlined,
             size: 15,
-            color: _IdeBottomPanelState.muted,
+            color: palette.muted,
           ),
           const SizedBox(width: 4),
           Expanded(
@@ -611,7 +593,7 @@ class _PanelHeader extends StatelessWidget {
               itemBuilder: (context, index) {
                 final view = views[index];
                 return _ConsoleTab(
-                  label: 'Terminal ${view.id}',
+                  label: '${context.l10n.tr('终端', 'Terminal')} ${view.id}',
                   active: view.id == activeViewId,
                   onTap: () => onSelectView(view.id),
                   onClose: () => onCloseView(view.id),
@@ -627,25 +609,27 @@ class _PanelHeader extends StatelessWidget {
               runner.runnerName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10.5,
-                color: _IdeBottomPanelState.muted,
+                color: palette.muted,
               ),
             ),
           ),
           const SizedBox(width: 5),
           _PanelIconButton(
-            tooltip: '新建 Terminal 窗口',
+            tooltip: context.l10n.tr('新建 Terminal 窗口', 'New terminal'),
             icon: Icons.add,
             onPressed: onCreateView,
           ),
           _PanelIconButton(
-            tooltip: '清空 Runner 日志',
+            tooltip: context.l10n.tr('清空 Runner 日志', 'Clear Runner logs'),
             icon: Icons.delete_sweep_outlined,
             onPressed: runner.logs.isEmpty ? null : runner.clearConsole,
           ),
           _PanelIconButton(
-            tooltip: expanded ? '收起 Panel' : '展开 Panel',
+            tooltip: expanded
+                ? context.l10n.tr('收起 Panel', 'Collapse panel')
+                : context.l10n.tr('展开 Panel', 'Expand panel'),
             icon:
                 expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
             onPressed: onToggleExpanded,
@@ -733,24 +717,25 @@ class _TerminalCommandBarState extends State<_TerminalCommandBar> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onSubmit != null;
+    final palette = WorkbenchPalette.of(context);
     return Container(
       height: 38,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: _IdeBottomPanelState.background,
+      decoration: BoxDecoration(
+        color: palette.surface,
         border: Border(
-          top: BorderSide(color: _IdeBottomPanelState.border),
+          top: BorderSide(color: palette.border),
         ),
       ),
       child: Row(
         children: [
-          const Text(
+          Text(
             '>',
             style: TextStyle(
               fontFamily: 'Cascadia Code',
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: _IdeBottomPanelState.accent,
+              color: palette.accent,
             ),
           ),
           const SizedBox(width: 8),
@@ -763,22 +748,29 @@ class _TerminalCommandBarState extends State<_TerminalCommandBar> {
                 enabled: enabled && !_submitting,
                 onSubmitted: _submit,
                 maxLines: 1,
-                cursorColor: const Color(0xffc7ccd6),
-                style: const TextStyle(
+                cursorColor: palette.accent,
+                style: TextStyle(
                   fontFamily: 'Cascadia Code',
-                  fontFamilyFallback: ['Consolas', 'monospace'],
+                  fontFamilyFallback: const ['Consolas', 'monospace'],
                   fontSize: 12,
-                  color: _IdeBottomPanelState.text,
+                  color: palette.text,
                 ),
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
+                  filled: false,
                   hintText: enabled
-                      ? '输入命令并按 Enter，例如 flutter --version'
-                      : '连接真实 Flutter Runner 后可执行命令',
-                  hintStyle: const TextStyle(
+                      ? context.l10n.tr(
+                          '输入命令并按 Enter，例如 flutter --version',
+                          'Type a command and press Enter, e.g. flutter --version',
+                        )
+                      : context.l10n.tr(
+                          '连接真实 Flutter Runner 后可执行命令',
+                          'Connect a real Flutter Runner to execute commands',
+                        ),
+                  hintStyle: TextStyle(
                     fontSize: 11.5,
-                    color: Color(0xff626b79),
+                    color: palette.muted,
                   ),
                 ),
               ),
@@ -811,6 +803,7 @@ class _ConsoleTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -821,8 +814,7 @@ class _ConsoleTab extends StatelessWidget {
             border: Border(
               bottom: BorderSide(
                 width: 2,
-                color:
-                    active ? _IdeBottomPanelState.accent : Colors.transparent,
+                color: active ? palette.accent : Colors.transparent,
               ),
             ),
           ),
@@ -836,25 +828,21 @@ class _ConsoleTab extends StatelessWidget {
                   fontFamilyFallback: const ['Consolas', 'monospace'],
                   fontSize: 10.5,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                  color: active
-                      ? _IdeBottomPanelState.text
-                      : _IdeBottomPanelState.muted,
+                  color: active ? palette.text : palette.muted,
                 ),
               ),
               const SizedBox(width: 2),
               SizedBox(
                 width: 26,
                 child: IconButton(
-                  tooltip: '关闭窗口',
+                  tooltip: context.l10n.tr('关闭窗口', 'Close terminal'),
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
                   onPressed: onClose,
                   icon: Icon(
                     Icons.close,
                     size: 13,
-                    color: active
-                        ? const Color(0xffaeb4bf)
-                        : const Color(0xff626b79),
+                    color: palette.muted,
                   ),
                 ),
               ),
@@ -879,6 +867,7 @@ class _PanelIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return SizedBox(
       width: 31,
       height: 31,
@@ -888,8 +877,8 @@ class _PanelIconButton extends StatelessWidget {
         visualDensity: VisualDensity.compact,
         onPressed: onPressed,
         icon: Icon(icon, size: 16),
-        color: const Color(0xffaeb4bf),
-        disabledColor: const Color(0xff4f5663),
+        color: palette.text,
+        disabledColor: palette.muted.withValues(alpha: .45),
       ),
     );
   }
@@ -904,16 +893,17 @@ class _RunnerStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final isError = status == RunnerStatus.error;
     final isRunning = status == RunnerStatus.running;
+    final scheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         color: isError
-            ? const Color(0xff3d2024)
+            ? scheme.errorContainer
             : isRunning
-                ? const Color(0xff173524)
-                : const Color(0xff252a33),
+                ? scheme.primaryContainer
+                : scheme.surfaceContainerHighest,
       ),
       child: Text(
         status.label,
@@ -921,10 +911,10 @@ class _RunnerStatusBadge extends StatelessWidget {
           fontSize: 9.5,
           fontWeight: FontWeight.w600,
           color: isError
-              ? const Color(0xffff9b9b)
+              ? scheme.onErrorContainer
               : isRunning
-                  ? const Color(0xff8de5ad)
-                  : const Color(0xffb8c0cc),
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant,
         ),
       ),
     );

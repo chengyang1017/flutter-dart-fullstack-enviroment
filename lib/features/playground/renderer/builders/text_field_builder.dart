@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/utils/color_parser.dart';
 import '../../../../core/utils/enum_parser.dart';
 import '../../../../core/utils/input_decoration_value_parser.dart';
@@ -42,13 +43,21 @@ class TextFieldUiBuilder {
         ValueParser.boolean(node.namedArguments['obscureText']) ?? false;
     if (minLines != null && maxLines != null && minLines > maxLines) {
       renderer.onWarning(
-        'TextField 的 minLines ($minLines) 不能大于 maxLines ($maxLines)，预览已自动调整。',
+        context.l10n.tr(
+          'TextField 的 minLines ($minLines) 不能大于 maxLines ($maxLines)，预览已自动调整。',
+          'TextField minLines ($minLines) cannot be greater than maxLines ($maxLines). The preview adjusted it automatically.',
+        ),
       );
       minLines = maxLines;
     }
     if (obscureText &&
         (maxLines == null || maxLines != 1 || (minLines ?? 1) != 1)) {
-      renderer.onWarning('obscureText 仅支持单行输入，预览已将行数调整为 1。');
+      renderer.onWarning(
+        context.l10n.tr(
+          'obscureText 仅支持单行输入，预览已将行数调整为 1。',
+          'obscureText only supports single-line input. The preview adjusted the line count to 1.',
+        ),
+      );
       minLines = 1;
       maxLines = 1;
     }

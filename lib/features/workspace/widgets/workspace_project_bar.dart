@@ -2,17 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../models/workspace_project.dart';
 import '../services/workspace_cloud_runtime.dart';
 import '../services/workspace_storage_status_service.dart';
 
 enum _OpenProjectAction { folder, zip }
 
-enum _ProjectAction {
-  keep,
-  rename,
-  delete,
-}
+enum _ProjectAction { keep, rename, delete }
 
 class WorkspaceProjectBar extends StatelessWidget {
   const WorkspaceProjectBar({
@@ -44,15 +42,9 @@ class WorkspaceProjectBar extends StatelessWidget {
   final VoidCallback? onKeep;
   final VoidCallback? onGitSync;
 
-  static const _surface = Color(0xff15191f);
-  static const _surfaceHover = Color(0xff1c222b);
-  static const _border = Color(0xff2b333e);
-  static const _text = Color(0xffd7dde8);
-  static const _muted = Color(0xff8f98a8);
-  static const _accent = Color(0xff82aaff);
-
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return SizedBox(
       height: 36,
       child: Row(
@@ -62,9 +54,9 @@ class WorkspaceProjectBar extends StatelessWidget {
           const SizedBox(width: 6),
           _ProjectActionButton(
             key: const ValueKey('workspace-project-create'),
-            tooltip: '新建 Flutter 项目',
+            tooltip: l10n.tr('新建 Flutter 项目', 'Create Flutter project'),
             icon: Icons.add_rounded,
-            label: '新建',
+            label: l10n.tr('新建', 'New'),
             onPressed: onCreate,
           ),
           const SizedBox(width: 4),
@@ -76,25 +68,28 @@ class WorkspaceProjectBar extends StatelessWidget {
           const SizedBox(width: 4),
           _ProjectActionButton(
             key: const ValueKey('workspace-project-commit'),
-            tooltip: 'Commit 当前修改为新的 Workspace 基线（不 Push）',
+            tooltip: l10n.tr(
+              'Commit 当前修改为新的 Workspace 基线（不 Push）',
+              'Commit current changes as a new Workspace baseline (no Push)',
+            ),
             icon: Icons.commit_rounded,
             label: 'Commit',
             onPressed: onCommit,
           ),
           if (onGitSync != null) ...[
             const SizedBox(width: 4),
-            _GitHubSyncButton(
-              project: activeProject,
-              onPressed: onGitSync!,
-            ),
+            _GitHubSyncButton(project: activeProject, onPressed: onGitSync!),
           ],
           if (WorkspaceCloudRuntime.enabled && onShare != null) ...[
             const SizedBox(width: 4),
             _ProjectActionButton(
               key: const ValueKey('workspace-project-share'),
-              tooltip: '生成当前 Workspace 的固定版本只读分享链接',
+              tooltip: l10n.tr(
+                '生成当前 Workspace 的固定版本只读分享链接',
+                'Create a versioned read-only share link for this Workspace',
+              ),
               icon: Icons.ios_share_rounded,
-              label: '分享',
+              label: l10n.tr('分享', 'Share'),
               onPressed: onShare,
             ),
           ],
@@ -116,13 +111,13 @@ class WorkspaceProjectBar extends StatelessWidget {
   }
 
   Widget _projectSelector(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return PopupMenuButton<String>(
       key: const ValueKey('workspace-project-selector'),
-      tooltip: _statusText(activeProject),
+      tooltip: _statusText(context, activeProject),
+      color: palette.surfaceRaised,
       onSelected: (value) {
-        if (value != activeProject.id) {
-          onSelect(value);
-        }
+        if (value != activeProject.id) onSelect(value);
       },
       itemBuilder: (_) => projects
           .map(
@@ -133,7 +128,9 @@ class WorkspaceProjectBar extends StatelessWidget {
                   Icon(
                     _projectIcon(project),
                     size: 17,
-                    color: project.id == activeProject.id ? _accent : _muted,
+                    color: project.id == activeProject.id
+                        ? palette.accent
+                        : palette.muted,
                   ),
                   const SizedBox(width: 9),
                   Expanded(
@@ -141,20 +138,20 @@ class WorkspaceProjectBar extends StatelessWidget {
                       project.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _text,
+                      style: TextStyle(
+                        color: palette.text,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   if (project.id == activeProject.id)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
                       child: Icon(
                         Icons.check_rounded,
                         size: 17,
-                        color: _accent,
+                        color: palette.accent,
                       ),
                     ),
                 ],
@@ -163,41 +160,37 @@ class WorkspaceProjectBar extends StatelessWidget {
           )
           .toList(growable: false),
       child: Tooltip(
-        message: _statusText(activeProject),
+        message: _statusText(context, activeProject),
         child: Container(
           width: 220,
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: _surface,
+            color: palette.surfaceRaised,
             borderRadius: BorderRadius.circular(7),
-            border: Border.all(color: _border),
+            border: Border.all(color: palette.border),
           ),
           child: Row(
             children: [
-              Icon(
-                _projectIcon(activeProject),
-                size: 17,
-                color: _accent,
-              ),
+              Icon(_projectIcon(activeProject), size: 17, color: palette.accent),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   activeProject.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _text,
+                  style: TextStyle(
+                    color: palette.text,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
               const SizedBox(width: 6),
-              const Icon(
+              Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 17,
-                color: _muted,
+                color: palette.muted,
               ),
             ],
           ),
@@ -206,55 +199,51 @@ class WorkspaceProjectBar extends StatelessWidget {
     );
   }
 
-  IconData _projectIcon(WorkspaceProject project) {
-    return switch (project.kind) {
-      WorkspaceProjectKind.generatedFlutter => Icons.flutter_dash_rounded,
-      WorkspaceProjectKind.importedFlutter => Icons.folder_zip_outlined,
-      _ => Icons.folder_copy_outlined,
-    };
-  }
+  IconData _projectIcon(WorkspaceProject project) => switch (project.kind) {
+        WorkspaceProjectKind.generatedFlutter => Icons.flutter_dash_rounded,
+        WorkspaceProjectKind.importedFlutter => Icons.folder_zip_outlined,
+        _ => Icons.folder_copy_outlined,
+      };
 
-  String _statusText(WorkspaceProject project) {
+  String _statusText(BuildContext context, WorkspaceProject project) {
+    final l10n = context.l10n;
     final identity = WorkspaceCloudRuntime.identity;
     final namespace = identity == null
         ? project.slug
         : '${identity.accountNamespace} / ${project.slug}';
-    final storage = identity == null ? '浏览器本地保存' : '云端保存';
+    final storage = identity == null
+        ? l10n.tr('浏览器本地保存', 'Browser local storage')
+        : l10n.tr('云端保存', 'Cloud storage');
 
     if (project.kind == WorkspaceProjectKind.generatedFlutter) {
-      final platforms =
-          project.flutterPlatforms.map(_platformLabel).join(' · ');
-      final projectType =
-          platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
+      final platforms = project.flutterPlatforms.map(_platformLabel).join(' · ');
+      final projectType = platforms.isEmpty
+          ? l10n.tr('Flutter 项目', 'Flutter project')
+          : 'Flutter · $platforms';
       return '$namespace · $projectType · $storage';
     }
     if (project.kind == WorkspaceProjectKind.importedFlutter) {
-      return '$namespace · 导入的 Flutter 项目 · $storage';
+      return '$namespace · ${l10n.tr('导入的 Flutter 项目', 'Imported Flutter project')} · $storage';
     }
     if (project.lifecycle == WorkspaceLifecycle.temporary) {
-      return '$namespace · 临时练习 · $storage';
+      return '$namespace · ${l10n.tr('临时练习', 'Temporary practice')} · $storage';
     }
     return '$namespace · Workspace · $storage';
   }
 
-  String _platformLabel(String platform) {
-    return switch (platform) {
-      'android' => 'Android',
-      'ios' => 'iOS',
-      'web' => 'Web',
-      'windows' => 'Windows',
-      'macos' => 'macOS',
-      'linux' => 'Linux',
-      _ => platform,
-    };
-  }
+  String _platformLabel(String platform) => switch (platform) {
+        'android' => 'Android',
+        'ios' => 'iOS',
+        'web' => 'Web',
+        'windows' => 'Windows',
+        'macos' => 'macOS',
+        'linux' => 'Linux',
+        _ => platform,
+      };
 }
 
 class _GitHubSyncButton extends StatefulWidget {
-  const _GitHubSyncButton({
-    required this.project,
-    required this.onPressed,
-  });
+  const _GitHubSyncButton({required this.project, required this.onPressed});
 
   final WorkspaceProject project;
   final VoidCallback onPressed;
@@ -268,17 +257,19 @@ class _GitHubSyncButtonState extends State<_GitHubSyncButton> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
     final remote = widget.project.gitRemote;
     final isBound = remote != null;
 
-    final String label;
-    final String tooltip;
-    final IconData leadingIcon;
-    final IconData trailingIcon;
+    late final String label;
+    late final String tooltip;
+    late final IconData leadingIcon;
+    late final IconData trailingIcon;
 
     if (!isBound) {
-      label = 'GitHub · 未绑定';
-      tooltip = '点击绑定 GitHub 仓库';
+      label = l10n.tr('GitHub · 未绑定', 'GitHub · Not connected');
+      tooltip = l10n.tr('点击绑定 GitHub 仓库', 'Connect a GitHub repository');
       leadingIcon = Icons.link_rounded;
       trailingIcon = Icons.add_rounded;
     } else {
@@ -290,9 +281,8 @@ class _GitHubSyncButtonState extends State<_GitHubSyncButton> {
       final idText = remote.repositoryId == null
           ? ''
           : '\nRepository #${remote.repositoryId}';
-
       label = 'GitHub · $repositoryName';
-      tooltip = 'GitHub\n$identity\n${remote.branch}$idText\n点击打开同步中心';
+      tooltip = 'GitHub\n$identity\n${remote.branch}$idText\n${l10n.tr('点击打开同步中心', 'Open sync center')}';
       leadingIcon = Icons.sync_rounded;
       trailingIcon = Icons.keyboard_arrow_down_rounded;
     }
@@ -312,39 +302,29 @@ class _GitHubSyncButtonState extends State<_GitHubSyncButton> {
             constraints: const BoxConstraints(maxWidth: 190),
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              color: _hovered
-                  ? WorkspaceProjectBar._surfaceHover
-                  : WorkspaceProjectBar._surface,
+              color: _hovered ? palette.selection : palette.surfaceRaised,
               borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: WorkspaceProjectBar._border),
+              border: Border.all(color: palette.border),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  leadingIcon,
-                  size: 16,
-                  color: WorkspaceProjectBar._accent,
-                ),
+                Icon(leadingIcon, size: 16, color: palette.accent),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: WorkspaceProjectBar._text,
+                    style: TextStyle(
+                      color: palette.text,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(
-                  trailingIcon,
-                  size: 15,
-                  color: WorkspaceProjectBar._muted,
-                ),
+                Icon(trailingIcon, size: 15, color: palette.muted),
               ],
             ),
           ),
@@ -361,7 +341,6 @@ class _GitHubSyncButtonState extends State<_GitHubSyncButton> {
     if (source.toLowerCase().endsWith('.git')) {
       source = source.substring(0, source.length - 4);
     }
-
     final slash = source.lastIndexOf('/');
     final colon = source.lastIndexOf(':');
     final split = slash > colon ? slash : colon;
@@ -375,14 +354,12 @@ class _CloudStorageStatusChip extends StatefulWidget {
   const _CloudStorageStatusChip();
 
   @override
-  State<_CloudStorageStatusChip> createState() =>
-      _CloudStorageStatusChipState();
+  State<_CloudStorageStatusChip> createState() => _CloudStorageStatusChipState();
 }
 
 class _CloudStorageStatusChipState extends State<_CloudStorageStatusChip> {
   final WorkspaceStorageStatusService _service =
       const WorkspaceStorageStatusService();
-
   WorkspaceStorageStatus? _status;
   Object? _error;
   bool _loading = true;
@@ -413,7 +390,6 @@ class _CloudStorageStatusChipState extends State<_CloudStorageStatusChip> {
         _error = null;
       });
     }
-
     try {
       final status = await _service.load();
       if (!mounted) return;
@@ -432,26 +408,29 @@ class _CloudStorageStatusChipState extends State<_CloudStorageStatusChip> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
     final status = _status;
     final available = status?.available == true;
     final label = _loading
         ? 'Cloud…'
         : available
-            ? '${_formatStorageBytes(status!.usedBytes)} / '
-                '${_formatStorageBytes(status.totalBytes)}'
+            ? '${_formatStorageBytes(status!.usedBytes)} / ${_formatStorageBytes(status.totalBytes)}'
             : 'Cloud';
 
     final tooltip = _loading
-        ? '正在读取 Railway Volume 容量…'
+        ? l10n.tr('正在读取 Railway Volume 容量…', 'Reading Railway Volume capacity…')
         : available
-            ? 'Railway Volume\n'
-                '已用：${_formatStorageBytes(status!.usedBytes)}\n'
-                '可用：${_formatStorageBytes(status.availableBytes)}\n'
-                '总量：${_formatStorageBytes(status.totalBytes)}\n'
-                '点击刷新'
+            ? 'Railway Volume\n${l10n.tr('已用', 'Used')}：${_formatStorageBytes(status!.usedBytes)}\n${l10n.tr('可用', 'Available')}：${_formatStorageBytes(status.availableBytes)}\n${l10n.tr('总量', 'Total')}：${_formatStorageBytes(status.totalBytes)}\n${l10n.tr('点击刷新', 'Click to refresh')}'
             : _error != null
-                ? 'Railway 容量读取失败：$_error\n点击重试'
-                : 'Railway 容量暂不可用\n点击重试';
+                ? l10n.tr(
+                    'Railway 容量读取失败：$_error\n点击重试',
+                    'Failed to read Railway capacity: $_error\nClick to retry',
+                  )
+                : l10n.tr(
+                    'Railway 容量暂不可用\n点击重试',
+                    'Railway capacity is unavailable\nClick to retry',
+                  );
 
     return Tooltip(
       message: tooltip,
@@ -466,29 +445,23 @@ class _CloudStorageStatusChipState extends State<_CloudStorageStatusChip> {
             height: 36,
             padding: const EdgeInsets.symmetric(horizontal: 9),
             decoration: BoxDecoration(
-              color: _hovered
-                  ? WorkspaceProjectBar._surfaceHover
-                  : WorkspaceProjectBar._surface,
+              color: _hovered ? palette.selection : palette.surfaceRaised,
               borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: WorkspaceProjectBar._border),
+              border: Border.all(color: palette.border),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  available
-                      ? Icons.cloud_done_outlined
-                      : Icons.cloud_queue_outlined,
+                  available ? Icons.cloud_done_outlined : Icons.cloud_queue_outlined,
                   size: 15,
-                  color: available
-                      ? WorkspaceProjectBar._accent
-                      : WorkspaceProjectBar._muted,
+                  color: available ? palette.accent : palette.muted,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: WorkspaceProjectBar._text,
+                  style: TextStyle(
+                    color: palette.text,
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -536,11 +509,14 @@ class _OpenProjectButtonState extends State<_OpenProjectButton> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
     final enabled = widget.onOpenFolder != null || widget.onImportZip != null;
 
     return PopupMenuButton<_OpenProjectAction>(
       enabled: enabled,
-      tooltip: '打开 Flutter 项目',
+      color: palette.surfaceRaised,
+      tooltip: l10n.tr('打开 Flutter 项目', 'Open Flutter project'),
       onSelected: (action) {
         if (action == _OpenProjectAction.folder) {
           widget.onOpenFolder?.call();
@@ -552,34 +528,30 @@ class _OpenProjectButtonState extends State<_OpenProjectButton> {
         PopupMenuItem<_OpenProjectAction>(
           value: _OpenProjectAction.folder,
           enabled: widget.onOpenFolder != null,
-          child: const Row(
+          child: Row(
             children: [
-              Icon(
-                Icons.folder_open_rounded,
-                size: 17,
-                color: WorkspaceProjectBar._accent,
-              ),
-              SizedBox(width: 9),
+              Icon(Icons.folder_open_rounded, size: 17, color: palette.accent),
+              const SizedBox(width: 9),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '打开项目文件夹',
+                      l10n.tr('打开项目文件夹', 'Open project folder'),
                       style: TextStyle(
-                        color: WorkspaceProjectBar._text,
+                        color: palette.text,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      '选择包含 pubspec.yaml 的 Flutter 根目录',
-                      style: TextStyle(
-                        color: WorkspaceProjectBar._muted,
-                        fontSize: 10.5,
+                      l10n.tr(
+                        '选择包含 pubspec.yaml 的 Flutter 根目录',
+                        'Choose a Flutter root containing pubspec.yaml',
                       ),
+                      style: TextStyle(color: palette.muted, fontSize: 10.5),
                     ),
                   ],
                 ),
@@ -590,18 +562,14 @@ class _OpenProjectButtonState extends State<_OpenProjectButton> {
         PopupMenuItem<_OpenProjectAction>(
           value: _OpenProjectAction.zip,
           enabled: widget.onImportZip != null,
-          child: const Row(
+          child: Row(
             children: [
-              Icon(
-                Icons.archive_outlined,
-                size: 17,
-                color: WorkspaceProjectBar._muted,
-              ),
-              SizedBox(width: 9),
+              Icon(Icons.archive_outlined, size: 17, color: palette.muted),
+              const SizedBox(width: 9),
               Text(
-                '导入 ZIP',
+                l10n.tr('导入 ZIP', 'Import ZIP'),
                 style: TextStyle(
-                  color: WorkspaceProjectBar._text,
+                  color: palette.text,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -618,11 +586,9 @@ class _OpenProjectButtonState extends State<_OpenProjectButton> {
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: enabled && _hovered
-                ? WorkspaceProjectBar._surfaceHover
-                : WorkspaceProjectBar._surface,
+            color: enabled && _hovered ? palette.selection : palette.surfaceRaised,
             borderRadius: BorderRadius.circular(7),
-            border: Border.all(color: WorkspaceProjectBar._border),
+            border: Border.all(color: palette.border),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -631,16 +597,16 @@ class _OpenProjectButtonState extends State<_OpenProjectButton> {
                 Icons.folder_open_outlined,
                 size: 16,
                 color: enabled
-                    ? WorkspaceProjectBar._text
-                    : WorkspaceProjectBar._muted.withValues(alpha: .45),
+                    ? palette.text
+                    : palette.muted.withValues(alpha: .45),
               ),
               const SizedBox(width: 6),
               Text(
-                '打开',
+                l10n.tr('打开', 'Open'),
                 style: TextStyle(
                   color: enabled
-                      ? WorkspaceProjectBar._text
-                      : WorkspaceProjectBar._muted.withValues(alpha: .45),
+                      ? palette.text
+                      : palette.muted.withValues(alpha: .45),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -650,8 +616,8 @@ class _OpenProjectButtonState extends State<_OpenProjectButton> {
                 Icons.keyboard_arrow_down_rounded,
                 size: 15,
                 color: enabled
-                    ? WorkspaceProjectBar._muted
-                    : WorkspaceProjectBar._muted.withValues(alpha: .35),
+                    ? palette.muted
+                    : palette.muted.withValues(alpha: .35),
               ),
             ],
           ),
@@ -684,6 +650,7 @@ class _ProjectActionButtonState extends State<_ProjectActionButton> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     final enabled = widget.onPressed != null;
     return Tooltip(
       message: widget.tooltip,
@@ -698,11 +665,9 @@ class _ProjectActionButtonState extends State<_ProjectActionButton> {
             height: 36,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              color: enabled && _hovered
-                  ? WorkspaceProjectBar._surfaceHover
-                  : WorkspaceProjectBar._surface,
+              color: enabled && _hovered ? palette.selection : palette.surfaceRaised,
               borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: WorkspaceProjectBar._border),
+              border: Border.all(color: palette.border),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -711,16 +676,16 @@ class _ProjectActionButtonState extends State<_ProjectActionButton> {
                   widget.icon,
                   size: 16,
                   color: enabled
-                      ? WorkspaceProjectBar._muted
-                      : WorkspaceProjectBar._muted.withValues(alpha: .38),
+                      ? palette.muted
+                      : palette.muted.withValues(alpha: .38),
                 ),
                 const SizedBox(width: 6),
                 Text(
                   widget.label,
                   style: TextStyle(
                     color: enabled
-                        ? WorkspaceProjectBar._text
-                        : WorkspaceProjectBar._muted.withValues(alpha: .38),
+                        ? palette.text
+                        : palette.muted.withValues(alpha: .38),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -751,9 +716,12 @@ class _ProjectMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
     return PopupMenuButton<_ProjectAction>(
       key: const ValueKey('workspace-project-more'),
-      tooltip: '项目操作',
+      color: palette.surfaceRaised,
+      tooltip: l10n.tr('项目操作', 'Project actions'),
       onSelected: (action) {
         switch (action) {
           case _ProjectAction.keep:
@@ -769,38 +737,26 @@ class _ProjectMenu extends StatelessWidget {
       },
       itemBuilder: (_) => [
         if (project.lifecycle == WorkspaceLifecycle.temporary)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: _ProjectAction.keep,
             child: ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              iconColor: WorkspaceProjectBar._muted,
-              textColor: WorkspaceProjectBar._text,
-              leading: Icon(Icons.bookmark_add_outlined),
-              title: Text(
-                '保留项目',
-                style: TextStyle(
-                  color: WorkspaceProjectBar._text,
-                  fontSize: 13,
-                ),
-              ),
+              iconColor: palette.muted,
+              textColor: palette.text,
+              leading: const Icon(Icons.bookmark_add_outlined),
+              title: Text(l10n.tr('保留项目', 'Keep project')),
             ),
           ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: _ProjectAction.rename,
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            iconColor: WorkspaceProjectBar._muted,
-            textColor: WorkspaceProjectBar._text,
-            leading: Icon(Icons.edit_outlined),
-            title: Text(
-              '重命名',
-              style: TextStyle(
-                color: WorkspaceProjectBar._text,
-                fontSize: 13,
-              ),
-            ),
+            iconColor: palette.muted,
+            textColor: palette.text,
+            leading: const Icon(Icons.edit_outlined),
+            title: Text(l10n.tr('重命名', 'Rename')),
           ),
         ),
         PopupMenuItem(
@@ -810,21 +766,13 @@ class _ProjectMenu extends StatelessWidget {
             dense: true,
             contentPadding: EdgeInsets.zero,
             iconColor: canDelete
-                ? WorkspaceProjectBar._muted
-                : WorkspaceProjectBar._muted.withValues(alpha: .38),
+                ? palette.muted
+                : palette.muted.withValues(alpha: .38),
             textColor: canDelete
-                ? WorkspaceProjectBar._text
-                : WorkspaceProjectBar._muted.withValues(alpha: .38),
+                ? palette.text
+                : palette.muted.withValues(alpha: .38),
             leading: const Icon(Icons.delete_outline),
-            title: Text(
-              '删除',
-              style: TextStyle(
-                color: canDelete
-                    ? WorkspaceProjectBar._text
-                    : WorkspaceProjectBar._muted.withValues(alpha: .38),
-                fontSize: 13,
-              ),
-            ),
+            title: Text(l10n.tr('删除', 'Delete')),
           ),
         ),
       ],
@@ -832,15 +780,11 @@ class _ProjectMenu extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: WorkspaceProjectBar._surface,
+          color: palette.surfaceRaised,
           borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: WorkspaceProjectBar._border),
+          border: Border.all(color: palette.border),
         ),
-        child: const Icon(
-          Icons.more_horiz_rounded,
-          size: 18,
-          color: WorkspaceProjectBar._muted,
-        ),
+        child: Icon(Icons.more_horiz_rounded, size: 18, color: palette.muted),
       ),
     );
   }

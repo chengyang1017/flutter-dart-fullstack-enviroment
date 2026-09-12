@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../controllers/workspace_controller.dart';
 
 class WorkspaceEditorTabs extends StatelessWidget {
@@ -24,11 +26,12 @@ class WorkspaceEditorTabs extends StatelessWidget {
         final openFiles = pathFilter == null
             ? workspace.openFiles
             : workspace.openFiles.where(pathFilter!).toList(growable: false);
+        final palette = WorkbenchPalette.of(context);
 
         return SizedBox(
           height: 38,
           child: Material(
-            color: const Color(0xff181b20),
+            color: palette.surfaceRaised,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: openFiles.length,
@@ -48,11 +51,9 @@ class WorkspaceEditorTabs extends StatelessWidget {
                       maxWidth: 220,
                     ),
                     decoration: BoxDecoration(
-                      color: selected
-                          ? const Color(0xff111318)
-                          : const Color(0xff181b20),
-                      border: const Border(
-                        right: BorderSide(color: Color(0xff2c313c)),
+                      color: selected ? palette.surface : palette.surfaceRaised,
+                      border: Border(
+                        right: BorderSide(color: palette.border),
                       ),
                     ),
                     padding: const EdgeInsets.only(left: 12, right: 4),
@@ -62,7 +63,7 @@ class WorkspaceEditorTabs extends StatelessWidget {
                         Icon(
                           _iconFor(entry.name),
                           size: 15,
-                          color: const Color(0xff9da5b4),
+                          color: palette.muted,
                         ),
                         const SizedBox(width: 6),
                         Flexible(
@@ -72,23 +73,21 @@ class WorkspaceEditorTabs extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
-                              color: selected
-                                  ? const Color(0xffe6edf3)
-                                  : const Color(0xff9da5b4),
+                              color: selected ? palette.text : palette.muted,
                             ),
                           ),
                         ),
                         if (dirty)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 6),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 6),
                             child: Icon(
                               Icons.circle,
                               size: 8,
-                              color: Color(0xff82aaff),
+                              color: palette.accent,
                             ),
                           ),
                         IconButton(
-                          tooltip: '关闭',
+                          tooltip: context.l10n.tr('关闭', 'Close'),
                           visualDensity: VisualDensity.compact,
                           iconSize: 14,
                           onPressed: () => onClose(path),

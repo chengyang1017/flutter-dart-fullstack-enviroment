@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:re_editor/re_editor.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../controllers/concept_label_controller.dart';
 import '../controllers/playground_controller.dart';
 import '../services/dart_code_flow_analyzer.dart';
@@ -130,7 +131,10 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
           _statusMessage = null;
         } else {
           _error = null;
-          _statusMessage = '光标暂时不在函数内，继续保留上一条电线。';
+          _statusMessage = context.l10n.tr(
+            '光标暂时不在函数内，继续保留上一条电线。',
+            'The cursor is temporarily outside a function; keeping the previous wire graph.',
+          );
         }
         _analyzing = false;
       });
@@ -168,6 +172,7 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
   Widget build(BuildContext context) {
     final graph = _graph;
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
     return Material(
       color: theme.colorScheme.surface,
@@ -190,7 +195,10 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
                   Expanded(
                     child: _DirectionButton(
                       icon: Icons.call_made_outlined,
-                      label: '我调用 ${graph.directCalleeCount}',
+                      label: l10n.tr(
+                        '我调用 ${graph.directCalleeCount}',
+                        'Calls ${graph.directCalleeCount}',
+                      ),
                       selected:
                           _direction == FunctionCallGraphDirection.outgoing,
                       onPressed: () {
@@ -213,7 +221,10 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
                   Expanded(
                     child: _DirectionButton(
                       icon: Icons.call_received_outlined,
-                      label: '调用我 ${graph.directCallerCount}',
+                      label: l10n.tr(
+                        '调用我 ${graph.directCallerCount}',
+                        'Called by ${graph.directCallerCount}',
+                      ),
                       selected:
                           _direction == FunctionCallGraphDirection.incoming,
                       onPressed: () {
@@ -239,7 +250,7 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
                       ),
                     ),
                   IconButton(
-                    tooltip: '立即刷新电线',
+                    tooltip: l10n.tr('立即刷新电线', 'Refresh wire graph now'),
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints:
@@ -266,20 +277,30 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
   }
 
   Widget _buildBody(BuildContext context, CodeFlowGraph? graph) {
+    final l10n = context.l10n;
+
     if (_error case final error?) {
       return _PanelMessage(
         icon: Icons.cable_outlined,
-        title: '电线模式等待可追踪函数',
-        message: '$error\n\n把光标移进任意 Dart 方法或函数，电线会自动出现。',
+        title: l10n.tr(
+          '电线模式等待可追踪函数',
+          'Wire mode is waiting for a traceable function',
+        ),
+        message: l10n.tr(
+          '$error\n\n把光标移进任意 Dart 方法或函数，电线会自动出现。',
+          '$error\n\nMove the cursor inside any Dart method or function and the wire graph will appear automatically.',
+        ),
       );
     }
 
     if (graph == null) {
-      return const _PanelMessage(
+      return _PanelMessage(
         icon: Icons.cable_outlined,
-        title: '电线模式已开启',
-        message: '不需要再点“分析”。\n\n'
-            '把光标移进 Dart 方法或函数，切文件、移动光标或修改代码后，调用电线都会自动更新并持续显示。',
+        title: l10n.tr('电线模式已开启', 'Wire mode is enabled'),
+        message: l10n.tr(
+          '不需要再点“分析”。\n\n把光标移进 Dart 方法或函数，切文件、移动光标或修改代码后，调用电线都会自动更新并持续显示。',
+          'You do not need to click “Analyze”.\n\nMove the cursor into a Dart method or function. The call graph updates automatically when you switch files, move the cursor, or edit code.',
+        ),
       );
     }
 
@@ -305,8 +326,14 @@ class _CodeFlowPanelState extends State<CodeFlowPanel> {
             padding: const EdgeInsets.fromLTRB(14, 6, 14, 14),
             child: Text(
               _direction == FunctionCallGraphDirection.outgoing
-                  ? '当前函数没有解析到继续调用的 Workspace 本地函数；电线模式仍保持开启。'
-                  : '当前函数没有解析到 Workspace 内的调用者；电线模式仍保持开启。',
+                  ? l10n.tr(
+                      '当前函数没有解析到继续调用的 Workspace 本地函数；电线模式仍保持开启。',
+                      'No further local Workspace calls were resolved from this function; wire mode remains enabled.',
+                    )
+                  : l10n.tr(
+                      '当前函数没有解析到 Workspace 内的调用者；电线模式仍保持开启。',
+                      'No callers inside this Workspace were resolved for this function; wire mode remains enabled.',
+                    ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),

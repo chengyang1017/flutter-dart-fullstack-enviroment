@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../controllers/flutter_runner_controller.dart';
 import '../models/run_session.dart';
 
@@ -21,9 +23,11 @@ class RunnerConsolePanel extends StatelessWidget {
         ? logStartIndex
         : 0;
     final visibleLogCount = runner.logs.length - safeStartIndex;
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
 
     return Material(
-      color: const Color(0xff111318),
+      color: palette.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -31,22 +35,22 @@ class RunnerConsolePanel extends StatelessWidget {
             Container(
               height: 36,
               padding: const EdgeInsets.only(left: 12, right: 4),
-              decoration: const BoxDecoration(
-                color: Color(0xff15181e),
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
                 border: Border(
-                  top: BorderSide(color: Color(0xff262a32)),
-                  bottom: BorderSide(color: Color(0xff262a32)),
+                  top: BorderSide(color: palette.border),
+                  bottom: BorderSide(color: palette.border),
                 ),
               ),
               child: Row(
                 children: [
-                  const Text(
-                    'CONSOLE',
+                  Text(
+                    l10n.tr('控制台', 'CONSOLE'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       letterSpacing: .8,
-                      color: Color(0xffaeb4bf),
+                      color: palette.text,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -57,14 +61,14 @@ class RunnerConsolePanel extends StatelessWidget {
                       runner.runnerName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xff7f8795),
+                        color: palette.muted,
                       ),
                     ),
                   ),
                   IconButton(
-                    tooltip: '清空控制台',
+                    tooltip: l10n.tr('清空控制台', 'Clear console'),
                     visualDensity: VisualDensity.compact,
                     onPressed: runner.logs.isEmpty ? null : runner.clearConsole,
                     icon: const Icon(Icons.delete_sweep_outlined, size: 18),
@@ -78,17 +82,23 @@ class RunnerConsolePanel extends StatelessWidget {
                     padding: const EdgeInsets.all(14),
                     child: Text(
                       runner.isMock
-                          ? '当前使用 Mock Runner。启动 flutter-runner-server，并通过 --dart-define=RUNNER_API_URL=... 连接真实 Flutter SDK Runner。'
-                          : '真实 Flutter SDK Runner 已连接，运行日志会显示在这里。',
-                      style: const TextStyle(
+                          ? l10n.tr(
+                              '当前使用 Mock Runner。启动 flutter-runner-server，并通过 --dart-define=RUNNER_API_URL=... 连接真实 Flutter SDK Runner。',
+                              'Mock Runner is active. Start flutter-runner-server and connect a real Flutter SDK Runner with --dart-define=RUNNER_API_URL=....',
+                            )
+                          : l10n.tr(
+                              '真实 Flutter SDK Runner 已连接，运行日志会显示在这里。',
+                              'A real Flutter SDK Runner is connected. Runtime logs will appear here.',
+                            ),
+                      style: TextStyle(
                         fontFamily: 'Cascadia Code',
-                        fontFamilyFallback: [
+                        fontFamilyFallback: const [
                           'Cascadia Mono',
                           'Consolas',
                           'monospace',
                         ],
                         fontSize: 12,
-                        color: Color(0xff7f8795),
+                        color: palette.muted,
                       ),
                     ),
                   )
@@ -102,16 +112,16 @@ class RunnerConsolePanel extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 3),
                       child: SelectableText(
                         runner.logs[safeStartIndex + index],
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Cascadia Code',
-                          fontFamilyFallback: [
+                          fontFamilyFallback: const [
                             'Cascadia Mono',
                             'Consolas',
                             'Courier New',
                           ],
                           fontSize: 12,
                           height: 1.4,
-                          color: Color(0xffc7ccd6),
+                          color: palette.text,
                         ),
                       ),
                     ),
@@ -132,16 +142,17 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final isError = status == RunnerStatus.error;
     final isRunning = status == RunnerStatus.running;
+    final scheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         color: isError
-            ? const Color(0xff3d2024)
+            ? scheme.errorContainer
             : isRunning
-                ? const Color(0xff173524)
-                : const Color(0xff252a33),
+                ? scheme.primaryContainer
+                : scheme.surfaceContainerHighest,
       ),
       child: Text(
         status.label,
@@ -149,10 +160,10 @@ class _StatusBadge extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: isError
-              ? const Color(0xffff9b9b)
+              ? scheme.onErrorContainer
               : isRunning
-                  ? const Color(0xff8de5ad)
-                  : const Color(0xffb8c0cc),
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant,
         ),
       ),
     );

@@ -1,11 +1,11 @@
 {
-    "name": "flutter_ui_playground",
-    "short_name": "flutter_ui_playground",
+    "name": "Flutter Workbench",
+    "short_name": "Workbench",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "A visual Flutter workspace for real projects, concept views, and learning workflows.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

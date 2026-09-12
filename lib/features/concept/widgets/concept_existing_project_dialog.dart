@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../workspace/models/workspace_project.dart';
 
 Future<WorkspaceProject?> showConceptExistingProjectDialog(
@@ -48,23 +49,32 @@ class _ConceptExistingProjectDialogState
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return AlertDialog(
       key: const ValueKey('concept-existing-project-dialog'),
-      title: const Text('打开现有项目'),
+      title: Text(l10n.tr('打开现有项目', 'Open existing project')),
       content: SizedBox(
         width: 640,
         child: widget.projects.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text('项目库里还没有可打开的项目。'),
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  l10n.tr(
+                    '项目库里还没有可打开的项目。',
+                    'There are no projects available in the project library yet.',
+                  ),
+                ),
               )
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    '选择项目模式已经创建、导入或从 Git 拉取的 Flutter 项目。打开后概念模式仍然只直接显示 lib/。',
+                    l10n.tr(
+                      '选择项目模式已经创建、导入或从 Git 拉取的 Flutter 项目。打开后概念模式仍然只直接显示 lib/。',
+                      'Choose a Flutter project that was created, imported, or pulled from Git in Project Mode. Concept Mode will still expose only lib/ directly.',
+                    ),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -92,7 +102,7 @@ class _ConceptExistingProjectDialogState
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              subtitle: Text(_subtitle(project)),
+                              subtitle: Text(_subtitle(context, project)),
                             ),
                         ],
                       ),
@@ -104,13 +114,13 @@ class _ConceptExistingProjectDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.tr('取消', 'Cancel')),
         ),
         FilledButton.icon(
           key: const ValueKey('concept-existing-project-open'),
           onPressed: selectedProjectId == null ? null : _open,
           icon: const Icon(Icons.folder_open_rounded),
-          label: const Text('打开'),
+          label: Text(l10n.tr('打开', 'Open')),
         ),
       ],
     );
@@ -132,7 +142,7 @@ class _ConceptExistingProjectDialogState
     };
   }
 
-  String _subtitle(WorkspaceProject project) {
+  String _subtitle(BuildContext context, WorkspaceProject project) {
     final remote = project.gitRemote;
     if (remote != null) {
       final path = remote.projectPath;
@@ -141,10 +151,14 @@ class _ConceptExistingProjectDialogState
           : '${remote.repositoryUrl} · ${remote.branch} · $path';
     }
 
+    final l10n = context.l10n;
     return switch (project.kind) {
-      WorkspaceProjectKind.generatedFlutter => '创建的 Flutter 项目',
-      WorkspaceProjectKind.importedFlutter => '导入的 Flutter 项目',
-      WorkspaceProjectKind.practice => '本地练习项目',
+      WorkspaceProjectKind.generatedFlutter =>
+        l10n.tr('创建的 Flutter 项目', 'Created Flutter project'),
+      WorkspaceProjectKind.importedFlutter =>
+        l10n.tr('导入的 Flutter 项目', 'Imported Flutter project'),
+      WorkspaceProjectKind.practice =>
+        l10n.tr('本地练习项目', 'Local practice project'),
     };
   }
 }

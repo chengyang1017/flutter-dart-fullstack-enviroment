@@ -4,16 +4,18 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_monaco/flutter_monaco.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../../runner/controllers/flutter_runner_controller.dart';
 import '../../runner/widgets/runner_preview_panel.dart';
 import '../../workspace/widgets/workspace_editor_tabs.dart';
 import '../controllers/concept_label_controller.dart';
 import '../controllers/playground_controller.dart';
 import '../models/workspace_view_mode.dart';
-import 'monaco_code_editor_panel.dart';
 import 'code_flow_panel.dart';
 import 'error_panel.dart';
 import 'ide_bottom_panel.dart';
+import 'monaco_code_editor_panel.dart';
 import 'unified_workspace_explorer.dart';
 import 'workspace_diff_panel.dart';
 
@@ -171,12 +173,10 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
       }
       return;
     }
-
     if (event is PointerUpEvent) {
       _finishWireResize(activePointer, commit: true);
       return;
     }
-
     if (event is PointerCancelEvent) {
       _finishWireResize(activePointer, commit: false);
     }
@@ -206,6 +206,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
   }
 
   Widget _buildWireSash() {
+    final palette = WorkbenchPalette.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.resizeColumn,
       onEnter: (_) => _wireSashHighlighted.value = true,
@@ -229,9 +230,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 90),
                     width: highlighted ? 2 : 1,
-                    color: highlighted
-                        ? const Color(0xff82aaff)
-                        : const Color(0xff303641),
+                    color: highlighted ? palette.accent : palette.border,
                   );
                 },
               ),
@@ -244,12 +243,9 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
 
   Future<void> _openAddLabelDialog() async {
     if (_labelModeEnabled) {
-      setState(() {
-        _labelModeEnabled = false;
-      });
+      setState(() => _labelModeEnabled = false);
       await Future<void>.delayed(Duration.zero);
     }
-
     if (!mounted) return;
 
     final editor = widget.controller.textController;
@@ -294,81 +290,95 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
 
     final labelController = TextEditingController();
     String? errorText;
+    final l10n = context.l10n;
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('添加位置标签'),
-              content: SizedBox(
-                width: 480,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      wholeLine
-                          ? '当前文件第 ${lineIndex + 1} 行'
-                          : '当前文件第 ${lineIndex + 1} 行 · '
-                              '第 ${startColumn + 1}–$endColumn 列',
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '只绑定这一处源码；上方增删行、代码移动或附近内容变化后会智能重新定位。',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                    const SizedBox(height: 10),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: '当前源码位置',
-                        border: OutlineInputBorder(),
-                      ),
-                      child: SelectableText(
-                        targetSource,
-                        maxLines: 3,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: labelController,
-                      autofocus: true,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: '这个位置显示成什么',
-                        hintText: wholeLine ? '例如：读取商品并刷新页面' : '例如：等',
-                        errorText: errorText,
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                  ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(l10n.tr('添加位置标签', 'Add position label')),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  wholeLine
+                      ? l10n.tr(
+                          '当前文件第 ${lineIndex + 1} 行',
+                          'Current file · line ${lineIndex + 1}',
+                        )
+                      : l10n.tr(
+                          '当前文件第 ${lineIndex + 1} 行 · 第 ${startColumn + 1}–$endColumn 列',
+                          'Current file · line ${lineIndex + 1} · columns ${startColumn + 1}–$endColumn',
+                        ),
+                  style: Theme.of(context).textTheme.labelMedium,
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
+                const SizedBox(height: 4),
+                Text(
+                  l10n.tr(
+                    '只绑定这一处源码；上方增删行、代码移动或附近内容变化后会智能重新定位。',
+                    'This label is bound only to this source position and will relocate intelligently when lines are added, code moves, or nearby content changes.',
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                 ),
-                FilledButton(
-                  onPressed: () {
-                    if (labelController.text.trim().isEmpty) {
-                      setDialogState(() => errorText = '标签不能为空');
-                      return;
-                    }
-                    Navigator.of(dialogContext).pop(true);
-                  },
-                  child: const Text('保存'),
+                const SizedBox(height: 10),
+                InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: l10n.tr('当前源码位置', 'Current source position'),
+                    border: const OutlineInputBorder(),
+                  ),
+                  child: SelectableText(targetSource, maxLines: 3),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: labelController,
+                  autofocus: true,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: l10n.tr(
+                      '这个位置显示成什么',
+                      'Display this position as',
+                    ),
+                    hintText: wholeLine
+                        ? l10n.tr(
+                            '例如：读取商品并刷新页面',
+                            'For example: Load products and refresh the page',
+                          )
+                        : l10n.tr('例如：等', 'For example: await'),
+                    errorText: errorText,
+                    border: const OutlineInputBorder(),
+                  ),
                 ),
               ],
-            );
-          },
-        );
-      },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.tr('取消', 'Cancel')),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (labelController.text.trim().isEmpty) {
+                  setDialogState(
+                    () => errorText = l10n.tr(
+                      '标签不能为空',
+                      'The label cannot be empty.',
+                    ),
+                  );
+                  return;
+                }
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: Text(l10n.tr('保存', 'Save')),
+            ),
+          ],
+        ),
+      ),
     );
 
     if (saved == true) {
@@ -387,85 +397,101 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
   }
 
   Future<void> _openManageLabelsDialog() async {
+    final l10n = context.l10n;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) {
-        return AnimatedBuilder(
-          animation: _labels,
-          builder: (context, _) {
-            final language = ConceptLabelController.languageForPath(
-              widget.controller.activeFilePath,
-            );
-            final rules = _labels.rules
-                .where((rule) => rule.language == language)
-                .toList(growable: false);
+      builder: (dialogContext) => AnimatedBuilder(
+        animation: _labels,
+        builder: (context, _) {
+          final language = ConceptLabelController.languageForPath(
+            widget.controller.activeFilePath,
+          );
+          final rules = _labels.rules
+              .where((rule) => rule.language == language)
+              .toList(growable: false);
 
-            return AlertDialog(
-              title: Text('我的标签与容器名 · $language'),
-              content: SizedBox(
-                width: 620,
-                height: 380,
-                child: rules.isEmpty
-                    ? const Center(
-                        child: Text('还没有标签。先选择一段源码，再点“添加标签”。'),
-                      )
-                    : ListView.separated(
-                        itemCount: rules.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final rule = rules[index];
-                          final String subtitle;
-                          switch (rule.scope) {
-                            case ConceptLabelScope.language:
-                              subtitle = '旧版通用标签 · 已停止自动复用；重新添加即可改为位置专属';
-                              break;
-                            case ConceptLabelScope.line:
-                              subtitle = '${rule.filePath ?? ''} · '
-                                  '整行位置标签 · 第 ${rule.lineNumber ?? '-'} 行';
-                              break;
-                            case ConceptLabelScope.range:
-                              final column = rule.startColumn == null
-                                  ? '-'
-                                  : '${rule.startColumn! + 1}';
-                              subtitle = '${rule.filePath ?? ''} · '
-                                  '位置标签 · 第 ${rule.lineNumber ?? '-'} 行:$column';
-                              break;
-                            case ConceptLabelScope.node:
-                              subtitle = '${rule.filePath ?? ''} · '
-                                  '电线容器名称 · 原函数 ${rule.source}';
-                              break;
-                          }
-
-                          return ListTile(
-                            dense: true,
-                            title: Text('${rule.source}  →  ${rule.label}'),
-                            subtitle: Text(subtitle),
-                            trailing: IconButton(
-                              tooltip: '删除',
-                              onPressed: () => _labels.removeRule(rule.id),
-                              icon: const Icon(Icons.delete_outline, size: 19),
-                            ),
-                          );
-                        },
+          return AlertDialog(
+            title: Text(
+              '${l10n.tr('我的标签与容器名', 'My labels and container names')} · $language',
+            ),
+            content: SizedBox(
+              width: 620,
+              height: 380,
+              child: rules.isEmpty
+                  ? Center(
+                      child: Text(
+                        l10n.tr(
+                          '还没有标签。先选择一段源码，再点“添加标签”。',
+                          'No labels yet. Select source code first, then choose “Add label”.',
+                        ),
                       ),
+                    )
+                  : ListView.separated(
+                      itemCount: rules.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final rule = rules[index];
+                        final String subtitle;
+                        switch (rule.scope) {
+                          case ConceptLabelScope.language:
+                            subtitle = l10n.tr(
+                              '旧版通用标签 · 已停止自动复用；重新添加即可改为位置专属',
+                              'Legacy shared label · automatic reuse is disabled; add it again to make it position-specific',
+                            );
+                            break;
+                          case ConceptLabelScope.line:
+                            subtitle = l10n.tr(
+                              '${rule.filePath ?? ''} · 整行位置标签 · 第 ${rule.lineNumber ?? '-'} 行',
+                              '${rule.filePath ?? ''} · full-line position label · line ${rule.lineNumber ?? '-'}',
+                            );
+                            break;
+                          case ConceptLabelScope.range:
+                            final column = rule.startColumn == null
+                                ? '-'
+                                : '${rule.startColumn! + 1}';
+                            subtitle = l10n.tr(
+                              '${rule.filePath ?? ''} · 位置标签 · 第 ${rule.lineNumber ?? '-'} 行:$column',
+                              '${rule.filePath ?? ''} · position label · line ${rule.lineNumber ?? '-'}:$column',
+                            );
+                            break;
+                          case ConceptLabelScope.node:
+                            subtitle = l10n.tr(
+                              '${rule.filePath ?? ''} · 电线容器名称 · 原函数 ${rule.source}',
+                              '${rule.filePath ?? ''} · wire container name · source function ${rule.source}',
+                            );
+                            break;
+                        }
+
+                        return ListTile(
+                          dense: true,
+                          title: Text('${rule.source}  →  ${rule.label}'),
+                          subtitle: Text(subtitle),
+                          trailing: IconButton(
+                            tooltip: l10n.tr('删除', 'Delete'),
+                            onPressed: () => _labels.removeRule(rule.id),
+                            icon: const Icon(Icons.delete_outline, size: 19),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.tr('关闭', 'Close')),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('关闭'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return ColoredBox(
-      color: const Color(0xff111318),
+      color: palette.background,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -513,10 +539,10 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                         ),
                       ),
                     if (_showExplorer)
-                      const VerticalDivider(
+                      VerticalDivider(
                         width: 1,
                         thickness: 1,
-                        color: Color(0xff272d36),
+                        color: palette.border,
                       ),
                     Expanded(
                       child: _EditorArea(
@@ -539,15 +565,11 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                         onToggleWireMode: () {
                           setState(() {
                             _wireModeEnabled = !_wireModeEnabled;
-                            if (!_wireModeEnabled) {
-                              _wireModeFullscreen = false;
-                            }
+                            if (!_wireModeEnabled) _wireModeFullscreen = false;
                           });
                         },
                         onToggleLabelMode: () {
-                          setState(() {
-                            _labelModeEnabled = !_labelModeEnabled;
-                          });
+                          setState(() => _labelModeEnabled = !_labelModeEnabled);
                         },
                         onAddLabel: _openAddLabelDialog,
                         onManageLabels: _openManageLabelsDialog,
@@ -563,10 +585,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                       _buildWireSash(),
                       ValueListenableBuilder<double>(
                         valueListenable: _wirePanelLiveWidth,
-                        child: _buildWirePanel(
-                          context,
-                          fullscreen: false,
-                        ),
+                        child: _buildWirePanel(context, fullscreen: false),
                         builder: (context, liveWidth, child) {
                           final useDefaultLayoutWidth =
                               _wireActivePointerId == null &&
@@ -574,18 +593,15 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                           final width = useDefaultLayoutWidth
                               ? wirePanelWidth
                               : _clampWirePanelWidth(liveWidth);
-                          return SizedBox(
-                            width: width,
-                            child: child,
-                          );
+                          return SizedBox(width: width, child: child);
                         },
                       ),
                     ],
                     if (_showPreview)
-                      const VerticalDivider(
+                      VerticalDivider(
                         width: 1,
                         thickness: 1,
-                        color: Color(0xff272d36),
+                        color: palette.border,
                       ),
                     if (_showPreview)
                       SizedBox(
@@ -608,44 +624,30 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
     );
   }
 
-  ThemeData _wireTheme() {
-    const background = Color(0xff111318);
-    const surface = Color(0xff15191f);
-    const surfaceHigh = Color(0xff1d2632);
-    const selected = Color(0xff22324a);
-    const border = Color(0xff2b333e);
-    const text = Color(0xffd7dde8);
-    const muted = Color(0xff8f98a8);
-    const accent = Color(0xff82aaff);
-
-    final base = ThemeData.dark(useMaterial3: true);
+  ThemeData _wireTheme(BuildContext context) {
+    final base = Theme.of(context);
+    final palette = WorkbenchPalette.of(context);
     final scheme = base.colorScheme.copyWith(
-      primary: accent,
-      onPrimary: const Color(0xff0d1827),
-      primaryContainer: selected,
-      onPrimaryContainer: const Color(0xffdbe8ff),
-      secondaryContainer: const Color(0xff1c2d45),
-      onSecondaryContainer: text,
-      surface: background,
-      onSurface: text,
-      surfaceContainerLow: surface,
-      surfaceContainerHighest: surfaceHigh,
-      onSurfaceVariant: muted,
-      outline: const Color(0xff445064),
-      outlineVariant: border,
-      tertiary: const Color(0xffc792ea),
+      primary: palette.accent,
+      primaryContainer: palette.selection,
+      surface: palette.background,
+      onSurface: palette.text,
+      surfaceContainerLow: palette.surface,
+      surfaceContainerHighest: palette.surfaceRaised,
+      onSurfaceVariant: palette.muted,
+      outlineVariant: palette.border,
       surfaceTint: Colors.transparent,
     );
 
     return base.copyWith(
       colorScheme: scheme,
-      scaffoldBackgroundColor: background,
-      dividerTheme: const DividerThemeData(
-        color: border,
+      scaffoldBackgroundColor: palette.background,
+      dividerTheme: DividerThemeData(
+        color: palette.border,
         space: 1,
         thickness: 1,
       ),
-      iconTheme: const IconThemeData(color: muted),
+      iconTheme: IconThemeData(color: palette.muted),
     );
   }
 
@@ -653,17 +655,18 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
     BuildContext context, {
     required bool fullscreen,
   }) {
-    final wireTheme = _wireTheme();
-    final scheme = wireTheme.colorScheme;
+    final wireTheme = _wireTheme(context);
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
 
     Widget wireLabelButton({required bool compact}) {
       return Tooltip(
-        message: _wireLabelModeEnabled ? '关闭电线容器源码标签' : '开启电线容器源码标签',
+        message: _wireLabelModeEnabled
+            ? l10n.tr('关闭电线容器源码标签', 'Hide wire-container source labels')
+            : l10n.tr('开启电线容器源码标签', 'Show wire-container source labels'),
         child: IconButton(
           key: ValueKey(
-            _wireLabelModeEnabled
-                ? 'wire-label-mode-on'
-                : 'wire-label-mode-off',
+            _wireLabelModeEnabled ? 'wire-label-mode-on' : 'wire-label-mode-off',
           ),
           visualDensity: VisualDensity.compact,
           padding: EdgeInsets.zero,
@@ -672,18 +675,14 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
             height: compact ? 34 : 36,
           ),
           onPressed: () {
-            setState(() {
-              _wireLabelModeEnabled = !_wireLabelModeEnabled;
-            });
+            setState(() => _wireLabelModeEnabled = !_wireLabelModeEnabled);
           },
           icon: Icon(
             _wireLabelModeEnabled
                 ? Icons.label_rounded
                 : Icons.label_outline_rounded,
             size: 18,
-            color: _wireLabelModeEnabled
-                ? const Color(0xff82aaff)
-                : const Color(0xff8f98a8),
+            color: _wireLabelModeEnabled ? palette.accent : palette.muted,
           ),
         ),
       );
@@ -698,7 +697,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
     return Theme(
       data: wireTheme,
       child: Material(
-        color: scheme.surface,
+        color: palette.background,
         child: Stack(
           children: [
             Column(
@@ -708,32 +707,35 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                   Container(
                     height: 40,
                     padding: const EdgeInsets.only(left: 12, right: 4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xff111318),
+                    decoration: BoxDecoration(
+                      color: palette.background,
                       border: Border(
-                        bottom: BorderSide(color: Color(0xff2b333e)),
+                        bottom: BorderSide(color: palette.border),
                       ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.account_tree_outlined,
                           size: 17,
-                          color: Color(0xff82aaff),
+                          color: palette.accent,
                         ),
                         const SizedBox(width: 8),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            '电线模式',
+                            l10n.tr('电线模式', 'Wire Mode'),
                             style: TextStyle(
-                              color: Color(0xffd7dde8),
+                              color: palette.text,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
                         Tooltip(
-                          message: '拖动左侧边缘可调整宽度；双击恢复默认宽度',
+                          message: l10n.tr(
+                            '拖动左侧边缘可调整宽度；双击恢复默认宽度',
+                            'Drag the left edge to resize; double-click to restore the default width',
+                          ),
                           child: ValueListenableBuilder<double>(
                             valueListenable: _wirePanelLiveWidth,
                             builder: (context, liveWidth, _) {
@@ -742,8 +744,8 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                                   : liveWidth;
                               return Text(
                                 '${_clampWirePanelWidth(width).round()} px',
-                                style: const TextStyle(
-                                  color: Color(0xff697386),
+                                style: TextStyle(
+                                  color: palette.muted,
                                   fontSize: 10,
                                 ),
                               );
@@ -753,20 +755,18 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                         const SizedBox(width: 4),
                         wireLabelButton(compact: true),
                         IconButton(
-                          tooltip: '全屏显示电线模式',
+                          tooltip: l10n.tr(
+                            '全屏显示电线模式',
+                            'Show Wire Mode fullscreen',
+                          ),
                           visualDensity: VisualDensity.compact,
                           onPressed: () {
-                            setState(() {
-                              _wireModeFullscreen = true;
-                            });
+                            setState(() => _wireModeFullscreen = true);
                           },
-                          icon: const Icon(
-                            Icons.fullscreen_rounded,
-                            size: 19,
-                          ),
+                          icon: const Icon(Icons.fullscreen_rounded, size: 19),
                         ),
                         IconButton(
-                          tooltip: '关闭电线模式',
+                          tooltip: l10n.tr('关闭电线模式', 'Close Wire Mode'),
                           visualDensity: VisualDensity.compact,
                           onPressed: () {
                             setState(() {
@@ -787,14 +787,12 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                 right: 10,
                 bottom: 10,
                 child: Material(
-                  color: const Color(0xff15191f).withOpacity(0.94),
+                  color: palette.surfaceRaised.withValues(alpha: .94),
                   elevation: 3,
                   borderRadius: BorderRadius.circular(9),
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(
-                        color: const Color(0xff2b333e),
-                      ),
+                      border: Border.all(color: palette.border),
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: Row(
@@ -802,7 +800,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                       children: [
                         wireLabelButton(compact: true),
                         IconButton(
-                          tooltip: '退出全屏',
+                          tooltip: l10n.tr('退出全屏', 'Exit fullscreen'),
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
@@ -810,9 +808,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                             height: 34,
                           ),
                           onPressed: () {
-                            setState(() {
-                              _wireModeFullscreen = false;
-                            });
+                            setState(() => _wireModeFullscreen = false);
                           },
                           icon: const Icon(
                             Icons.fullscreen_exit_rounded,
@@ -820,7 +816,7 @@ class _WidePlaygroundLayoutState extends State<WidePlaygroundLayout> {
                           ),
                         ),
                         IconButton(
-                          tooltip: '关闭电线模式',
+                          tooltip: l10n.tr('关闭电线模式', 'Close Wire Mode'),
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
@@ -980,28 +976,23 @@ class _EditorCommandBar extends StatelessWidget {
   final VoidCallback onAddLabel;
   final VoidCallback onManageLabels;
 
-  static const _background = Color(0xff111318);
-  static const _border = Color(0xff272d36);
-  static const _muted = Color(0xff8f98a8);
-  static const _text = Color(0xffcbd3df);
-  static const _accent = Color(0xff82aaff);
-  static const _selected = Color(0xff22324a);
-
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
     return Container(
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 5),
-      decoration: const BoxDecoration(
-        color: _background,
-        border: Border(
-          bottom: BorderSide(color: _border),
-        ),
+      decoration: BoxDecoration(
+        color: palette.background,
+        border: Border(bottom: BorderSide(color: palette.border)),
       ),
       child: Row(
         children: [
           _EditorBarIconButton(
-            tooltip: explorerVisible ? '收起文件树' : '展开文件树',
+            tooltip: explorerVisible
+                ? l10n.tr('收起文件树', 'Collapse file tree')
+                : l10n.tr('展开文件树', 'Expand file tree'),
             icon:
                 explorerVisible ? Icons.menu_open_rounded : Icons.menu_rounded,
             onPressed: onToggleExplorer,
@@ -1014,73 +1005,78 @@ class _EditorCommandBar extends StatelessWidget {
                   child: Text(
                     controller.activeFilePath,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _text,
+                    style: TextStyle(
+                      color: palette.text,
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
                 if (controller.workspace.isDirty)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 7),
-                    child: Icon(
-                      Icons.circle,
-                      size: 6,
-                      color: _accent,
-                    ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 7),
+                    child: Icon(Icons.circle, size: 6, color: palette.accent),
                   ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          const SizedBox(
+          SizedBox(
             height: 20,
             child: VerticalDivider(
               width: 1,
               thickness: 1,
-              color: _border,
+              color: palette.border,
             ),
           ),
           const SizedBox(width: 5),
           _EditorBarIconButton(
             key: const ValueKey('add-concept-label'),
-            tooltip: '给选中代码 / 当前行添加标签',
+            tooltip: l10n.tr(
+              '给选中代码 / 当前行添加标签',
+              'Add a label to the selection / current line',
+            ),
             icon: Icons.new_label_outlined,
             onPressed: onAddLabel,
           ),
           _EditorBarIconButton(
             key: const ValueKey('manage-concept-labels'),
-            tooltip: '管理标签',
+            tooltip: l10n.tr('管理标签', 'Manage labels'),
             icon: Icons.label_important_outline,
             onPressed: onManageLabels,
           ),
           _EditorBarIconButton(
             key: const ValueKey('label-mode-toggle'),
-            tooltip: labelModeEnabled ? '切回原代码视角' : '显示标签视角',
+            tooltip: labelModeEnabled
+                ? l10n.tr('切回原代码视角', 'Show original code')
+                : l10n.tr('显示标签视角', 'Show label view'),
             icon: labelModeEnabled ? Icons.label : Icons.label_outline,
             selected: labelModeEnabled,
             onPressed: onToggleLabelMode,
           ),
           const SizedBox(width: 4),
-          const SizedBox(
+          SizedBox(
             height: 20,
             child: VerticalDivider(
               width: 1,
               thickness: 1,
-              color: _border,
+              color: palette.border,
             ),
           ),
           const SizedBox(width: 5),
           _EditorBarIconButton(
             key: const ValueKey('wire-mode-toggle'),
-            tooltip: wireModeEnabled ? '关闭电线模式' : '打开电线模式',
+            tooltip: wireModeEnabled
+                ? l10n.tr('关闭电线模式', 'Close Wire Mode')
+                : l10n.tr('打开电线模式', 'Open Wire Mode'),
             icon: wireModeEnabled ? Icons.cable : Icons.cable_outlined,
             selected: wireModeEnabled,
             onPressed: onToggleWireMode,
           ),
           _EditorBarIconButton(
-            tooltip: previewVisible ? '收起设备预览' : '展开设备预览',
+            tooltip: previewVisible
+                ? l10n.tr('收起设备预览', 'Collapse device preview')
+                : l10n.tr('展开设备预览', 'Expand device preview'),
             icon: Icons.phone_android_outlined,
             selected: previewVisible,
             onPressed: onTogglePreview,
@@ -1107,6 +1103,7 @@ class _EditorBarIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return IconButton(
       tooltip: tooltip,
       visualDensity: VisualDensity.compact,
@@ -1114,10 +1111,8 @@ class _EditorBarIconButton extends StatelessWidget {
         minimumSize: const Size(31, 30),
         maximumSize: const Size(31, 30),
         padding: EdgeInsets.zero,
-        foregroundColor:
-            selected ? _EditorCommandBar._accent : _EditorCommandBar._muted,
-        backgroundColor:
-            selected ? _EditorCommandBar._selected : Colors.transparent,
+        foregroundColor: selected ? palette.accent : palette.muted,
+        backgroundColor: selected ? palette.selection : Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(5),
         ),
@@ -1139,27 +1134,20 @@ class _PreviewArea extends StatelessWidget {
   final FlutterRunnerController runner;
   final VoidCallback onClose;
 
-  static const _background = Color(0xff111318);
-  static const _surface = Color(0xff15191f);
-  static const _border = Color(0xff272d36);
-  static const _muted = Color(0xff8f98a8);
-  static const _text = Color(0xffcbd3df);
-  static const _accent = Color(0xff82aaff);
-
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
     return ColoredBox(
-      color: _background,
+      color: palette.background,
       child: Column(
         children: [
           Container(
             height: 40,
             padding: const EdgeInsets.only(left: 10, right: 4),
-            decoration: const BoxDecoration(
-              color: _background,
-              border: Border(
-                bottom: BorderSide(color: _border),
-              ),
+            decoration: BoxDecoration(
+              color: palette.background,
+              border: Border(bottom: BorderSide(color: palette.border)),
             ),
             child: Row(
               children: [
@@ -1167,18 +1155,18 @@ class _PreviewArea extends StatelessWidget {
                   width: 26,
                   height: 26,
                   decoration: BoxDecoration(
-                    color: _surface,
+                    color: palette.surfaceRaised,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: _border),
+                    border: Border.all(color: palette.border),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.phone_android_outlined,
                     size: 15,
-                    color: _accent,
+                    color: palette.accent,
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1186,7 +1174,7 @@ class _PreviewArea extends StatelessWidget {
                       Text(
                         'Device Preview',
                         style: TextStyle(
-                          color: _text,
+                          color: palette.text,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1194,7 +1182,7 @@ class _PreviewArea extends StatelessWidget {
                       Text(
                         'Flutter runtime',
                         style: TextStyle(
-                          color: _muted,
+                          color: palette.muted,
                           fontSize: 9.5,
                           height: 1.05,
                         ),
@@ -1203,10 +1191,10 @@ class _PreviewArea extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: '收起设备预览',
+                  tooltip: l10n.tr('收起设备预览', 'Collapse device preview'),
                   visualDensity: VisualDensity.compact,
                   style: IconButton.styleFrom(
-                    foregroundColor: _muted,
+                    foregroundColor: palette.muted,
                     minimumSize: const Size(30, 30),
                     maximumSize: const Size(30, 30),
                     padding: EdgeInsets.zero,

@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
-
 import '../../assets/widgets/asset_manager_dialog.dart';
 import '../../packages/widgets/package_manager_dialog.dart';
 import '../../playground/controllers/playground_controller.dart';
@@ -37,15 +37,7 @@ class ConceptModeScreen extends StatefulWidget {
     this.workspaceStore,
   });
 
-  /// When supplied, Concept Mode opens a selected Flutter subproject projected
-  /// from a larger repository. The projected Workspace keeps a runnable Flutter
-  /// root while Concept Explorer presents `lib/` as App and an optional backend
-  /// source tree as the sibling Backend concept.
   final ConceptProjectProjection? projection;
-
-  /// Optional persistence boundary for an existing project from Project Mode.
-  /// Passing the project's keyed store makes Concept Mode edit the same saved
-  /// Flutter Workspace instead of creating a detached copy.
   final WorkspaceSnapshotStore? workspaceStore;
 
   @override
@@ -135,18 +127,24 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
         _pendingWebPreviewTab = tab;
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              '浏览器阻止了网页预览标签页。请允许本站打开弹窗后重新运行。',
+              context.l10n.tr(
+                '浏览器阻止了网页预览标签页。请允许本站打开弹窗后重新运行。',
+                'The browser blocked the web preview tab. Allow pop-ups for this site and run again.',
+              ),
             ),
           ),
         );
       }
     } else if (target.opensExternalTab && runner.isMock && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Mock Runner 没有真实网页 Preview URL。连接真实 Runner 后可运行网页设备。',
+            context.l10n.tr(
+              'Mock Runner 没有真实网页 Preview URL。连接真实 Runner 后可运行网页设备。',
+              'Mock Runner has no real web Preview URL. Connect a real Runner to run the web target.',
+            ),
           ),
         ),
       );
@@ -160,7 +158,14 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     if (persistence == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前环境没有可用的本地项目库。')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '当前环境没有可用的本地项目库。',
+              'No local project library is available in the current environment.',
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -175,7 +180,14 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     final snapshot = persistence.snapshotStore.load(project.storageKey);
     if (snapshot == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${project.name} 还没有可打开的 Workspace 快照。')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '${project.name} 还没有可打开的 Workspace 快照。',
+              '${project.name} does not have an available Workspace snapshot yet.',
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -183,7 +195,14 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     final candidates = _projectionService.detectFlutterProjects(snapshot);
     if (candidates.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${project.name} 不是可运行 Flutter 项目。')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '${project.name} 不是可运行 Flutter 项目。',
+              '${project.name} is not a runnable Flutter project.',
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -238,7 +257,14 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     if (persistence == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前环境没有可用的本地项目库。')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '当前环境没有可用的本地项目库。',
+              'No local project library is available in the current environment.',
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -274,7 +300,14 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('从 Git 打开失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '从 Git 打开失败：$error',
+              'Failed to open from Git: $error',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -324,27 +357,31 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
   @override
   Widget build(BuildContext context) {
     final sourceLabel = widget.projection?.context.sourceLabel;
+    final l10n = context.l10n;
 
     return Scaffold(
       key: const ValueKey('concept-mode-screen'),
       appBar: AppBar(
         leading: IconButton(
           key: const ValueKey('concept-mode-back'),
-          tooltip: '返回主页',
+          tooltip: l10n.tr('返回主页', 'Back to home'),
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.arrow_back_rounded),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '概念模式',
-              style: TextStyle(fontWeight: FontWeight.w700),
+            Text(
+              l10n.tr('概念模式', 'Concept Mode'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             Text(
               sourceLabel == null
-                  ? 'Concept Mode · 应用 + 后端'
-                  : '$sourceLabel · 应用 + 后端',
+                  ? l10n.tr('概念模式 · 应用 + 后端', 'Concept Mode · App + Backend')
+                  : l10n.tr(
+                      '$sourceLabel · 应用 + 后端',
+                      '$sourceLabel · App + Backend',
+                    ),
               key: sourceLabel == null
                   ? null
                   : const ValueKey('concept-source-project'),
@@ -353,16 +390,17 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
           ],
         ),
         actions: [
+          const AppLanguageToggleButton(compact: true),
           const AppThemeToggleButton(compact: true),
           IconButton(
             key: const ValueKey('concept-open-existing-project'),
-            tooltip: '打开现有项目',
+            tooltip: l10n.tr('打开现有项目', 'Open existing project'),
             onPressed: () => unawaited(_openExistingProject()),
             icon: const Icon(Icons.folder_open_rounded),
           ),
           IconButton(
             key: const ValueKey('concept-open-git-project'),
-            tooltip: '从 Git 打开',
+            tooltip: l10n.tr('从 Git 打开', 'Open from Git'),
             onPressed: () => unawaited(_openGitProject()),
             icon: const Icon(Icons.cloud_download_outlined),
           ),
@@ -387,7 +425,7 @@ class _ConceptModeScreenState extends State<ConceptModeScreen> {
                 runner: runner,
               ),
               icon: const Icon(Icons.extension_outlined, size: 17),
-              label: const Text('依赖'),
+              label: Text(l10n.tr('依赖', 'Dependencies')),
             ),
           ),
         ],
@@ -442,10 +480,13 @@ class _ConceptBoundaryBanner extends StatelessWidget {
             color: scheme.onPrimaryContainer,
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
-              '概念模式直接展示应用与后端源码。Assets、依赖和运行设备继续通过界面管理；pubspec、lock、平台目录仍由系统隐藏处理。',
-              style: TextStyle(fontSize: 12.5),
+              context.l10n.tr(
+                '概念模式直接展示应用与后端源码。Assets、依赖和运行设备继续通过界面管理；pubspec、lock、平台目录仍由系统隐藏处理。',
+                'Concept Mode shows app and backend source directly. Assets, dependencies, and run targets remain managed through the UI, while pubspec, lock files, and platform folders stay hidden by the system.',
+              ),
+              style: const TextStyle(fontSize: 12.5),
             ),
           ),
         ],
@@ -468,6 +509,7 @@ class _ConceptRunnerBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return Material(
       color: scheme.surface,
@@ -489,12 +531,16 @@ class _ConceptRunnerBar extends StatelessWidget {
                 key: const ValueKey('concept-run-button'),
                 onPressed: runner.canRun ? onRun : null,
                 icon: const Icon(Icons.play_arrow_rounded),
-                label: Text(runner.isMock ? 'Run Mock' : 'Run'),
+                label: Text(
+                  runner.isMock
+                      ? l10n.tr('模拟运行', 'Run Mock')
+                      : l10n.tr('运行', 'Run'),
+                ),
               ),
               const SizedBox(width: 8),
               PopupMenuButton<RunnerPreviewTarget>(
                 key: const ValueKey('concept-device-selector'),
-                tooltip: '选择运行设备',
+                tooltip: l10n.tr('选择运行设备', 'Choose run target'),
                 initialValue: runner.previewTarget,
                 onSelected: onDeviceSelected,
                 itemBuilder: (context) => [
@@ -526,7 +572,12 @@ class _ConceptRunnerBar extends StatelessWidget {
                     children: [
                       Icon(_deviceIcon(runner.previewTarget), size: 18),
                       const SizedBox(width: 7),
-                      Text('设备 · ${runner.previewTarget.label}'),
+                      Text(
+                        l10n.tr(
+                          '设备 · ${runner.previewTarget.label}',
+                          'Device · ${runner.previewTarget.label}',
+                        ),
+                      ),
                       const SizedBox(width: 4),
                       const Icon(Icons.arrow_drop_down_rounded, size: 18),
                     ],
@@ -550,7 +601,7 @@ class _ConceptRunnerBar extends StatelessWidget {
               ),
               IconButton(
                 key: const ValueKey('concept-stop'),
-                tooltip: 'Stop',
+                tooltip: l10n.tr('停止', 'Stop'),
                 onPressed: runner.canStop ? runner.stop : null,
                 icon: const Icon(Icons.stop_rounded),
               ),
@@ -681,10 +732,16 @@ class _ConceptCompactLayout extends StatelessWidget {
       child: Column(
         key: const ValueKey('concept-compact-layout'),
         children: [
-          const TabBar(
+          TabBar(
             tabs: [
-              Tab(icon: Icon(Icons.code_rounded), text: '代码'),
-              Tab(icon: Icon(Icons.phone_android_rounded), text: '设备'),
+              Tab(
+                icon: const Icon(Icons.code_rounded),
+                text: context.l10n.tr('代码', 'Code'),
+              ),
+              Tab(
+                icon: const Icon(Icons.phone_android_rounded),
+                text: context.l10n.tr('设备', 'Device'),
+              ),
             ],
           ),
           Expanded(
@@ -748,7 +805,10 @@ class _ConceptDeviceArea extends StatelessWidget {
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      'Device Preview · ${runner.previewTarget.label}',
+                      context.l10n.tr(
+                        '设备预览 · ${runner.previewTarget.label}',
+                        'Device Preview · ${runner.previewTarget.label}',
+                      ),
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,

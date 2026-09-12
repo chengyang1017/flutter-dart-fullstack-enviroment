@@ -67,23 +67,46 @@ Future<void> main() async {
 
   final authenticator = CompositeWorkspaceAuthenticator(authenticators);
   final allowedOrigin = environment['ALLOWED_ORIGIN'] ?? '*';
+  final adminAllowedOrigin =
+      environment['WORKSPACE_ADMIN_ALLOWED_ORIGIN'] ?? '*';
+  final workspaceStore = FileWorkspaceStore(
+    root,
+    temporaryWorkspaceTtl: Duration(hours: temporaryTtlHours),
+  );
+  final secretStore = FileWorkspaceSecretStore(
+    root,
+    masterKey: decodedSecretMasterKey,
+  );
   final workspaceHandler = WorkspaceStorageHttpServer(
-    store: FileWorkspaceStore(
-      root,
-      temporaryWorkspaceTtl: Duration(hours: temporaryTtlHours),
-    ),
-    secretStore: FileWorkspaceSecretStore(
-      root,
-      masterKey: decodedSecretMasterKey,
-    ),
+    store: workspaceStore,
+    secretStore: secretStore,
     authenticator: authenticator,
     allowedOrigin: allowedOrigin,
   );
-  final handler = WorkspaceAuthHttpHandler(
+  final authHandler = WorkspaceAuthHttpHandler(
     accounts: accounts,
     workspaceHandler: workspaceHandler,
     legacyAuthenticator: legacyAuthenticator,
     allowedOrigin: allowedOrigin,
+  );
+
+  final adminUsernames = (environment['WORKSPACE_ADMIN_USERNAMES'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty)
+      .toSet();
+  final adminStore = WorkspaceAdminStore(
+    root: root,
+    workspaceStore: workspaceStore,
+    secretStore: secretStore,
+  );
+  final handler = WorkspaceAdminHttpHandler(
+    store: adminStore,
+    accounts: accounts,
+    authenticator: authenticator,
+    fallback: authHandler.handle,
+    adminUsernames: adminUsernames,
+    allowedOrigin: adminAllowedOrigin,
   );
 
   final server = await HttpServer.bind(host, port);
@@ -95,6 +118,12 @@ Future<void> main() async {
   stdout.writeln('Workspace account sessions: $sessionTtlDays days');
   stdout.writeln('Workspace password hashing: PBKDF2-HMAC-SHA256');
   stdout.writeln('Workspace secret vault: AES-GCM-256 enabled');
+  stdout.writeln(
+    adminUsernames.isEmpty
+        ? 'Workspace admin API: disabled (WORKSPACE_ADMIN_USERNAMES is empty)'
+        : 'Workspace admin API: enabled for ${adminUsernames.join(', ')}',
+  );
+  stdout.writeln('Workspace admin API CORS: $adminAllowedOrigin');
   if (authTokens != null && authTokens.trim().isNotEmpty) {
     stdout.writeln('Static development bearer identities: enabled');
     stdout.writeln('Legacy account claiming: enabled');

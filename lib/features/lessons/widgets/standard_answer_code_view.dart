@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:re_editor/re_editor.dart';
 
+import '../../../core/theme/workbench_palette.dart';
 import '../../playground/highlighting/flutter_dart_highlight.dart';
 import '../controller/lesson_controller.dart';
 import '../models/code_reference.dart';
@@ -25,9 +26,8 @@ class StandardAnswerCodeView extends StatefulWidget {
   final OpenCodeDefinition onOpenDefinition;
 
   @override
-  State<StandardAnswerCodeView> createState() {
-    return _StandardAnswerCodeViewState();
-  }
+  State<StandardAnswerCodeView> createState() =>
+      _StandardAnswerCodeViewState();
 }
 
 class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
@@ -36,48 +36,28 @@ class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
   @override
   void initState() {
     super.initState();
-
     _controller = CodeLineEditingController.fromText(
       widget.code,
-      const CodeLineOptions(
-        indentSize: 4,
-      ),
+      const CodeLineOptions(indentSize: 4),
     );
-
     _scheduleJump();
   }
 
   @override
-  void didUpdateWidget(
-    covariant StandardAnswerCodeView oldWidget,
-  ) {
+  void didUpdateWidget(covariant StandardAnswerCodeView oldWidget) {
     super.didUpdateWidget(oldWidget);
-
     if (oldWidget.code != widget.code) {
       _controller.text = widget.code;
     }
-
     if (oldWidget.code != widget.code ||
-        !_sameTarget(
-          oldWidget.navigationTarget,
-          widget.navigationTarget,
-        )) {
+        !_sameTarget(oldWidget.navigationTarget, widget.navigationTarget)) {
       _scheduleJump();
     }
   }
 
-  bool _sameTarget(
-    CodeReference? first,
-    CodeReference? second,
-  ) {
-    if (identical(first, second)) {
-      return true;
-    }
-
-    if (first == null || second == null) {
-      return false;
-    }
-
+  bool _sameTarget(CodeReference? first, CodeReference? second) {
+    if (identical(first, second)) return true;
+    if (first == null || second == null) return false;
     return first.fileName == second.fileName &&
         first.stepIndex == second.stepIndex &&
         first.line == second.line &&
@@ -87,15 +67,12 @@ class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
 
   void _scheduleJump() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _jumpToTarget();
-      }
+      if (mounted) _jumpToTarget();
     });
   }
 
   void _jumpToTarget() {
     final target = widget.navigationTarget;
-
     if (target == null ||
         !target.isStandardAnswer ||
         target.fileName != widget.fileName ||
@@ -107,29 +84,18 @@ class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n')
         .split('\n');
-
-    if (lines.isEmpty) {
-      return;
-    }
+    if (lines.isEmpty) return;
 
     final lineIndex = (target.line - 1).clamp(0, lines.length - 1).toInt();
-
     final offset =
         (target.column - 1).clamp(0, lines[lineIndex].length).toInt();
-
-    final position = CodeLinePosition(
-      index: lineIndex,
-      offset: offset,
-    );
+    final position = CodeLinePosition(index: lineIndex, offset: offset);
 
     _controller.selection = CodeLineSelection.collapsed(
       index: lineIndex,
       offset: offset,
     );
-
-    _controller.makePositionCenterIfInvisible(
-      position,
-    );
+    _controller.makePositionCenterIfInvisible(position);
   }
 
   @override
@@ -140,6 +106,9 @@ class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
     return CodeDefinitionCtrlClickRegion(
       lessonController: widget.lessonController,
       editorController: _controller,
@@ -148,7 +117,7 @@ class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
       sourceIsStandardAnswer: true,
       onOpenDefinition: widget.onOpenDefinition,
       child: ColoredBox(
-        color: const Color(0xff111318),
+        color: palette.editorBackground,
         child: CodeEditor(
           controller: _controller,
           readOnly: true,
@@ -157,10 +126,7 @@ class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
           autocompleteSymbols: false,
           chunkAnalyzer: NonCodeChunkAnalyzer(),
           autofocus: false,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           style: CodeEditorStyle(
             fontFamily: 'Consolas',
             fontFamilyFallback: const [
@@ -171,20 +137,18 @@ class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
             ],
             fontSize: 15,
             fontHeight: 1.5,
-            textColor: const Color(0xffd6deeb),
-            backgroundColor: const Color(0xff111318),
-            cursorColor: const Color(0xff82aaff),
+            textColor: palette.editorText,
+            backgroundColor: palette.editorBackground,
+            cursorColor: palette.accent,
             cursorWidth: 2,
-            cursorLineColor: const Color(0xff28374d),
-            selectionColor: const Color(0xff334b68),
-            highlightColor: const Color(0xff3b4252),
+            cursorLineColor: palette.surfaceRaised,
+            selectionColor: palette.selection,
+            highlightColor: palette.selection,
             codeTheme: CodeHighlightTheme(
               languages: {
-                'dart': CodeHighlightThemeMode(
-                  mode: flutterDartMode,
-                ),
+                'dart': CodeHighlightThemeMode(mode: flutterDartMode),
               },
-              theme: vscodeDark2026Theme,
+              theme: dark ? vscodeDark2026Theme : vscodeLight2026Theme,
             ),
           ),
           indicatorBuilder: (
@@ -196,34 +160,31 @@ class _StandardAnswerCodeViewState extends State<StandardAnswerCodeView> {
             return DefaultCodeLineNumber(
               controller: editingController,
               notifier: notifier,
-              textStyle: const TextStyle(
+              textStyle: TextStyle(
                 fontFamily: 'Consolas',
-                fontFamilyFallback: [
+                fontFamilyFallback: const [
                   'Cascadia Mono',
                   'Cascadia Code',
                   'Courier New',
                 ],
                 fontSize: 14,
                 height: 1.5,
-                color: Color(0xff5c6370),
+                color: palette.lineNumber,
               ),
-              focusedTextStyle: const TextStyle(
+              focusedTextStyle: TextStyle(
                 fontFamily: 'Consolas',
-                fontFamilyFallback: [
+                fontFamilyFallback: const [
                   'Cascadia Mono',
                   'Cascadia Code',
                   'Courier New',
                 ],
                 fontSize: 14,
                 height: 1.5,
-                color: Color(0xffabb2bf),
+                color: palette.activeLineNumber,
               ),
             );
           },
-          leadingDivider: Container(
-            width: 1,
-            color: const Color(0xff2c313c),
-          ),
+          leadingDivider: Container(width: 1, color: palette.border),
         ),
       ),
     );
