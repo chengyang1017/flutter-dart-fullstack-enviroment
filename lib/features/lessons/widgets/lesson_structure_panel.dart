@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../controller/lesson_controller.dart';
+import '../controllers/lesson_controller.dart';
 import 'lesson_result_panel.dart';
 
 class LessonStructurePanel extends StatelessWidget {
