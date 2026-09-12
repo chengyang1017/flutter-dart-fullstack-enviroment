@@ -102,6 +102,7 @@ Future<void> main() async {
   );
   final handler = WorkspaceAdminHttpHandler(
     store: adminStore,
+    accounts: accounts,
     authenticator: authenticator,
     fallback: authHandler.handle,
     adminUsernames: adminUsernames,
