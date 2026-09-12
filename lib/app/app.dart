@@ -100,7 +100,7 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       navigatorObservers: [monacoRouteObserver],
-      title: 'Flutter UI Playground',
+      title: 'Flutter Workbench',
       debugShowCheckedModeBanner: false,
       theme: AppThemeData.light,
       darkTheme: AppThemeData.deepNight,
