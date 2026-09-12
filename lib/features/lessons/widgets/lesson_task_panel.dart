@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../controller/lesson_controller.dart';
 
 class LessonTaskPanel extends StatelessWidget {
@@ -8,7 +9,9 @@ class LessonTaskPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final step = controller.lesson.steps[controller.currentStepIndex];
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -18,7 +21,10 @@ class LessonTaskPanel extends StatelessWidget {
         const SizedBox(height: 12),
         Text(step.instruction),
         const SizedBox(height: 16),
-        Text('知识解释', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          l10n.tr('知识解释', 'Explanation'),
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: 6),
         Text(step.explanation),
         const SizedBox(height: 12),
@@ -28,7 +34,10 @@ class LessonTaskPanel extends StatelessWidget {
               step.relatedFiles.map((file) => Chip(label: Text(file))).toList(),
         ),
         const SizedBox(height: 20),
-        Text('完成要求', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          l10n.tr('完成要求', 'Requirements'),
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: 8),
         ...step.requirements.map(
           (requirement) => ListTile(
@@ -40,7 +49,10 @@ class LessonTaskPanel extends StatelessWidget {
         ),
         if (controller.visibleHintCount > 0) ...[
           const Divider(),
-          Text('提示', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            l10n.tr('提示', 'Hints'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           ...step.hints
               .take(controller.visibleHintCount)
