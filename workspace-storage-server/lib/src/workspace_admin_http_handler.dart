@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'workspace_account_store.dart';
 import 'workspace_admin_store.dart';
 import 'workspace_authenticator.dart';
 import 'workspace_store.dart';
@@ -13,6 +14,7 @@ import 'workspace_store.dart';
 class WorkspaceAdminHttpHandler {
   WorkspaceAdminHttpHandler({
     required this.store,
+    required this.accounts,
     required this.authenticator,
     required this.fallback,
     required Iterable<String> adminUsernames,
@@ -23,6 +25,7 @@ class WorkspaceAdminHttpHandler {
             .toSet();
 
   final WorkspaceAdminStore store;
+  final FileWorkspaceAccountStore accounts;
   final WorkspaceAuthenticator authenticator;
   final Future<void> Function(HttpRequest request) fallback;
   final Set<String> adminUsernames;
@@ -49,6 +52,13 @@ class WorkspaceAdminHttpHandler {
         return;
       }
 
+      if (request.method == 'POST' &&
+          segments.length == 2 &&
+          segments[1] == 'login') {
+        await _handleAdminLogin(request);
+        return;
+      }
+
       final principal = await authenticator.authenticatePrincipal(request);
       if (principal == null) {
         await _sendError(
@@ -70,6 +80,12 @@ class WorkspaceAdminHttpHandler {
       }
 
       await _handleAdmin(request, segments, principal);
+    } on WorkspaceCredentialsRejected {
+      await _sendError(
+        request.response,
+        HttpStatus.unauthorized,
+        'Invalid email or password.',
+      );
     } on FormatException catch (error) {
       await _sendError(
         request.response,
@@ -91,6 +107,41 @@ class WorkspaceAdminHttpHandler {
         'Internal server error.',
       );
     }
+  }
+
+  Future<void> _handleAdminLogin(HttpRequest request) async {
+    if (adminUsernames.isEmpty) {
+      await _sendError(
+        request.response,
+        HttpStatus.forbidden,
+        'Workspace admin access is not configured.',
+      );
+      return;
+    }
+
+    final body = await _readJsonObject(request);
+    final email = body['email'];
+    final password = body['password'];
+    if (email is! String || password is! String) {
+      throw const FormatException('Email and password are required.');
+    }
+
+    final session = await accounts.login(email: email, password: password);
+    if (!adminUsernames.contains(session.principal.username.toLowerCase())) {
+      await accounts.logoutToken(session.accessToken);
+      await _sendError(
+        request.response,
+        HttpStatus.forbidden,
+        'Administrator access required.',
+      );
+      return;
+    }
+
+    await _sendJson(
+      request.response,
+      HttpStatus.ok,
+      session.toJson(),
+    );
   }
 
   Future<void> _handleContent(
