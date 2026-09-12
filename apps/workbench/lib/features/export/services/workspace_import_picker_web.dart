@@ -1,6 +1,7 @@
 import 'dart:html' as html;
-import 'dart:js_util' as js_util;
 import 'dart:typed_data';
+
+import 'package:js/js_util.dart' as js_util;
 
 const bool supportsWorkspaceImportPicker = true;
 const bool supportsWorkspaceDirectoryPicker = true;
@@ -289,7 +290,7 @@ Future<List<({String path, Uint8List bytes})>> _readFileSystemHandles(
         );
       }
 
-      selectedBytes += file.size;
+      selectedBytes += file.size.toInt();
       if (selectedBytes > _maxImportedBytes) {
         throw const FormatException(
           'Project is larger than the 120 MB folder-import limit.',
@@ -335,7 +336,7 @@ Future<List<({String path, Uint8List bytes})>?>
       );
     }
 
-    selectedBytes += file.size;
+    selectedBytes += file.size.toInt();
     if (selectedBytes > _maxImportedBytes) {
       throw const FormatException(
         'Project is larger than the 120 MB folder-import limit.',
