@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../../assets/widgets/asset_manager_dialog.dart';
 import '../../concept/widgets/concept_lib_explorer.dart';
 import '../../packages/widgets/package_manager_dialog.dart';
 import '../../runner/controllers/flutter_runner_controller.dart';
 import '../../workspace/widgets/workspace_file_explorer.dart';
-import 'source_control_panel.dart';
 import '../controllers/playground_controller.dart';
 import '../models/workspace_view_mode.dart';
+import 'source_control_panel.dart';
 
 class UnifiedWorkspaceExplorer extends StatelessWidget {
   const UnifiedWorkspaceExplorer({
@@ -25,28 +27,21 @@ class UnifiedWorkspaceExplorer extends StatelessWidget {
   final ValueChanged<WorkspaceViewMode> onViewModeChanged;
   final ValueChanged<String>? onShowDiff;
 
-  static const _background = Color(0xff111318);
-  static const _section = Color(0xff15191f);
-  static const _border = Color(0xff272d36);
-  static const _text = Color(0xffd7dce5);
-  static const _muted = Color(0xff8b93a1);
-  static const _accent = Color(0xff82aaff);
-
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+    final l10n = context.l10n;
     return Material(
       key: const ValueKey('unified-workspace-explorer'),
-      color: _background,
+      color: palette.background,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 7),
-            decoration: const BoxDecoration(
-              color: _background,
-              border: Border(
-                bottom: BorderSide(color: _border),
-              ),
+            decoration: BoxDecoration(
+              color: palette.background,
+              border: Border(bottom: BorderSide(color: palette.border)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -55,9 +50,9 @@ class UnifiedWorkspaceExplorer extends StatelessWidget {
                   height: 36,
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    color: _section,
+                    color: palette.surfaceRaised,
                     borderRadius: BorderRadius.circular(7),
-                    border: Border.all(color: _border),
+                    border: Border.all(color: palette.border),
                   ),
                   child: Row(
                     children: [
@@ -66,7 +61,7 @@ class UnifiedWorkspaceExplorer extends StatelessWidget {
                           key: const ValueKey('workspace-view-project'),
                           selected: viewMode == WorkspaceViewMode.project,
                           icon: Icons.account_tree_outlined,
-                          label: '项目',
+                          label: l10n.tr('项目', 'Project'),
                           onTap: () {
                             onViewModeChanged(WorkspaceViewMode.project);
                           },
@@ -78,7 +73,7 @@ class UnifiedWorkspaceExplorer extends StatelessWidget {
                           key: const ValueKey('workspace-view-concept'),
                           selected: viewMode == WorkspaceViewMode.concept,
                           icon: Icons.hub_outlined,
-                          label: '概念',
+                          label: l10n.tr('概念', 'Concept'),
                           onTap: () {
                             onViewModeChanged(WorkspaceViewMode.concept);
                           },
@@ -109,7 +104,7 @@ class UnifiedWorkspaceExplorer extends StatelessWidget {
                               ? Icons.filter_alt_outlined
                               : Icons.folder_open_outlined,
                       size: 13,
-                      color: _muted,
+                      color: palette.muted,
                     ),
                     const SizedBox(width: 5),
                     Expanded(
@@ -117,10 +112,10 @@ class UnifiedWorkspaceExplorer extends StatelessWidget {
                         viewMode.description,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10.5,
                           height: 1.2,
-                          color: _muted,
+                          color: palette.muted,
                         ),
                       ),
                     ),
@@ -165,7 +160,7 @@ class UnifiedWorkspaceExplorer extends StatelessWidget {
                                 'unified-concept-packages-entry',
                               ),
                               icon: Icons.extension_outlined,
-                              label: '依赖',
+                              label: l10n.tr('依赖', 'Packages'),
                               onTap: () {
                                 showPackageManagerDialog(
                                   context,
@@ -224,11 +219,12 @@ class _ViewModeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 110),
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
-        color: selected ? const Color(0xff243149) : Colors.transparent,
+        color: selected ? palette.selection : Colors.transparent,
         borderRadius: BorderRadius.circular(5),
       ),
       child: Material(
@@ -236,7 +232,7 @@ class _ViewModeButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(5),
         child: InkWell(
           borderRadius: BorderRadius.circular(5),
-          hoverColor: const Color(0xff1c222b),
+          hoverColor: palette.surface,
           onTap: onTap,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -244,9 +240,7 @@ class _ViewModeButton extends StatelessWidget {
               Icon(
                 icon,
                 size: 15,
-                color: selected
-                    ? UnifiedWorkspaceExplorer._accent
-                    : UnifiedWorkspaceExplorer._muted,
+                color: selected ? palette.accent : palette.muted,
               ),
               const SizedBox(width: 6),
               Text(
@@ -254,9 +248,7 @@ class _ViewModeButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                  color: selected
-                      ? UnifiedWorkspaceExplorer._text
-                      : UnifiedWorkspaceExplorer._muted,
+                  color: selected ? palette.text : palette.muted,
                 ),
               ),
             ],
@@ -281,36 +273,33 @@ class _ExplorerActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
     return Material(
-      color: UnifiedWorkspaceExplorer._section,
+      color: palette.surfaceRaised,
       borderRadius: BorderRadius.circular(6),
       child: Ink(
         height: 32,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: UnifiedWorkspaceExplorer._border),
+          border: Border.all(color: palette.border),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
-          hoverColor: const Color(0xff1d2430),
+          hoverColor: palette.surface,
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 9),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  icon,
-                  size: 15,
-                  color: UnifiedWorkspaceExplorer._accent,
-                ),
+                Icon(icon, size: 15, color: palette.accent),
                 const SizedBox(width: 6),
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: UnifiedWorkspaceExplorer._text,
+                    color: palette.text,
                   ),
                 ),
               ],
