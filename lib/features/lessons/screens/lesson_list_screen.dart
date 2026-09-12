@@ -34,7 +34,10 @@ class _LessonListScreenState extends State<LessonListScreen> {
   late final LessonProgressStore _progressStore;
   late final LessonCatalogRepository _catalogRepository;
   List<LessonProject> _projects = LessonCatalog.projects;
+  LessonProject? _activeProject;
+  String? _catalogLanguage;
   bool _catalogLoading = false;
+  int _loadSerial = 0;
 
   @override
   void initState() {
@@ -45,10 +48,21 @@ class _LessonListScreenState extends State<LessonListScreen> {
           Hive.box<dynamic>('lesson_progress'),
         );
     _catalogRepository = LessonCatalogRepository();
+    _activeProject = widget.project;
+  }
 
-    if (widget.project == null) {
-      _loadCatalog();
-    }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final languageCode =
+        Localizations.localeOf(context).languageCode.toLowerCase().startsWith('en')
+            ? 'en'
+            : 'zh';
+    if (_catalogLanguage == languageCode) return;
+    _catalogLanguage = languageCode;
+    Future<void>.microtask(
+      () => _loadCatalog(languageCode: languageCode),
+    );
   }
 
   @override
@@ -57,13 +71,32 @@ class _LessonListScreenState extends State<LessonListScreen> {
     super.dispose();
   }
 
-  Future<void> _loadCatalog() async {
-    if (_catalogLoading) return;
-    setState(() => _catalogLoading = true);
-    final projects = await _catalogRepository.loadProjects();
-    if (!mounted) return;
+  Future<void> _loadCatalog({String? languageCode}) async {
+    final requestedLanguage = languageCode ?? _catalogLanguage ?? 'zh';
+    final serial = ++_loadSerial;
+    if (mounted) setState(() => _catalogLoading = true);
+
+    final projects = await _catalogRepository.loadProjects(
+      languageCode: requestedLanguage,
+    );
+    if (!mounted || serial != _loadSerial) return;
+
+    LessonProject? activeProject;
+    final projectId = widget.project?.id;
+    if (projectId != null) {
+      for (final project in projects) {
+        if (project.id == projectId) {
+          activeProject = project;
+          break;
+        }
+      }
+    }
+
     setState(() {
       _projects = projects;
+      if (widget.project != null) {
+        _activeProject = activeProject ?? widget.project;
+      }
       _catalogLoading = false;
     });
   }
@@ -133,7 +166,7 @@ class _LessonListScreenState extends State<LessonListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final project = widget.project;
+    final project = widget.project == null ? null : (_activeProject ?? widget.project);
     final l10n = context.l10n;
 
     return Scaffold(
@@ -142,12 +175,13 @@ class _LessonListScreenState extends State<LessonListScreen> {
           project?.title ?? l10n.tr('教材模式', 'Lesson mode'),
         ),
         actions: [
-          if (project == null)
-            IconButton(
-              tooltip: l10n.tr('刷新课程', 'Refresh lessons'),
-              onPressed: _catalogLoading ? null : _loadCatalog,
-              icon: const Icon(Icons.refresh_rounded),
-            ),
+          IconButton(
+            tooltip: l10n.tr('刷新课程', 'Refresh lessons'),
+            onPressed: _catalogLoading
+                ? null
+                : () => _loadCatalog(languageCode: _catalogLanguage),
+            icon: const Icon(Icons.refresh_rounded),
+          ),
           const AppLanguageToggleButton(),
           const AppThemeToggleButton(),
           const SizedBox(width: 6),
@@ -156,7 +190,7 @@ class _LessonListScreenState extends State<LessonListScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            if (project == null && _catalogLoading)
+            if (_catalogLoading)
               const LinearProgressIndicator(minHeight: 2),
             Expanded(
               child: project == null
