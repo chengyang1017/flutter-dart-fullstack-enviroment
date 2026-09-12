@@ -1,30 +1,34 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../models/ui_node.dart';
+import 'builders/app_bar_builder.dart';
 import 'builders/card_builder.dart';
 import 'builders/center_builder.dart';
 import 'builders/column_builder.dart';
 import 'builders/container_builder.dart';
+import 'builders/divider_builder.dart';
 import 'builders/elevated_button_builder.dart';
-import 'builders/icon_builder.dart';
-import 'builders/padding_builder.dart';
-import 'builders/row_builder.dart';
-import 'builders/sized_box_builder.dart';
-import 'builders/text_builder.dart';
-import 'builders/text_field_builder.dart';
-import 'builders/scaffold_builder.dart';
-import 'builders/app_bar_builder.dart';
-import 'builders/safe_area_builder.dart';
 import 'builders/expanded_builder.dart';
 import 'builders/flexible_builder.dart';
-import 'builders/single_child_scroll_view_builder.dart';
-import 'builders/list_view_builder.dart';
-import 'builders/list_tile_builder.dart';
-import 'builders/divider_builder.dart';
-import 'builders/stack_builder.dart';
-import 'builders/positioned_builder.dart';
 import 'builders/floating_action_button_builder.dart';
+import 'builders/icon_builder.dart';
+import 'builders/list_tile_builder.dart';
+import 'builders/list_view_builder.dart';
+import 'builders/padding_builder.dart';
+import 'builders/positioned_builder.dart';
+import 'builders/row_builder.dart';
+import 'builders/safe_area_builder.dart';
+import 'builders/scaffold_builder.dart';
+import 'builders/single_child_scroll_view_builder.dart';
+import 'builders/sized_box_builder.dart';
+import 'builders/stack_builder.dart';
+import 'builders/text_builder.dart';
+import 'builders/text_field_builder.dart';
 import 'widget_registry.dart';
+
+String _localized(String zh, String en) =>
+    AppLocaleController.locale.value.languageCode == 'en' ? en : zh;
 
 class WidgetRenderer {
   WidgetRenderer({void Function(String)? onWarning})
@@ -61,11 +65,23 @@ class WidgetRenderer {
 
   Widget render(BuildContext context, UiNode node) {
     final builder = registry[node.type];
-    if (builder == null) return _error('暂不支持 Widget：${node.type}');
+    if (builder == null) {
+      return _error(
+        _localized(
+          '暂不支持 Widget：${node.type}',
+          'Unsupported widget: ${node.type}',
+        ),
+      );
+    }
     try {
       return builder(context, node, this);
     } catch (error) {
-      return _error('渲染失败：$error');
+      return _error(
+        _localized(
+          '渲染失败：$error',
+          'Rendering failed: $error',
+        ),
+      );
     }
   }
 
@@ -75,7 +91,12 @@ class WidgetRenderer {
   ) {
     final widget = render(context, node);
     if (widget is PreferredSizeWidget) return widget;
-    onWarning('${node.type} 不能用作 Scaffold.appBar');
+    onWarning(
+      _localized(
+        '${node.type} 不能用作 Scaffold.appBar',
+        '${node.type} cannot be used as Scaffold.appBar',
+      ),
+    );
     return null;
   }
 
@@ -89,7 +110,14 @@ class WidgetRenderer {
 
   void warnUnknown(UiNode node, Set<String> supported) {
     for (final key in node.namedArguments.keys) {
-      if (!supported.contains(key)) onWarning('${node.type} 暂不支持属性：$key');
+      if (!supported.contains(key)) {
+        onWarning(
+          _localized(
+            '${node.type} 暂不支持属性：$key',
+            '${node.type} does not currently support property: $key',
+          ),
+        );
+      }
     }
   }
 }
