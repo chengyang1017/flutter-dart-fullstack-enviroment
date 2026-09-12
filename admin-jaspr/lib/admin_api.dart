@@ -104,20 +104,24 @@ class AdminApi {
     return _objectList(body['projects']);
   }
 
-  Future<Map<String, dynamic>> lessons(String token) async {
+  Future<Map<String, dynamic>> lessons(
+    String token, {
+    String languageCode = 'en',
+  }) async {
     final catalog = await _getObject('/admin/lessons', token);
-    CatalogLocalization.materialize(catalog, 'en');
+    CatalogLocalization.materialize(catalog, languageCode);
     return catalog;
   }
 
   Future<Map<String, dynamic>> saveLessons(
     String token,
-    Map<String, dynamic> catalog,
-  ) async {
-    // The admin UI edits the English presentation fields. Capture those edits
-    // into translations.en, then persist the catalog with Chinese as the
-    // canonical/root language so existing Flutter lesson checks remain stable.
-    CatalogLocalization.capture(catalog, 'en');
+    Map<String, dynamic> catalog, {
+    String languageCode = 'en',
+  }) async {
+    // Capture whichever language the administrator is currently editing, then
+    // persist Chinese in the legacy root fields. Runtime clients materialize
+    // the selected translation before decoding the lesson models.
+    CatalogLocalization.capture(catalog, languageCode);
     final payload = Map<String, dynamic>.from(
       jsonDecode(jsonEncode(catalog)) as Map,
     );
@@ -135,7 +139,7 @@ class AdminApi {
         statusCode: response.statusCode,
       );
     }
-    CatalogLocalization.materialize(body, 'en');
+    CatalogLocalization.materialize(body, languageCode);
     return body;
   }
 
