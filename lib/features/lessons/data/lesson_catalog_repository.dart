@@ -6,6 +6,7 @@ import '../../workspace/services/workspace_cloud_runtime.dart';
 import '../models/lesson_project.dart';
 import 'lesson_catalog.dart';
 import 'lesson_catalog_codec.dart';
+import 'lesson_catalog_publishing_translations.dart';
 
 /// Cloud-backed lesson catalog with a built-in bootstrap fallback.
 ///
@@ -59,6 +60,9 @@ class LessonCatalogRepository {
     if (accessToken.isEmpty) return;
 
     try {
+      final seed = LessonCatalogPublishingTranslations.enrich(
+        LessonCatalogCodec.encodeProjects(LessonCatalog.projects),
+      );
       await _client
           .post(
             baseUri.resolve('/admin/lessons/bootstrap'),
@@ -66,9 +70,7 @@ class LessonCatalogRepository {
               'authorization': 'Bearer $accessToken',
               'content-type': 'application/json',
             },
-            body: jsonEncode(
-              LessonCatalogCodec.encodeProjects(LessonCatalog.projects),
-            ),
+            body: jsonEncode(seed),
           )
           .timeout(const Duration(seconds: 12));
     } catch (_) {
