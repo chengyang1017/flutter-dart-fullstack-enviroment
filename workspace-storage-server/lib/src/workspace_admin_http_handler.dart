@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'workspace_admin_store.dart';
 import 'workspace_authenticator.dart';
+import 'workspace_store.dart';
 
 /// Adds a small administrative API in front of the normal Workspace routes.
 ///
