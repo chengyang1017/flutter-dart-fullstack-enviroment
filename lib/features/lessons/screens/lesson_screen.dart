@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_localizations.dart';
-import '../../../core/responsive_framework.dart';
 import '../../../core/theme/app_theme.dart';
 import '../controller/lesson_controller.dart';
 import '../data/author_answer_repository.dart';
@@ -447,7 +446,9 @@ class _TabletPortraitLessonState extends State<_TabletPortraitLesson> {
                 controller: widget.controller,
                 onOpenStandardAnswerReference:
                     widget.onOpenStandardAnswerReference,
-                onRun: () async => widget.controller.runCurrentUi(),
+                onRun: () async {
+                  await widget.controller.runCurrentUi();
+                },
               ),
             ),
             _ResizableHorizontalDivider(
@@ -647,7 +648,9 @@ class _WideLessonState extends State<_WideLesson> {
                 controller: widget.controller,
                 onOpenStandardAnswerReference:
                     widget.onOpenStandardAnswerReference,
-                onRun: () async => widget.controller.runCurrentUi(),
+                onRun: () async {
+                  await widget.controller.runCurrentUi();
+                },
               ),
             ),
             _ResizableDivider(
