@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../runner/controllers/flutter_runner_controller.dart';
 import '../controllers/playground_controller.dart';
 
@@ -27,6 +28,9 @@ class ErrorPanel extends StatelessWidget {
     if (controller.error == null && controller.warnings.isEmpty) {
       return const SizedBox.shrink();
     }
+
+    final l10n = context.l10n;
+
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxHeight),
       child: Material(
@@ -41,8 +45,14 @@ class ErrorPanel extends StatelessWidget {
           ),
           title: Text(
             controller.error == null
-                ? '快速预览警告 (${controller.warnings.length})'
-                : '快速预览解析错误',
+                ? l10n.tr(
+                    '快速预览警告 (${controller.warnings.length})',
+                    'Quick Preview warnings (${controller.warnings.length})',
+                  )
+                : l10n.tr(
+                    '快速预览解析错误',
+                    'Quick Preview parse error',
+                  ),
           ),
           children: [
             ConstrainedBox(
