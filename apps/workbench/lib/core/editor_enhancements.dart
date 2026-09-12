@@ -1,8 +1,8 @@
 /// 代码编辑器增强配置
-/// 
+///
 /// 该配置文件提供编辑器的增强功能支持，包括：
 /// - 快捷键定义
-/// - 语言特定设置  
+/// - 语言特定设置
 /// - 主题和样式
 /// - 自动补全规则
 /// - 代码诊断配置
@@ -152,18 +152,18 @@ class _\${1:MyWidget}State extends State<\${1:MyWidget}> {
     'light': 'Light Theme (高对比度适合白天)',
     'dark': 'Dark Theme (护眼适合长时间编码)',
     'high-contrast': 'High Contrast (高可达性)',
-    'solarized': 'Solarized (护眼)', 
+    'solarized': 'Solarized (护眼)',
   };
 
   /// 语法高亮颜色
   static const Map<String, String> syntaxHighlighting = {
-    'keyword': '#FF7B00',        // 关键字 - 橙色
-    'string': '#00B33C',         // 字符串 - 绿色
-    'comment': '#808080',        // 注释 - 灰色
-    'number': '#0066FF',         // 数字 - 蓝色
-    'function': '#7B3FF2',        // 函数 - 紫色
-    'class': '#FF0099',           // 类 - 红紫色
-    'variable': '#3366FF',        // 变量 - 蓝色
+    'keyword': '#FF7B00', // 关键字 - 橙色
+    'string': '#00B33C', // 字符串 - 绿色
+    'comment': '#808080', // 注释 - 灰色
+    'number': '#0066FF', // 数字 - 蓝色
+    'function': '#7B3FF2', // 函数 - 紫色
+    'class': '#FF0099', // 类 - 红紫色
+    'variable': '#3366FF', // 变量 - 蓝色
   };
 
   // ============================================================================
@@ -218,7 +218,8 @@ class _\${1:MyWidget}State extends State<\${1:MyWidget}> {
     CompletionItem(
       label: 'Button',
       kind: 'class',
-      snippet: 'ElevatedButton(\n  onPressed: () => \${1:},\n  child: Text('\${2:label}'),\n)',
+      snippet:
+          "ElevatedButton(\n  onPressed: () => \${1:},\n  child: Text('\${2:label}'),\n)",
     ),
   ];
 
