@@ -5,6 +5,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:universal_web/web.dart' as web;
 
 import 'admin_api.dart';
+import 'catalog_localization.dart';
 
 enum _AdminSection { dashboard, lessons, users, projects }
 
@@ -35,6 +36,7 @@ class _AdminAppState extends State<AdminApp> {
   String _catalogDraft = '';
   int? _selectedProjectIndex;
   int? _selectedLessonIndex;
+  String _courseEditLanguage = 'en';
 
   int? _creatingCourseGroupIndex;
   String _newCourseId = '';
@@ -120,6 +122,7 @@ class _AdminAppState extends State<AdminApp> {
       _selectedProjectIndex = null;
       _selectedLessonIndex = null;
       _creatingCourseGroupIndex = null;
+      _courseEditLanguage = 'en';
       _section = _AdminSection.dashboard;
       _error = null;
       _notice = null;
@@ -134,7 +137,10 @@ class _AdminAppState extends State<AdminApp> {
     final projects = await _api.projects(token);
     Map<String, dynamic>? lessons;
     try {
-      lessons = await _api.lessons(token);
+      lessons = await _api.lessons(
+        token,
+        languageCode: _courseEditLanguage,
+      );
     } on AdminApiException catch (error) {
       if (error.statusCode != 404) rethrow;
     }
@@ -220,7 +226,11 @@ class _AdminAppState extends State<AdminApp> {
     _setBusy(true);
     _clearMessages();
     try {
-      final saved = await _api.saveLessons(token, catalog);
+      final saved = await _api.saveLessons(
+        token,
+        catalog,
+        languageCode: _courseEditLanguage,
+      );
       final overview = await _api.overview(token);
       setState(() {
         _lessonCatalog = saved;
@@ -249,6 +259,7 @@ class _AdminAppState extends State<AdminApp> {
       final saved = await _api.saveLessons(
         token,
         Map<String, dynamic>.from(decoded),
+        languageCode: _courseEditLanguage,
       );
       final overview = await _api.overview(token);
       setState(() {
@@ -263,6 +274,24 @@ class _AdminAppState extends State<AdminApp> {
     } finally {
       _setBusy(false);
     }
+  }
+
+  void _switchCourseLanguage(String languageCode) {
+    if (languageCode == _courseEditLanguage) return;
+    final catalog = _lessonCatalog;
+    if (catalog == null) {
+      setState(() => _courseEditLanguage = languageCode);
+      return;
+    }
+
+    CatalogLocalization.capture(catalog, _courseEditLanguage);
+    CatalogLocalization.materialize(catalog, languageCode);
+    setState(() {
+      _courseEditLanguage = languageCode;
+      _catalogDraft = const JsonEncoder.withIndent('  ').convert(catalog);
+      _error = null;
+      _notice = null;
+    });
   }
 
   void _normalizeLessonSelection() {
@@ -318,7 +347,7 @@ class _AdminAppState extends State<AdminApp> {
       _newCourseTitle = '';
       _newCourseDescription = '';
       _newCourseCategory = '';
-      _newCourseDifficulty = 'Beginner';
+      _newCourseDifficulty = _courseEditLanguage == 'zh' ? '初级' : 'Beginner';
       _newCourseMinutes = '60';
       _newCourseTags = '';
       _newCourseComingSoon = false;
@@ -344,12 +373,11 @@ class _AdminAppState extends State<AdminApp> {
       return;
     }
 
-    final id = _newCourseId.trim().isEmpty
+    var id = _newCourseId.trim().isEmpty
         ? _slugify(title)
         : _slugify(_newCourseId);
     if (id.isEmpty) {
-      setState(() => _error = 'Course ID is required.');
-      return;
+      id = 'course-${DateTime.now().millisecondsSinceEpoch}';
     }
 
     final duplicate = groups
@@ -361,10 +389,10 @@ class _AdminAppState extends State<AdminApp> {
     }
 
     final category = _newCourseCategory.trim().isEmpty
-        ? 'General'
+        ? (_courseEditLanguage == 'zh' ? '通用' : 'General')
         : _newCourseCategory.trim();
     final difficulty = _newCourseDifficulty.trim().isEmpty
-        ? 'Beginner'
+        ? (_courseEditLanguage == 'zh' ? '初级' : 'Beginner')
         : _newCourseDifficulty.trim();
     final minutes = int.tryParse(_newCourseMinutes.trim()) ?? 60;
     final tags = _newCourseTags
@@ -372,11 +400,20 @@ class _AdminAppState extends State<AdminApp> {
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
+    final description = _newCourseDescription.trim();
+    final presentation = <String, dynamic>{
+      'title': title,
+      'description': description,
+      'difficulty': difficulty,
+      'category': category,
+      'tags': tags,
+      'prerequisites': <String>[],
+    };
 
     final course = <String, dynamic>{
       'id': id,
       'title': title,
-      'description': _newCourseDescription.trim(),
+      'description': description,
       'difficulty': difficulty,
       'category': category,
       'tags': tags,
@@ -386,14 +423,8 @@ class _AdminAppState extends State<AdminApp> {
       'version': 'beginner',
       'steps': <Object?>[],
       'translations': <String, dynamic>{
-        'en': <String, dynamic>{
-          'title': title,
-          'description': _newCourseDescription.trim(),
-          'difficulty': difficulty,
-          'category': category,
-          'tags': tags,
-          'prerequisites': <String>[],
-        },
+        'en': Map<String, dynamic>.from(presentation),
+        'zh': Map<String, dynamic>.from(presentation),
       },
     };
 
@@ -702,6 +733,22 @@ class _AdminAppState extends State<AdminApp> {
           ]),
         ]),
         div(classes: 'topbar-actions', [
+          button(
+            classes: _courseEditLanguage == 'en'
+                ? 'primary-button compact-button'
+                : 'ghost-button compact-button',
+            disabled: _busy,
+            onClick: () => _switchCourseLanguage('en'),
+            [text('English')],
+          ),
+          button(
+            classes: _courseEditLanguage == 'zh'
+                ? 'primary-button compact-button'
+                : 'ghost-button compact-button',
+            disabled: _busy,
+            onClick: () => _switchCourseLanguage('zh'),
+            [text('中文')],
+          ),
           if (groups.isNotEmpty)
             button(
               classes: 'ghost-button',
@@ -738,7 +785,7 @@ class _AdminAppState extends State<AdminApp> {
           div([
             h3([text('Advanced catalog JSON')]),
             p(classes: 'muted', [
-              text('Edit steps, starter code, answer assets and AST requirements directly.'),
+              text('Translations for English and Chinese are stored together with steps, starter code, answer assets and AST requirements.'),
             ]),
           ]),
           button(
@@ -790,7 +837,7 @@ class _AdminAppState extends State<AdminApp> {
                 span([
                   text(
                     lessons[lessonIndex]['comingSoon'] == true
-                        ? 'Coming soon'
+                        ? (_courseEditLanguage == 'zh' ? '即将推出' : 'Coming soon')
                         : lessons[lessonIndex]['category']?.toString() ?? 'Lesson',
                   ),
                 ]),
@@ -805,8 +852,10 @@ class _AdminAppState extends State<AdminApp> {
     return div(key: const Key('new-course-editor'), [
       div(classes: 'editor-heading', [
         div([
-          p(classes: 'eyebrow', [text('NEW COURSE')]),
-          h2([text('Add course')]),
+          p(classes: 'eyebrow', [
+            text(_courseEditLanguage == 'zh' ? '新课程 · 中文' : 'NEW COURSE · ENGLISH'),
+          ]),
+          h2([text(_courseEditLanguage == 'zh' ? '添加课程' : 'Add course')]),
           p(classes: 'muted', [
             text('Add a course to ${group['title']?.toString() ?? 'this group'}.'),
           ]),
@@ -814,7 +863,7 @@ class _AdminAppState extends State<AdminApp> {
         span(classes: 'badge', [text('Draft')]),
       ]),
       _field(
-        'Course title',
+        _courseEditLanguage == 'zh' ? '课程标题' : 'Course title',
         _newCourseTitle,
         (value) => _newCourseTitle = value,
       ),
@@ -824,21 +873,21 @@ class _AdminAppState extends State<AdminApp> {
         (value) => _newCourseId = value,
       ),
       p(classes: 'muted editor-note', [
-        text('Leave the ID empty to generate it from the English title.'),
+        text('Leave the ID empty to generate it automatically.'),
       ]),
       _area(
-        'Description',
+        _courseEditLanguage == 'zh' ? '课程简介' : 'Description',
         _newCourseDescription,
         (value) => _newCourseDescription = value,
       ),
       div(classes: 'form-grid', [
         _field(
-          'Category',
+          _courseEditLanguage == 'zh' ? '分类' : 'Category',
           _newCourseCategory,
           (value) => _newCourseCategory = value,
         ),
         _field(
-          'Difficulty',
+          _courseEditLanguage == 'zh' ? '难度' : 'Difficulty',
           _newCourseDifficulty,
           (value) => _newCourseDifficulty = value,
         ),
@@ -851,7 +900,7 @@ class _AdminAppState extends State<AdminApp> {
           type: 'number',
         ),
         _field(
-          'Tags (comma separated)',
+          _courseEditLanguage == 'zh' ? '标签（逗号分隔）' : 'Tags (comma separated)',
           _newCourseTags,
           (value) => _newCourseTags = value,
         ),
@@ -867,7 +916,7 @@ class _AdminAppState extends State<AdminApp> {
           }),
         ),
         span([
-          strong([text('Coming soon')]),
+          strong([text(_courseEditLanguage == 'zh' ? '即将推出' : 'Coming soon')]),
           span(classes: 'muted', [text('Create the course but keep it unavailable to students.')]),
         ]),
       ]),
@@ -886,33 +935,52 @@ class _AdminAppState extends State<AdminApp> {
         ),
       ]),
       p(classes: 'muted editor-note', [
-        text('A new course starts with zero lesson steps. Add steps later through Advanced catalog JSON.'),
+        text('The initial text is copied to both languages. After creation, switch English / 中文 above and edit each translation separately.'),
       ]),
     ]);
   }
 
   Component _lessonForm(Map<String, dynamic> lesson) {
     final id = lesson['id']?.toString() ?? 'lesson';
-    return div(key: Key('lesson-editor-$id'), [
+    final languageLabel = _courseEditLanguage == 'zh' ? '中文' : 'English';
+    return div(key: Key('lesson-editor-$id-$_courseEditLanguage'), [
       div(classes: 'editor-heading', [
         div([
-          p(classes: 'eyebrow', [text(id)]),
+          p(classes: 'eyebrow', [text('$id · $languageLabel')]),
           h2([text(lesson['title']?.toString() ?? 'Untitled lesson')]),
         ]),
         span(
           classes: 'badge${lesson['comingSoon'] == true ? ' pending' : ''}',
-          [text(lesson['comingSoon'] == true ? 'Coming soon' : 'Published')],
+          [
+            text(
+              lesson['comingSoon'] == true
+                  ? (_courseEditLanguage == 'zh' ? '即将推出' : 'Coming soon')
+                  : (_courseEditLanguage == 'zh' ? '已发布' : 'Published'),
+            ),
+          ],
         ),
       ]),
-      _field('Title', lesson['title']?.toString() ?? '', (value) => _updateLesson('title', value)),
+      _field(
+        _courseEditLanguage == 'zh' ? '标题' : 'Title',
+        lesson['title']?.toString() ?? '',
+        (value) => _updateLesson('title', value),
+      ),
       _area(
-        'Description',
+        _courseEditLanguage == 'zh' ? '简介' : 'Description',
         lesson['description']?.toString() ?? '',
         (value) => _updateLesson('description', value),
       ),
       div(classes: 'form-grid', [
-        _field('Category', lesson['category']?.toString() ?? '', (value) => _updateLesson('category', value)),
-        _field('Difficulty', lesson['difficulty']?.toString() ?? '', (value) => _updateLesson('difficulty', value)),
+        _field(
+          _courseEditLanguage == 'zh' ? '分类' : 'Category',
+          lesson['category']?.toString() ?? '',
+          (value) => _updateLesson('category', value),
+        ),
+        _field(
+          _courseEditLanguage == 'zh' ? '难度' : 'Difficulty',
+          lesson['difficulty']?.toString() ?? '',
+          (value) => _updateLesson('difficulty', value),
+        ),
       ]),
       div(classes: 'form-grid', [
         _field(
@@ -922,7 +990,7 @@ class _AdminAppState extends State<AdminApp> {
           type: 'number',
         ),
         _field(
-          'Tags (comma separated)',
+          _courseEditLanguage == 'zh' ? '标签（逗号分隔）' : 'Tags (comma separated)',
           _stringList(lesson['tags']).join(', '),
           (value) => _updateLesson(
             'tags',
@@ -939,7 +1007,7 @@ class _AdminAppState extends State<AdminApp> {
           events: events<bool>(onChange: (value) => _updateLesson('comingSoon', value)),
         ),
         span([
-          strong([text('Coming soon')]),
+          strong([text(_courseEditLanguage == 'zh' ? '即将推出' : 'Coming soon')]),
           span(classes: 'muted', [text('Prevent students from opening this lesson.')]),
         ]),
       ]),
@@ -949,7 +1017,7 @@ class _AdminAppState extends State<AdminApp> {
         _miniMeta('ID', id),
       ]),
       p(classes: 'muted editor-note', [
-        text('Use Advanced catalog JSON for code, hints, answer assets and checker requirements.'),
+        text('Switch English / 中文 to edit the same course in both languages. Steps, code and checker requirements remain shared.'),
       ]),
     ]);
   }
