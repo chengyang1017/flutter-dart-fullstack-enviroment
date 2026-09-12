@@ -5,6 +5,7 @@ import '../../../core/l10n/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
 
 import '../data/lesson_catalog.dart';
+import '../data/lesson_catalog_repository.dart';
 import '../data/lesson_progress_store.dart';
 import '../models/lesson.dart';
 import '../models/lesson_project.dart';
@@ -31,6 +32,9 @@ class LessonListScreen extends StatefulWidget {
 
 class _LessonListScreenState extends State<LessonListScreen> {
   late final LessonProgressStore _progressStore;
+  late final LessonCatalogRepository _catalogRepository;
+  List<LessonProject> _projects = LessonCatalog.projects;
+  bool _catalogLoading = false;
 
   @override
   void initState() {
@@ -40,6 +44,28 @@ class _LessonListScreenState extends State<LessonListScreen> {
         LessonProgressStore(
           Hive.box<dynamic>('lesson_progress'),
         );
+    _catalogRepository = LessonCatalogRepository();
+
+    if (widget.project == null) {
+      _loadCatalog();
+    }
+  }
+
+  @override
+  void dispose() {
+    _catalogRepository.close();
+    super.dispose();
+  }
+
+  Future<void> _loadCatalog() async {
+    if (_catalogLoading) return;
+    setState(() => _catalogLoading = true);
+    final projects = await _catalogRepository.loadProjects();
+    if (!mounted) return;
+    setState(() {
+      _projects = projects;
+      _catalogLoading = false;
+    });
   }
 
   Future<void> _openProject(
@@ -115,15 +141,30 @@ class _LessonListScreenState extends State<LessonListScreen> {
         title: Text(
           project?.title ?? l10n.tr('教材模式', 'Lesson mode'),
         ),
-        actions: const [
-          AppLanguageToggleButton(),
-          AppThemeToggleButton(),
-          SizedBox(width: 6),
+        actions: [
+          if (project == null)
+            IconButton(
+              tooltip: l10n.tr('刷新课程', 'Refresh lessons'),
+              onPressed: _catalogLoading ? null : _loadCatalog,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          const AppLanguageToggleButton(),
+          const AppThemeToggleButton(),
+          const SizedBox(width: 6),
         ],
       ),
       body: SafeArea(
-        child:
-            project == null ? _buildProjectList() : _buildLessonList(project),
+        child: Column(
+          children: [
+            if (project == null && _catalogLoading)
+              const LinearProgressIndicator(minHeight: 2),
+            Expanded(
+              child: project == null
+                  ? _buildProjectList()
+                  : _buildLessonList(project),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -135,7 +176,7 @@ class _LessonListScreenState extends State<LessonListScreen> {
 
         return GridView.builder(
           padding: const EdgeInsets.all(20),
-          itemCount: LessonCatalog.projects.length,
+          itemCount: _projects.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columnCount,
             crossAxisSpacing: 16,
@@ -143,7 +184,7 @@ class _LessonListScreenState extends State<LessonListScreen> {
             mainAxisExtent: 230,
           ),
           itemBuilder: (context, index) {
-            final project = LessonCatalog.projects[index];
+            final project = _projects[index];
 
             return _ProjectCard(
               project: project,
