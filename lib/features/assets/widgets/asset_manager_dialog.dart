@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../workspace/controllers/workspace_controller.dart';
 import '../../workspace/models/workspace_entry.dart';
 import '../services/asset_workspace_service.dart';
@@ -19,10 +20,7 @@ Future<void> showAssetManagerDialog(
 }
 
 class AssetManagerDialog extends StatefulWidget {
-  const AssetManagerDialog({
-    super.key,
-    required this.workspace,
-  });
+  const AssetManagerDialog({super.key, required this.workspace});
 
   final WorkspaceController workspace;
 
@@ -54,7 +52,8 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
 
   void _workspaceChanged() {
     if (!mounted) return;
-    final directories = service.assetDirectories.map((entry) => entry.path).toSet();
+    final directories =
+        service.assetDirectories.map((entry) => entry.path).toSet();
     if (!directories.contains(_targetFolder)) {
       _targetFolder = AssetWorkspaceService.rootPath;
     }
@@ -76,6 +75,7 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     final assets = _visibleAssets;
     final directories = service.assetDirectories;
     final imageCount = service.assetFiles.where(_isImage).length;
@@ -108,27 +108,30 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Assets',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          '资源界面化 · 系统自动维护 assets/ 与 pubspec.yaml',
-                          style: TextStyle(fontSize: 12.5),
+                          l10n.tr(
+                            '资源界面化 · 系统自动维护 assets/ 与 pubspec.yaml',
+                            'Visual asset management · assets/ and pubspec.yaml are maintained automatically',
+                          ),
+                          style: const TextStyle(fontSize: 12.5),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    tooltip: '关闭',
+                    tooltip: l10n.tr('关闭', 'Close'),
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded),
                   ),
@@ -145,19 +148,31 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
                 children: [
                   _StatusChip(
                     icon: Icons.inventory_2_outlined,
-                    label: '${service.assetFiles.length} 个资源',
+                    label: l10n.tr(
+                      '${service.assetFiles.length} 个资源',
+                      '${service.assetFiles.length} assets',
+                    ),
                   ),
                   _StatusChip(
                     icon: Icons.image_outlined,
-                    label: '$imageCount 张图片',
+                    label: l10n.tr(
+                      '$imageCount 张图片',
+                      '$imageCount images',
+                    ),
                   ),
                   _StatusChip(
                     icon: service.isAssetsDeclared
                         ? Icons.check_circle_outline
                         : Icons.warning_amber_rounded,
                     label: service.isAssetsDeclared
-                        ? 'pubspec 已声明 assets/'
-                        : '上传时自动写入 pubspec',
+                        ? l10n.tr(
+                            'pubspec 已声明 assets/',
+                            'assets/ declared in pubspec',
+                          )
+                        : l10n.tr(
+                            '上传时自动写入 pubspec',
+                            'pubspec will be updated on import',
+                          ),
                   ),
                 ],
               ),
@@ -182,12 +197,15 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
                     decoration: InputDecoration(
                       isDense: true,
                       prefixIcon: const Icon(Icons.search_rounded, size: 19),
-                      hintText: '搜索资源名称或路径',
+                      hintText: l10n.tr(
+                        '搜索资源名称或路径',
+                        'Search asset name or path',
+                      ),
                       border: const OutlineInputBorder(),
                       suffixIcon: _searchController.text.isEmpty
                           ? null
                           : IconButton(
-                              tooltip: '清除',
+                              tooltip: l10n.tr('清除', 'Clear'),
                               onPressed: () {
                                 _searchController.clear();
                                 setState(() {});
@@ -205,7 +223,7 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
                         key: const ValueKey('asset-create-folder'),
                         onPressed: _createFolder,
                         icon: const Icon(Icons.create_new_folder_outlined),
-                        label: const Text('新建文件夹'),
+                        label: Text(l10n.tr('新建文件夹', 'New folder')),
                       ),
                       FilledButton.icon(
                         key: const ValueKey('asset-upload-files'),
@@ -217,7 +235,11 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.upload_file_outlined),
-                        label: Text(_picking ? '导入中…' : '导入资源'),
+                        label: Text(
+                          _picking
+                              ? l10n.tr('导入中…', 'Importing…')
+                              : l10n.tr('导入资源', 'Import assets'),
+                        ),
                       ),
                     ],
                   );
@@ -283,7 +305,8 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
                                     : 1;
                         return GridView.builder(
                           padding: const EdgeInsets.all(16),
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: columns,
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 12,
@@ -306,6 +329,7 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
   }
 
   Future<void> _pickFiles() async {
+    final l10n = context.l10n;
     setState(() {
       _picking = true;
       _message = null;
@@ -325,7 +349,12 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
       for (final file in result.files) {
         final bytes = file.bytes;
         if (bytes == null) {
-          skipped.add('${file.name}（无法读取内容）');
+          skipped.add(
+            l10n.tr(
+              '${file.name}（无法读取内容）',
+              '${file.name} (content could not be read)',
+            ),
+          );
           continue;
         }
         try {
@@ -336,20 +365,31 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
           );
           imported++;
         } catch (error) {
-          skipped.add('${file.name}（$error）');
+          skipped.add('${file.name} ($error)');
         }
       }
 
       if (mounted) {
         setState(() {
           _message = skipped.isEmpty
-              ? '已导入 $imported 个资源，并确认 pubspec.yaml 已注册 assets/。'
-              : '已导入 $imported 个；跳过 ${skipped.length} 个：${skipped.join('、')}';
+              ? l10n.tr(
+                  '已导入 $imported 个资源，并确认 pubspec.yaml 已注册 assets/。',
+                  'Imported $imported assets and confirmed that assets/ is registered in pubspec.yaml.',
+                )
+              : l10n.tr(
+                  '已导入 $imported 个；跳过 ${skipped.length} 个：${skipped.join('、')}',
+                  'Imported $imported; skipped ${skipped.length}: ${skipped.join(', ')}',
+                );
         });
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _message = '导入失败：$error');
+        setState(
+          () => _message = l10n.tr(
+            '导入失败：$error',
+            'Import failed: $error',
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _picking = false);
@@ -357,9 +397,13 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
   }
 
   Future<void> _createFolder() async {
+    final l10n = context.l10n;
     final name = await _askForName(
-      title: '新建 Assets 文件夹',
-      hint: '例如 images、icons、fonts',
+      title: l10n.tr('新建 Assets 文件夹', 'New Assets folder'),
+      hint: l10n.tr(
+        '例如 images、icons、fonts',
+        'For example: images, icons, fonts',
+      ),
     );
     if (name == null) return;
 
@@ -368,7 +412,7 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
       if (mounted) {
         setState(() {
           _targetFolder = path;
-          _message = '已创建 $path';
+          _message = l10n.tr('已创建 $path', 'Created $path');
         });
       }
     } catch (error) {
@@ -377,8 +421,9 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
   }
 
   Future<void> _renameAsset(WorkspaceEntry entry) async {
+    final l10n = context.l10n;
     final name = await _askForName(
-      title: '重命名资源',
+      title: l10n.tr('重命名资源', 'Rename asset'),
       hint: entry.name,
       initialValue: entry.name,
     );
@@ -386,26 +431,39 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
 
     try {
       service.renameAsset(entry.path, name);
-      if (mounted) setState(() => _message = '已重命名为 $name');
+      if (mounted) {
+        setState(
+          () => _message = l10n.tr(
+            '已重命名为 $name',
+            'Renamed to $name',
+          ),
+        );
+      }
     } catch (error) {
       if (mounted) setState(() => _message = error.toString());
     }
   }
 
   Future<void> _deleteAsset(WorkspaceEntry entry) async {
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('删除 ${entry.name}？'),
-        content: Text('将从 Workspace 删除 ${entry.path}。'),
+        title: Text(l10n.tr('删除 ${entry.name}？', 'Delete ${entry.name}?')),
+        content: Text(
+          l10n.tr(
+            '将从 Workspace 删除 ${entry.path}。',
+            '${entry.path} will be deleted from the Workspace.',
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(l10n.tr('取消', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
+            child: Text(l10n.tr('删除', 'Delete')),
           ),
         ],
       ),
@@ -414,7 +472,14 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
 
     try {
       service.deleteAsset(entry.path);
-      if (mounted) setState(() => _message = '已删除 ${entry.path}');
+      if (mounted) {
+        setState(
+          () => _message = l10n.tr(
+            '已删除 ${entry.path}',
+            'Deleted ${entry.path}',
+          ),
+        );
+      }
     } catch (error) {
       if (mounted) setState(() => _message = error.toString());
     }
@@ -425,6 +490,7 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
     required String hint,
     String? initialValue,
   }) async {
+    final l10n = context.l10n;
     var value = initialValue ?? '';
     final result = await showDialog<String>(
       context: context,
@@ -440,18 +506,23 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: Text(l10n.tr('取消', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, value.trim()),
-            child: const Text('确定'),
+            child: Text(l10n.tr('确定', 'OK')),
           ),
         ],
       ),
     );
     if (result == null || result.trim().isEmpty) return null;
     if (result.contains('/') || result.contains('\\')) {
-      setState(() => _message = '名称不能包含路径分隔符。');
+      setState(
+        () => _message = l10n.tr(
+          '名称不能包含路径分隔符。',
+          'The name cannot contain path separators.',
+        ),
+      );
       return null;
     }
     return result.trim();
@@ -459,7 +530,8 @@ class _AssetManagerDialogState extends State<AssetManagerDialog> {
 
   bool _isImage(WorkspaceEntry entry) {
     final extension = _extension(entry.name);
-    return const <String>{'png', 'jpg', 'jpeg', 'gif', 'webp'}.contains(extension);
+    return const <String>{'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        .contains(extension);
   }
 }
 
@@ -484,20 +556,17 @@ class _FolderPicker extends StatelessWidget {
     return DropdownButtonFormField<String>(
       value: paths.contains(value) ? value : AssetWorkspaceService.rootPath,
       isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: '导入到',
+      decoration: InputDecoration(
+        labelText: context.l10n.tr('导入到', 'Import to'),
         isDense: true,
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.folder_outlined, size: 19),
+        border: const OutlineInputBorder(),
+        prefixIcon: const Icon(Icons.folder_outlined, size: 19),
       ),
       items: paths
           .map(
             (path) => DropdownMenuItem<String>(
               value: path,
-              child: Text(
-                '$path/',
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Text('$path/', overflow: TextOverflow.ellipsis),
             ),
           )
           .toList(growable: false),
@@ -520,6 +589,7 @@ class _AssetCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     final image = _isImageEntry(entry);
 
     return Card(
@@ -562,7 +632,7 @@ class _AssetCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${_assetKind(entry)} · ${_formatBytes(entry.bytes.length)}',
+                  '${_assetKindLabel(context, entry)} · ${_formatBytes(entry.bytes.length)}',
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
                 const SizedBox(height: 5),
@@ -570,13 +640,20 @@ class _AssetCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     IconButton(
-                      tooltip: '复制资源路径',
+                      tooltip: l10n.tr('复制资源路径', 'Copy asset path'),
                       visualDensity: VisualDensity.compact,
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: entry.path));
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('已复制 ${entry.path}')),
+                            SnackBar(
+                              content: Text(
+                                l10n.tr(
+                                  '已复制 ${entry.path}',
+                                  'Copied ${entry.path}',
+                                ),
+                              ),
+                            ),
                           );
                         }
                       },
@@ -584,7 +661,7 @@ class _AssetCard extends StatelessWidget {
                     ),
                     if (image)
                       IconButton(
-                        tooltip: '复制 Image.asset(...)',
+                        tooltip: 'Copy Image.asset(...)',
                         visualDensity: VisualDensity.compact,
                         onPressed: () async {
                           await Clipboard.setData(
@@ -592,20 +669,27 @@ class _AssetCard extends StatelessWidget {
                           );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('已复制 Image.asset(...)')),
+                              SnackBar(
+                                content: Text(
+                                  l10n.tr(
+                                    '已复制 Image.asset(...)',
+                                    'Copied Image.asset(...)',
+                                  ),
+                                ),
+                              ),
                             );
                           }
                         },
                         icon: const Icon(Icons.code_rounded, size: 18),
                       ),
                     IconButton(
-                      tooltip: '重命名',
+                      tooltip: l10n.tr('重命名', 'Rename'),
                       visualDensity: VisualDensity.compact,
                       onPressed: onRename,
                       icon: const Icon(Icons.edit_outlined, size: 18),
                     ),
                     IconButton(
-                      tooltip: '删除',
+                      tooltip: l10n.tr('删除', 'Delete'),
                       visualDensity: VisualDensity.compact,
                       onPressed: onDelete,
                       icon: const Icon(Icons.delete_outline, size: 18),
@@ -628,13 +712,12 @@ class _AssetTypeIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final kind = _assetKind(entry);
-    final icon = switch (kind) {
-      '图片' => Icons.image_outlined,
-      '字体' => Icons.font_download_outlined,
-      '音频' => Icons.audio_file_outlined,
-      '视频' => Icons.video_file_outlined,
-      '数据' => Icons.data_object_rounded,
+    final icon = switch (_assetKindId(entry)) {
+      'image' => Icons.image_outlined,
+      'font' => Icons.font_download_outlined,
+      'audio' => Icons.audio_file_outlined,
+      'video' => Icons.video_file_outlined,
+      'data' => Icons.data_object_rounded,
       _ => Icons.insert_drive_file_outlined,
     };
     return Center(child: Icon(icon, size: 52));
@@ -658,16 +741,14 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _EmptyAssets extends StatelessWidget {
-  const _EmptyAssets({
-    required this.hasAnyAsset,
-    required this.onImport,
-  });
+  const _EmptyAssets({required this.hasAnyAsset, required this.onImport});
 
   final bool hasAnyAsset;
   final VoidCallback? onImport;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -679,7 +760,9 @@ class _EmptyAssets extends StatelessWidget {
               const Icon(Icons.photo_library_outlined, size: 58),
               const SizedBox(height: 14),
               Text(
-                hasAnyAsset ? '没有匹配的资源' : '还没有 Assets',
+                hasAnyAsset
+                    ? l10n.tr('没有匹配的资源', 'No matching assets')
+                    : l10n.tr('还没有 Assets', 'No assets yet'),
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -687,8 +770,11 @@ class _EmptyAssets extends StatelessWidget {
               const SizedBox(height: 7),
               Text(
                 hasAnyAsset
-                    ? '换一个关键词试试。'
-                    : '直接选择电脑上的图片、字体、JSON、音频等文件。系统会放进 assets/，并自动维护 pubspec.yaml。',
+                    ? l10n.tr('换一个关键词试试。', 'Try another keyword.')
+                    : l10n.tr(
+                        '直接选择电脑上的图片、字体、JSON、音频等文件。系统会放进 assets/，并自动维护 pubspec.yaml。',
+                        'Choose images, fonts, JSON, audio, and other files from your computer. They will be placed in assets/ and pubspec.yaml will be maintained automatically.',
+                      ),
                 textAlign: TextAlign.center,
               ),
               if (!hasAnyAsset) ...[
@@ -696,7 +782,9 @@ class _EmptyAssets extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onImport,
                   icon: const Icon(Icons.upload_file_outlined),
-                  label: const Text('导入第一个资源'),
+                  label: Text(
+                    l10n.tr('导入第一个资源', 'Import first asset'),
+                  ),
                 ),
               ],
             ],
@@ -712,26 +800,38 @@ bool _isImageEntry(WorkspaceEntry entry) {
       .contains(_extension(entry.name));
 }
 
-String _assetKind(WorkspaceEntry entry) {
+String _assetKindId(WorkspaceEntry entry) {
   final extension = _extension(entry.name);
   if (const <String>{'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
       .contains(extension)) {
-    return '图片';
+    return 'image';
   }
   if (const <String>{'ttf', 'otf', 'woff', 'woff2'}.contains(extension)) {
-    return '字体';
+    return 'font';
   }
   if (const <String>{'mp3', 'wav', 'ogg', 'm4a', 'aac'}.contains(extension)) {
-    return '音频';
+    return 'audio';
   }
   if (const <String>{'mp4', 'webm', 'mov', 'mkv'}.contains(extension)) {
-    return '视频';
+    return 'video';
   }
   if (const <String>{'json', 'yaml', 'yml', 'csv', 'txt', 'xml'}
       .contains(extension)) {
-    return '数据';
+    return 'data';
   }
-  return '文件';
+  return 'file';
+}
+
+String _assetKindLabel(BuildContext context, WorkspaceEntry entry) {
+  final l10n = context.l10n;
+  return switch (_assetKindId(entry)) {
+    'image' => l10n.tr('图片', 'Image'),
+    'font' => l10n.tr('字体', 'Font'),
+    'audio' => l10n.tr('音频', 'Audio'),
+    'video' => l10n.tr('视频', 'Video'),
+    'data' => l10n.tr('数据', 'Data'),
+    _ => l10n.tr('文件', 'File'),
+  };
 }
 
 String _extension(String name) {
