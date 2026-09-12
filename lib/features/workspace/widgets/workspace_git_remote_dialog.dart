@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../models/workspace_git_remote.dart';
 
 class WorkspaceGitRemoteDialog extends StatefulWidget {
@@ -62,9 +63,14 @@ class _WorkspaceGitRemoteDialogState extends State<WorkspaceGitRemoteDialog> {
   @override
   Widget build(BuildContext context) {
     final hasExistingRemote = widget.initialRemote != null;
+    final l10n = context.l10n;
 
     return AlertDialog(
-      title: Text(hasExistingRemote ? 'Git 仓库设置' : '绑定 Git 仓库'),
+      title: Text(
+        hasExistingRemote
+            ? l10n.tr('Git 仓库设置', 'Git repository settings')
+            : l10n.tr('绑定 Git 仓库', 'Connect Git repository'),
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: SingleChildScrollView(
@@ -72,8 +78,11 @@ class _WorkspaceGitRemoteDialogState extends State<WorkspaceGitRemoteDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '这里只保存仓库地址与分支。Token、密码和 SSH 私钥不会写进 Workspace 元数据。',
+              Text(
+                l10n.tr(
+                  '这里只保存仓库地址与分支。Token、密码和 SSH 私钥不会写进 Workspace 元数据。',
+                  'Only the repository address and branch are stored here. Tokens, passwords, and SSH private keys are never written to Workspace metadata.',
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -141,16 +150,20 @@ class _WorkspaceGitRemoteDialogState extends State<WorkspaceGitRemoteDialog> {
               context,
               const WorkspaceGitRemoteDialogResult.unbind(),
             ),
-            child: const Text('解绑'),
+            child: Text(l10n.tr('解绑', 'Disconnect')),
           ),
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n.tr('取消', 'Cancel')),
         ),
         FilledButton(
           key: const ValueKey('workspace-git-save'),
           onPressed: _save,
-          child: Text(hasExistingRemote ? '保存' : '绑定'),
+          child: Text(
+            hasExistingRemote
+                ? l10n.tr('保存', 'Save')
+                : l10n.tr('绑定', 'Connect'),
+          ),
         ),
       ],
     );
