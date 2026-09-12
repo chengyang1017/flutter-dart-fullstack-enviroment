@@ -11,7 +11,7 @@ RUN dart pub get
 COPY lib ./lib
 COPY web ./web
 
-RUN jaspr build --no-ssr
+RUN jaspr build
 
 FROM nginx:1.27-alpine
 
