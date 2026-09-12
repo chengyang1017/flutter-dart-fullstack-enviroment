@@ -6,6 +6,7 @@ import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:flutter/material.dart';
 import 'package:re_editor/re_editor.dart';
 
+import '../../../core/theme/workbench_palette.dart';
 import '../controllers/playground_controller.dart';
 import '../highlighting/flutter_dart_highlight.dart';
 import '../services/single_file_code_relationship_analyzer.dart';
@@ -26,9 +27,6 @@ class CodeEditorPanel extends StatefulWidget {
 }
 
 class _CodeEditorPanelState extends State<CodeEditorPanel> {
-  // Keep the editor on the same kind of monospace stack used by Monaco/VS Code.
-  // Cascadia has a wider, more IDE-like cell than the previous Consolas-first
-  // setup, so a single blank space no longer looks unnaturally compressed.
   static const _codeFontFamily = 'Cascadia Code';
   static const _codeFontFallback = <String>[
     'JetBrains Mono',
@@ -276,6 +274,8 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
   @override
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.sizeOf(context).width < 700;
+    final palette = WorkbenchPalette.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
 
     final codeFontSize =
         isCompact ? _compactCodeFontSize : _desktopCodeFontSize;
@@ -296,10 +296,6 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
     )..layout();
     final charWidth = textPainter.width;
 
-    // Match re_editor's DefaultCodeLineNumber layout exactly: its width is
-    // the measured width of a zero-filled string with at least three digits.
-    // Do not estimate this gutter with fixed pixels, otherwise every wire
-    // anchor drifts horizontally away from the real token.
     final lineCount = widget.controller.textController.text.split('\n').length;
     final rawLineDigits = lineCount.toString().length;
     final lineNumberDigits = rawLineDigits < 3 ? 3 : rawLineDigits;
@@ -351,20 +347,26 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
         fontFamilyFallback: _codeFontFallback,
         fontSize: codeFontSize,
         fontHeight: fontHeight,
-        textColor: const Color(0xffd6deeb),
-        backgroundColor: const Color(0xff111318),
-        cursorColor: const Color(0xff82aaff),
+        textColor: palette.editorText,
+        backgroundColor: palette.editorBackground,
+        cursorColor: palette.accent,
         cursorWidth: 2,
-        cursorLineColor: const Color(0xff191c23),
-        selectionColor: const Color(0xff334b68),
-        highlightColor: const Color(0xff3b4252),
+        cursorLineColor: dark
+            ? const Color(0xff191c23)
+            : const Color(0xfff3f6fa),
+        selectionColor: dark
+            ? const Color(0xff334b68)
+            : const Color(0xffcfe3fb),
+        highlightColor: dark
+            ? const Color(0xff3b4252)
+            : const Color(0xffdfe9f5),
         codeTheme: CodeHighlightTheme(
           languages: {
             'dart': CodeHighlightThemeMode(
               mode: flutterDartMode,
             ),
           },
-          theme: vscodeDark2026Theme,
+          theme: dark ? vscodeDark2026Theme : vscodeLight2026Theme,
         ),
       ),
       indicatorBuilder: (
@@ -381,27 +383,27 @@ class _CodeEditorPanelState extends State<CodeEditorPanel> {
             fontFamilyFallback: _codeFontFallback,
             fontSize: lineNumberFontSize,
             height: lineNumberFontHeight,
-            color: const Color(0xff5c6370),
+            color: palette.lineNumber,
           ),
           focusedTextStyle: TextStyle(
             fontFamily: _codeFontFamily,
             fontFamilyFallback: _codeFontFallback,
             fontSize: lineNumberFontSize,
             height: lineNumberFontHeight,
-            color: const Color(0xffabb2bf),
+            color: palette.activeLineNumber,
           ),
         );
       },
       leadingDivider: Container(
         width: 1,
-        color: const Color(0xff2c313c),
+        color: palette.border,
       ),
     );
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: ColoredBox(
-        color: const Color(0xff111318),
+        color: palette.editorBackground,
         child: Stack(
           fit: StackFit.expand,
           children: [
