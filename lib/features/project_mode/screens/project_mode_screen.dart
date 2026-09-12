@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
 
 import '../../export/services/workspace_import_picker.dart';
@@ -94,8 +95,13 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
 
     if (_runnerApiUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('创建真实 Flutter 项目需要连接 Flutter Runner。'),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '创建真实 Flutter 项目需要连接 Flutter Runner。',
+              'Creating a real Flutter project requires a Flutter Runner connection.',
+            ),
+          ),
         ),
       );
       return;
@@ -110,7 +116,14 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
 
     try {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('正在创建 Flutter 项目 ${request.projectName}...')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '正在创建 Flutter 项目 ${request.projectName}...',
+              'Creating Flutter project ${request.projectName}...',
+            ),
+          ),
+        ),
       );
 
       final snapshot = await scaffoldService.create(
@@ -130,7 +143,14 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('创建 Flutter 项目失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '创建 Flutter 项目失败：$error',
+              'Failed to create Flutter project: $error',
+            ),
+          ),
+        ),
       );
     } finally {
       scaffoldService.close();
@@ -159,19 +179,27 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
         barrierDismissible: false,
         builder: (dialogContext) {
           progressDialogContext = dialogContext;
-          return const PopScope(
+          final l10n = dialogContext.l10n;
+          return PopScope(
             canPop: false,
             child: AlertDialog(
-              title: Text('正在打开本地文件夹'),
+              title: Text(
+                l10n.tr('正在打开本地文件夹', 'Opening local folder'),
+              ),
               content: SizedBox(
                 width: 420,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('正在读取项目文件并保存到 Workspace，请稍候…'),
-                    SizedBox(height: 18),
-                    LinearProgressIndicator(),
+                    Text(
+                      l10n.tr(
+                        '正在读取项目文件并保存到 Workspace，请稍候…',
+                        'Reading project files and saving them to the Workspace. Please wait…',
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const LinearProgressIndicator(),
                   ],
                 ),
               ),
@@ -196,8 +224,14 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
         SnackBar(
           content: Text(
             WorkspaceCloudRuntime.enabled
-                ? '已打开 ${bundle.projectName}，${bundle.importedFileCount} 个文件已进入云端 Workspace。'
-                : '已打开 ${bundle.projectName}，${bundle.importedFileCount} 个文件已保存到本地 Workspace。',
+                ? context.l10n.tr(
+                    '已打开 ${bundle.projectName}，${bundle.importedFileCount} 个文件已进入云端 Workspace。',
+                    'Opened ${bundle.projectName}. ${bundle.importedFileCount} files were saved to the cloud Workspace.',
+                  )
+                : context.l10n.tr(
+                    '已打开 ${bundle.projectName}，${bundle.importedFileCount} 个文件已保存到本地 Workspace。',
+                    'Opened ${bundle.projectName}. ${bundle.importedFileCount} files were saved to the local Workspace.',
+                  ),
           ),
         ),
       );
@@ -207,7 +241,14 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
       closeProgressDialog();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('打开本地 Flutter 文件夹失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '打开本地 Flutter 文件夹失败：$error',
+              'Failed to open local Flutter folder: $error',
+            ),
+          ),
+        ),
       );
     } finally {
       closeProgressDialog();
@@ -226,26 +267,30 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
 
     final name = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('重命名项目'),
-        content: TextField(
-          controller: textController,
-          autofocus: true,
-          maxLength: 80,
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
+      builder: (dialogContext) {
+        final l10n = dialogContext.l10n;
+        return AlertDialog(
+          title: Text(l10n.tr('重命名项目', 'Rename project')),
+          content: TextField(
+            controller: textController,
+            autofocus: true,
+            maxLength: 80,
+            onSubmitted: (value) =>
+                Navigator.of(dialogContext).pop(value.trim()),
           ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(textController.text.trim()),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.tr('取消', 'Cancel')),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(textController.text.trim()),
+              child: Text(l10n.tr('确定', 'Confirm')),
+            ),
+          ],
+        );
+      },
     );
 
     textController.dispose();
@@ -260,7 +305,14 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('重命名项目失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '重命名项目失败：$error',
+              'Failed to rename project: $error',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -271,24 +323,34 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('删除 ${project.name}？'),
-        content: const Text('这个项目会从 Workspace 中删除。此操作无法撤销。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+      builder: (dialogContext) {
+        final l10n = dialogContext.l10n;
+        return AlertDialog(
+          title: Text(
+            l10n.tr('删除 ${project.name}？', 'Delete ${project.name}?'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+          content: Text(
+            l10n.tr(
+              '这个项目会从 Workspace 中删除。此操作无法撤销。',
+              'This project will be removed from the Workspace. This action cannot be undone.',
             ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.tr('取消', 'Cancel')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(l10n.tr('删除', 'Delete')),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed != true || !mounted) return;
@@ -301,12 +363,26 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
       setState(() {});
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已删除 ${project.name}')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '已删除 ${project.name}',
+              'Deleted ${project.name}',
+            ),
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除项目失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '删除项目失败：$error',
+              'Failed to delete project: $error',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -330,7 +406,14 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Flutter ZIP 导入失败：$error')),
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              'Flutter ZIP 导入失败：$error',
+              'Failed to import Flutter ZIP: $error',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -340,12 +423,14 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
     final library = _library;
     final projects = _visibleProjects;
     final accountUsername = _identity?.username;
+    final l10n = context.l10n;
 
     return Scaffold(
       key: const ValueKey('project-mode-screen'),
       appBar: AppBar(
-        title: const Text('开始项目'),
+        title: Text(l10n.tr('开始项目', 'Start a project')),
         actions: const [
+          AppLanguageToggleButton(),
           AppThemeToggleButton(),
           SizedBox(width: 6),
         ],
@@ -375,7 +460,7 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
                         Row(
                           children: [
                             Text(
-                              '你的项目',
+                              l10n.tr('你的项目', 'Your projects'),
                               style: Theme.of(context)
                                   .textTheme
                                   .titleLarge
@@ -383,7 +468,10 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
                             ),
                             const Spacer(),
                             Text(
-                              '${projects.length} 个项目',
+                              l10n.tr(
+                                '${projects.length} 个项目',
+                                '${projects.length} projects',
+                              ),
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
@@ -447,6 +535,8 @@ class _ProjectModeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -458,14 +548,17 @@ class _ProjectModeHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '选择一个项目开始',
+                l10n.tr('选择一个项目开始', 'Choose a project to begin'),
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
               ),
               const SizedBox(height: 6),
-              const Text(
-                '创建、打开或导入 Flutter 项目。进入 Workspace 后可随时在项目视角和概念视角之间切换。',
+              Text(
+                l10n.tr(
+                  '创建、打开或导入 Flutter 项目。进入 Workspace 后可随时在项目视角和概念视角之间切换。',
+                  'Create, open, or import a Flutter project. Once inside the Workspace, you can switch between Project View and Concept View at any time.',
+                ),
               ),
               if (accountUsername != null) ...[
                 const SizedBox(height: 10),
@@ -482,19 +575,19 @@ class _ProjectModeHeader extends StatelessWidget {
           key: const ValueKey('project-mode-open-folder'),
           onPressed: onOpenFolder,
           icon: const Icon(Icons.folder_open_rounded),
-          label: const Text('打开本地文件夹'),
+          label: Text(l10n.tr('打开本地文件夹', 'Open local folder')),
         ),
         OutlinedButton.icon(
           key: const ValueKey('project-mode-create'),
           onPressed: onCreate,
           icon: const Icon(Icons.add_rounded),
-          label: const Text('创建 Flutter 项目'),
+          label: Text(l10n.tr('创建 Flutter 项目', 'Create Flutter project')),
         ),
         TextButton.icon(
           key: const ValueKey('project-mode-import'),
           onPressed: onImportZip,
           icon: const Icon(Icons.archive_outlined),
-          label: const Text('导入 ZIP'),
+          label: Text(l10n.tr('导入 ZIP', 'Import ZIP')),
         ),
       ],
     );
@@ -515,6 +608,7 @@ class _EmptyProjectList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return Center(
       child: Container(
@@ -536,14 +630,17 @@ class _EmptyProjectList extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              '还没有项目',
+              l10n.tr('还没有项目', 'No projects yet'),
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              '直接打开电脑里的 Flutter 根目录，或者创建/导入一个项目。',
+            Text(
+              l10n.tr(
+                '直接打开电脑里的 Flutter 根目录，或者创建/导入一个项目。',
+                'Open a Flutter project root folder from your computer, or create/import a project.',
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 18),
@@ -556,19 +653,19 @@ class _EmptyProjectList extends StatelessWidget {
                   key: const ValueKey('project-mode-empty-open-folder'),
                   onPressed: onOpenFolder,
                   icon: const Icon(Icons.folder_open_rounded),
-                  label: const Text('打开本地文件夹'),
+                  label: Text(l10n.tr('打开本地文件夹', 'Open local folder')),
                 ),
                 OutlinedButton.icon(
                   key: const ValueKey('project-mode-empty-create'),
                   onPressed: onCreate,
                   icon: const Icon(Icons.add_rounded),
-                  label: const Text('创建项目'),
+                  label: Text(l10n.tr('创建项目', 'Create project')),
                 ),
                 TextButton.icon(
                   key: const ValueKey('project-mode-empty-import'),
                   onPressed: onImportZip,
                   icon: const Icon(Icons.archive_outlined),
-                  label: const Text('导入 ZIP'),
+                  label: Text(l10n.tr('导入 ZIP', 'Import ZIP')),
                 ),
               ],
             ),
@@ -598,10 +695,11 @@ class _ProjectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final subtitle = _subtitle(project);
+    final subtitle = _subtitle(context, project);
     final namespace = accountUsername == null
         ? project.slug
         : '$accountUsername / ${project.slug}';
+    final l10n = context.l10n;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -682,7 +780,7 @@ class _ProjectCard extends StatelessWidget {
           ),
           PopupMenuButton<_ProjectCardAction>(
             key: ValueKey('project-mode-project-menu-${project.id}'),
-            tooltip: '项目操作',
+            tooltip: l10n.tr('项目操作', 'Project actions'),
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (action) {
               switch (action) {
@@ -695,12 +793,12 @@ class _ProjectCard extends StatelessWidget {
               }
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: _ProjectCardAction.rename,
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.edit_outlined),
-                  title: Text('重命名'),
+                  leading: const Icon(Icons.edit_outlined),
+                  title: Text(l10n.tr('重命名', 'Rename')),
                 ),
               ),
               PopupMenuItem(
@@ -712,7 +810,7 @@ class _ProjectCard extends StatelessWidget {
                     color: scheme.error,
                   ),
                   title: Text(
-                    '删除项目',
+                    l10n.tr('删除项目', 'Delete project'),
                     style: TextStyle(color: scheme.error),
                   ),
                 ),
@@ -725,7 +823,8 @@ class _ProjectCard extends StatelessWidget {
     );
   }
 
-  String _subtitle(WorkspaceProject project) {
+  String _subtitle(BuildContext context, WorkspaceProject project) {
+    final l10n = context.l10n;
     final remote = project.gitRemote;
     if (remote != null) {
       final path = remote.projectPath;
@@ -737,12 +836,17 @@ class _ProjectCard extends StatelessWidget {
     if (project.kind == WorkspaceProjectKind.generatedFlutter) {
       final platforms =
           project.flutterPlatforms.map(_platformLabel).join(' · ');
-      return platforms.isEmpty ? 'Flutter 项目' : 'Flutter · $platforms';
+      return platforms.isEmpty
+          ? l10n.tr('Flutter 项目', 'Flutter project')
+          : 'Flutter · $platforms';
     }
     if (project.kind == WorkspaceProjectKind.importedFlutter) {
-      return '本地打开 / 导入的 Flutter 项目';
+      return l10n.tr(
+        '本地打开 / 导入的 Flutter 项目',
+        'Locally opened / imported Flutter project',
+      );
     }
-    return 'Workspace 项目';
+    return l10n.tr('Workspace 项目', 'Workspace project');
   }
 
   String _platformLabel(String platform) => switch (platform) {
@@ -761,8 +865,13 @@ class _UnavailableProjectLibrary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Text('当前环境没有可用的项目库。'),
+    return Center(
+      child: Text(
+        context.l10n.tr(
+          '当前环境没有可用的项目库。',
+          'No project library is available in the current environment.',
+        ),
+      ),
     );
   }
 }
