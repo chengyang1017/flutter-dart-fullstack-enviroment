@@ -2,7 +2,8 @@ FROM dart:stable AS build
 
 WORKDIR /app
 
-RUN dart install jaspr_cli
+RUN dart pub global activate jaspr_cli
+ENV PATH="${PATH}:/root/.pub-cache/bin"
 
 COPY pubspec.yaml analysis_options.yaml ./
 RUN dart pub get
@@ -10,7 +11,7 @@ RUN dart pub get
 COPY lib ./lib
 COPY web ./web
 
-RUN /root/.pub-cache/bin/jaspr build
+RUN jaspr build
 
 FROM nginx:1.27-alpine
 
