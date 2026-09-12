@@ -1,4 +1,6 @@
 export 'src/workspace_account_store.dart';
+export 'src/workspace_admin_agent_http_handler.dart';
+export 'src/workspace_admin_agent_service.dart';
 export 'src/workspace_admin_http_handler.dart';
 export 'src/workspace_admin_store.dart';
 export 'src/workspace_auth_http_handler.dart';
