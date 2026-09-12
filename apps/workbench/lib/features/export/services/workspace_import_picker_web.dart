@@ -1,7 +1,7 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-import 'package:universal_html/js_util.dart' as js_util;
+import 'package:file_system_access_api/file_system_access_api.dart';
 
 const bool supportsWorkspaceImportPicker = true;
 const bool supportsWorkspaceDirectoryPicker = true;
@@ -57,27 +57,23 @@ Future<List<({String path, Uint8List bytes})>?> pickWorkspaceDirectory() async {
   return _pickWorkspaceDirectoryWithLegacyInput();
 }
 
-bool get _supportsFileSystemAccessDirectoryPicker =>
-    js_util.hasProperty(html.window, 'showDirectoryPicker');
+bool get _supportsFileSystemAccessDirectoryPicker => FileSystemAccess.supported;
 
 Future<List<({String path, Uint8List bytes})>?>
     _pickWorkspaceDirectoryWithFileSystemAccess() async {
-  Object rootHandle;
+  late final FileSystemDirectoryHandle rootHandle;
   try {
-    final promise = js_util.callMethod<Object>(
-      html.window,
-      'showDirectoryPicker',
-      const <Object?>[],
+    rootHandle = await html.window.showDirectoryPicker(
+      mode: PermissionMode.read,
     );
-    rootHandle = await js_util.promiseToFuture<Object>(promise);
-  } catch (error) {
-    if (_isAbortError(error)) return null;
-    rethrow;
+  } on AbortError {
+    return null;
   }
 
-  final rootName = js_util.getProperty<String>(rootHandle, 'name').trim();
-  final selected = <({String path, Object handle})>[];
-  final enumeratedGitMetadata = <({String path, Object handle})>[];
+  final rootName = rootHandle.name.trim();
+  final selected = <({String path, FileSystemFileHandle handle})>[];
+  final enumeratedGitMetadata =
+      <({String path, FileSystemFileHandle handle})>[];
 
   await _collectDirectoryHandles(
     rootHandle,
@@ -110,17 +106,12 @@ Future<List<({String path, Uint8List bytes})>?>
 }
 
 Future<List<({String path, Uint8List bytes})>> _readRootGitMetadata(
-  Object rootHandle, {
+  FileSystemDirectoryHandle rootHandle, {
   required String rootName,
 }) async {
-  Object gitHandle;
+  late final FileSystemDirectoryHandle gitHandle;
   try {
-    final promise = js_util.callMethod<Object>(
-      rootHandle,
-      'getDirectoryHandle',
-      <Object?>['.git'],
-    );
-    gitHandle = await js_util.promiseToFuture<Object>(promise);
+    gitHandle = await rootHandle.getDirectoryHandle('.git');
   } catch (_) {
     return const <({String path, Uint8List bytes})>[];
   }
@@ -128,18 +119,8 @@ Future<List<({String path, Uint8List bytes})>> _readRootGitMetadata(
   final result = <({String path, Uint8List bytes})>[];
   for (final name in const <String>['config', 'HEAD']) {
     try {
-      final handlePromise = js_util.callMethod<Object>(
-        gitHandle,
-        'getFileHandle',
-        <Object?>[name],
-      );
-      final handle = await js_util.promiseToFuture<Object>(handlePromise);
-      final filePromise = js_util.callMethod<Object>(
-        handle,
-        'getFile',
-        const <Object?>[],
-      );
-      final file = await js_util.promiseToFuture<html.File>(filePromise);
+      final handle = await gitHandle.getFileHandle(name);
+      final file = await handle.getFile();
       if (file.size > 256 * 1024) continue;
       final prefix = rootName.isEmpty ? '' : '$rootName/';
       result.add(
@@ -158,37 +139,22 @@ Future<List<({String path, Uint8List bytes})>> _readRootGitMetadata(
 }
 
 Future<void> _collectDirectoryHandles(
-  Object directoryHandle, {
+  FileSystemDirectoryHandle directoryHandle, {
   required String prefix,
-  required List<({String path, Object handle})> selected,
-  required List<({String path, Object handle})> gitMetadata,
+  required List<({String path, FileSystemFileHandle handle})> selected,
+  required List<({String path, FileSystemFileHandle handle})> gitMetadata,
 }) async {
-  final iterator = js_util.callMethod<Object>(
-    directoryHandle,
-    'values',
-    const <Object?>[],
-  );
-
-  while (true) {
-    final nextPromise = js_util.callMethod<Object>(
-      iterator,
-      'next',
-      const <Object?>[],
-    );
-    final next = await js_util.promiseToFuture<Object>(nextPromise);
-    if (js_util.getProperty<bool>(next, 'done')) return;
-
-    final handle = js_util.getProperty<Object>(next, 'value');
-    final name = js_util.getProperty<String>(handle, 'name').trim();
+  await for (final handle in directoryHandle.values) {
+    final name = handle.name.trim();
     if (name.isEmpty) continue;
 
-    final kind = js_util.getProperty<String>(handle, 'kind');
     final path = prefix.isEmpty ? name : '$prefix/$name';
 
-    if (kind == 'directory') {
+    if (handle.kind == FileSystemKind.directory) {
+      final directory = handle as FileSystemDirectoryHandle;
       if (name == '.git' && _isRootGitDirectoryPath(path)) {
         await _collectRootGitMetadataHandles(
-          handle,
+          directory,
           prefix: path,
           selected: gitMetadata,
         );
@@ -196,7 +162,7 @@ Future<void> _collectDirectoryHandles(
       }
       if (_ignoredDirectoryNames.contains(name)) continue;
       await _collectDirectoryHandles(
-        handle,
+        directory,
         prefix: path,
         selected: selected,
         gitMetadata: gitMetadata,
@@ -204,7 +170,10 @@ Future<void> _collectDirectoryHandles(
       continue;
     }
 
-    if (kind != 'file' || _shouldIgnoreDirectoryPath(path)) continue;
+    if (handle.kind != FileSystemKind.file ||
+        _shouldIgnoreDirectoryPath(path)) {
+      continue;
+    }
 
     if (selected.length >= _maxImportedFiles) {
       throw const FormatException(
@@ -212,38 +181,26 @@ Future<void> _collectDirectoryHandles(
       );
     }
 
-    selected.add((path: path, handle: handle));
+    selected.add((path: path, handle: handle as FileSystemFileHandle));
   }
 }
 
 Future<void> _collectRootGitMetadataHandles(
-  Object gitHandle, {
+  FileSystemDirectoryHandle gitHandle, {
   required String prefix,
-  required List<({String path, Object handle})> selected,
+  required List<({String path, FileSystemFileHandle handle})> selected,
 }) async {
-  final iterator = js_util.callMethod<Object>(
-    gitHandle,
-    'values',
-    const <Object?>[],
-  );
-
-  while (true) {
-    final nextPromise = js_util.callMethod<Object>(
-      iterator,
-      'next',
-      const <Object?>[],
-    );
-    final next = await js_util.promiseToFuture<Object>(nextPromise);
-    if (js_util.getProperty<bool>(next, 'done')) return;
-
-    final handle = js_util.getProperty<Object>(next, 'value');
-    final name = js_util.getProperty<String>(handle, 'name').trim();
+  await for (final handle in gitHandle.values) {
+    final name = handle.name.trim();
     if (name != 'config' && name != 'HEAD') continue;
+    if (handle.kind != FileSystemKind.file) continue;
 
-    final kind = js_util.getProperty<String>(handle, 'kind');
-    if (kind != 'file') continue;
-
-    selected.add((path: '$prefix/$name', handle: handle));
+    selected.add(
+      (
+        path: '$prefix/$name',
+        handle: handle as FileSystemFileHandle,
+      ),
+    );
   }
 }
 
@@ -257,7 +214,7 @@ bool _isRootGitDirectoryPath(String path) {
 }
 
 Future<List<({String path, Uint8List bytes})>> _readFileSystemHandles(
-  List<({String path, Object handle})> selected,
+  List<({String path, FileSystemFileHandle handle})> selected,
 ) async {
   final result = <({String path, Uint8List bytes})>[];
   var selectedBytes = 0;
@@ -270,14 +227,7 @@ Future<List<({String path, Uint8List bytes})>> _readFileSystemHandles(
     final batch = selected.sublist(start, end);
 
     final files = await Future.wait(
-      batch.map((entry) async {
-        final promise = js_util.callMethod<Object>(
-          entry.handle,
-          'getFile',
-          const <Object?>[],
-        );
-        return js_util.promiseToFuture<html.File>(promise);
-      }),
+      batch.map((entry) => entry.handle.getFile()),
     );
 
     for (var index = 0; index < batch.length; index += 1) {
@@ -290,7 +240,7 @@ Future<List<({String path, Uint8List bytes})>> _readFileSystemHandles(
         );
       }
 
-      selectedBytes += file.size.toInt();
+      selectedBytes += file.size;
       if (selectedBytes > _maxImportedBytes) {
         throw const FormatException(
           'Project is larger than the 120 MB folder-import limit.',
@@ -336,7 +286,7 @@ Future<List<({String path, Uint8List bytes})>?>
       );
     }
 
-    selectedBytes += file.size.toInt();
+    selectedBytes += file.size;
     if (selectedBytes > _maxImportedBytes) {
       throw const FormatException(
         'Project is larger than the 120 MB folder-import limit.',
@@ -363,15 +313,6 @@ Future<List<({String path, Uint8List bytes})>?>
   }
 
   return result;
-}
-
-bool _isAbortError(Object error) {
-  try {
-    return js_util.hasProperty(error, 'name') &&
-        js_util.getProperty<String>(error, 'name') == 'AbortError';
-  } catch (_) {
-    return false;
-  }
 }
 
 String _directoryPath(html.File file) {
