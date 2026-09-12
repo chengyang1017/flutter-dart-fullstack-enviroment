@@ -1,9 +1,13 @@
 import '../../../core/errors/parse_exception.dart';
+import '../../../core/l10n/app_localizations.dart';
 import '../models/token.dart';
 import '../models/ui_node.dart';
 import '../models/ui_value.dart';
 import 'parser_cursor.dart';
 import 'tokenizer.dart';
+
+String _localized(String zh, String en) =>
+    AppLocaleController.locale.value.languageCode == 'en' ? en : zh;
 
 class FlutterUiParser {
   UiNode parse(String source) {
@@ -12,14 +16,23 @@ class FlutterUiParser {
 
     if (v is! NodeUiValue) {
       throw ParseException(
-        '根元素必须是 Widget',
+        _localized(
+          '根元素必须是 Widget',
+          'The root element must be a Widget',
+        ),
         c.current.line,
         c.current.column,
         c.current.lexeme,
       );
     }
 
-    c.expect(TokenType.eof, 'Widget 后存在多余内容');
+    c.expect(
+      TokenType.eof,
+      _localized(
+        'Widget 后存在多余内容',
+        'Unexpected content after the Widget',
+      ),
+    );
     return v.value;
   }
 
@@ -61,7 +74,10 @@ class FlutterUiParser {
       while (!c.check(TokenType.rightBracket)) {
         if (c.check(TokenType.eof)) {
           throw ParseException(
-            'children 列表缺少右方括号 ]',
+            _localized(
+              'children 列表缺少右方括号 ]',
+              'The children list is missing a closing bracket ]',
+            ),
             c.current.line,
             c.current.column,
             c.current.lexeme,
@@ -71,7 +87,13 @@ class FlutterUiParser {
         values.add(_value(c));
 
         if (!c.match(TokenType.comma) && !c.check(TokenType.rightBracket)) {
-          c.expect(TokenType.comma, '列表元素之间需要逗号');
+          c.expect(
+            TokenType.comma,
+            _localized(
+              '列表元素之间需要逗号',
+              'List elements must be separated by commas',
+            ),
+          );
         }
       }
 
@@ -81,14 +103,17 @@ class FlutterUiParser {
 
     final first = c.expect(
       TokenType.identifier,
-      '此处需要值',
+      _localized('此处需要值', 'A value is required here'),
     );
 
     final name = StringBuffer(first.lexeme);
 
     while (c.match(TokenType.dot)) {
       name.write(
-        '.${c.expect(TokenType.identifier, '点号后需要标识符').lexeme}',
+        '.${c.expect(
+          TokenType.identifier,
+          _localized('点号后需要标识符', 'An identifier is required after the dot'),
+        ).lexeme}',
       );
     }
 
@@ -102,7 +127,10 @@ class FlutterUiParser {
     while (!c.check(TokenType.rightParen)) {
       if (c.check(TokenType.eof)) {
         throw ParseException(
-          '${name.toString()} 缺少右括号 )',
+          _localized(
+            '${name.toString()} 缺少右括号 )',
+            '${name.toString()} is missing a closing parenthesis )',
+          ),
           c.current.line,
           c.current.column,
           c.current.lexeme,
@@ -120,7 +148,13 @@ class FlutterUiParser {
       }
 
       if (!c.match(TokenType.comma) && !c.check(TokenType.rightParen)) {
-        c.expect(TokenType.comma, '参数之间需要逗号');
+        c.expect(
+          TokenType.comma,
+          _localized(
+            '参数之间需要逗号',
+            'Arguments must be separated by commas',
+          ),
+        );
       }
     }
 
