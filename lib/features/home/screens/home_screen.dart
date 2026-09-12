@@ -88,7 +88,7 @@ class HomeScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            'Flutter UI Playground',
+                            'Flutter Workbench',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.headlineMedium,
                           ),
