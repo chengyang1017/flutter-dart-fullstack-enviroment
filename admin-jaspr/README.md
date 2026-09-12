@@ -10,7 +10,7 @@ Jaspr client-mode administration console for Flutter Workbench.
 - Lesson groups and lessons
 - Full lesson catalog JSON, including starter code, hints, answer assets and checker requirements
 
-The admin app does **not** contain an admin secret. It signs in through the normal `/auth/login` endpoint and sends the returned bearer token to `/admin/*`. Workspace Storage grants admin access only to usernames listed in `WORKSPACE_ADMIN_USERNAMES`.
+The admin app does **not** contain an admin secret. It signs in through the Workspace account system and sends the returned bearer token to `/admin/*`. Workspace Storage grants admin access only to usernames listed in `WORKSPACE_ADMIN_USERNAMES`.
 
 ## Lesson migration
 
@@ -27,16 +27,16 @@ The bootstrap endpoint refuses to overwrite an existing catalog.
 
 ## Run locally
 
-Install the current Jaspr CLI and dependencies:
+This is a pure client-side Jaspr app, so SSR must be disabled when serving it:
 
 ```bash
-dart install jaspr_cli
+dart pub global activate jaspr_cli
 cd admin-jaspr
 dart pub get
-jaspr serve
+jaspr serve --no-ssr
 ```
 
-Jaspr generates `lib/main.client.options.dart` during serve/build.
+Jaspr generates `lib/main.client.options.dart` and the `main.client.dart.js` bundle during serve/build.
 
 The default Workspace Storage API is:
 
@@ -49,14 +49,14 @@ To build against another backend, provide `WORKSPACE_STORAGE_API_URL` as a Dart 
 ## Build
 
 ```bash
-jaspr build
+jaspr build --no-ssr
 ```
 
-Client-mode output is generated in `build/jaspr`.
+The no-SSR build produces static client assets that can be deployed behind nginx or any static host.
 
 ## Docker / Railway
 
-The included Dockerfile builds the Jaspr client app and serves it through nginx on port `8080` with SPA fallback.
+The included Dockerfile builds the Jaspr client app with `--no-ssr` and serves it through nginx on port `8080` with SPA fallback.
 
 For a Railway service created from this monorepo, set:
 
