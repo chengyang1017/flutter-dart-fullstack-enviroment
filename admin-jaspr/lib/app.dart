@@ -36,6 +36,16 @@ class _AdminAppState extends State<AdminApp> {
   int? _selectedProjectIndex;
   int? _selectedLessonIndex;
 
+  int? _creatingCourseGroupIndex;
+  String _newCourseId = '';
+  String _newCourseTitle = '';
+  String _newCourseDescription = '';
+  String _newCourseCategory = '';
+  String _newCourseDifficulty = 'Beginner';
+  String _newCourseMinutes = '60';
+  String _newCourseTags = '';
+  bool _newCourseComingSoon = false;
+
   @override
   void initState() {
     super.initState();
@@ -109,6 +119,7 @@ class _AdminAppState extends State<AdminApp> {
       _catalogDraft = '';
       _selectedProjectIndex = null;
       _selectedLessonIndex = null;
+      _creatingCourseGroupIndex = null;
       _section = _AdminSection.dashboard;
       _error = null;
       _notice = null;
@@ -202,7 +213,7 @@ class _AdminAppState extends State<AdminApp> {
     }
   }
 
-  Future<void> _saveLessons() async {
+  Future<void> _saveLessons({String successMessage = 'Lesson catalog saved.'}) async {
     final token = _token;
     final catalog = _lessonCatalog;
     if (token == null || catalog == null) return;
@@ -215,7 +226,7 @@ class _AdminAppState extends State<AdminApp> {
         _lessonCatalog = saved;
         _overview = overview;
         _catalogDraft = const JsonEncoder.withIndent('  ').convert(saved);
-        _notice = 'Lesson catalog saved.';
+        _notice = successMessage;
         _normalizeLessonSelection();
       });
     } catch (error) {
@@ -295,6 +306,125 @@ class _AdminAppState extends State<AdminApp> {
     final lessons = _lessonList(groups[groupIndex]);
     if (lessonIndex < 0 || lessonIndex >= lessons.length) return null;
     return lessons[lessonIndex];
+  }
+
+  void _openCreateCourse(int groupIndex) {
+    final groups = _lessonGroups;
+    if (groupIndex < 0 || groupIndex >= groups.length) return;
+    setState(() {
+      _creatingCourseGroupIndex = groupIndex;
+      _selectedProjectIndex = groupIndex;
+      _newCourseId = '';
+      _newCourseTitle = '';
+      _newCourseDescription = '';
+      _newCourseCategory = '';
+      _newCourseDifficulty = 'Beginner';
+      _newCourseMinutes = '60';
+      _newCourseTags = '';
+      _newCourseComingSoon = false;
+      _error = null;
+      _notice = null;
+    });
+  }
+
+  void _cancelCreateCourse() {
+    setState(() => _creatingCourseGroupIndex = null);
+  }
+
+  Future<void> _createCourse() async {
+    final catalog = _lessonCatalog;
+    final groupIndex = _creatingCourseGroupIndex;
+    final groups = _lessonGroups;
+    if (catalog == null || groupIndex == null) return;
+    if (groupIndex < 0 || groupIndex >= groups.length) return;
+
+    final title = _newCourseTitle.trim();
+    if (title.isEmpty) {
+      setState(() => _error = 'Course title is required.');
+      return;
+    }
+
+    final id = _newCourseId.trim().isEmpty
+        ? _slugify(title)
+        : _slugify(_newCourseId);
+    if (id.isEmpty) {
+      setState(() => _error = 'Course ID is required.');
+      return;
+    }
+
+    final duplicate = groups
+        .expand(_lessonList)
+        .any((lesson) => lesson['id']?.toString() == id);
+    if (duplicate) {
+      setState(() => _error = 'A course with ID "$id" already exists.');
+      return;
+    }
+
+    final category = _newCourseCategory.trim().isEmpty
+        ? 'General'
+        : _newCourseCategory.trim();
+    final difficulty = _newCourseDifficulty.trim().isEmpty
+        ? 'Beginner'
+        : _newCourseDifficulty.trim();
+    final minutes = int.tryParse(_newCourseMinutes.trim()) ?? 60;
+    final tags = _newCourseTags
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+
+    final course = <String, dynamic>{
+      'id': id,
+      'title': title,
+      'description': _newCourseDescription.trim(),
+      'difficulty': difficulty,
+      'category': category,
+      'tags': tags,
+      'estimatedMinutes': minutes < 1 ? 1 : minutes,
+      'prerequisites': <String>[],
+      'comingSoon': _newCourseComingSoon,
+      'version': 'beginner',
+      'steps': <Object?>[],
+      'translations': <String, dynamic>{
+        'en': <String, dynamic>{
+          'title': title,
+          'description': _newCourseDescription.trim(),
+          'difficulty': difficulty,
+          'category': category,
+          'tags': tags,
+          'prerequisites': <String>[],
+        },
+      },
+    };
+
+    final group = groups[groupIndex];
+    final rawLessons = group['lessons'];
+    late final List<dynamic> lessons;
+    if (rawLessons is List) {
+      lessons = rawLessons;
+    } else {
+      lessons = <dynamic>[];
+      group['lessons'] = lessons;
+    }
+    lessons.add(course);
+
+    setState(() {
+      _selectedProjectIndex = groupIndex;
+      _selectedLessonIndex = lessons.length - 1;
+      _creatingCourseGroupIndex = null;
+      _catalogDraft = const JsonEncoder.withIndent('  ').convert(catalog);
+    });
+
+    await _saveLessons(successMessage: 'Course "$title" created.');
+  }
+
+  String _slugify(String value) {
+    final slug = value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    return slug;
   }
 
   Map<String, dynamic> _mapRef(Object? source) {
@@ -556,6 +686,13 @@ class _AdminAppState extends State<AdminApp> {
 
     final groups = _lessonGroups;
     final lesson = _selectedLesson;
+    final creatingGroupIndex = _creatingCourseGroupIndex;
+    final creatingGroup = creatingGroupIndex != null &&
+            creatingGroupIndex >= 0 &&
+            creatingGroupIndex < groups.length
+        ? groups[creatingGroupIndex]
+        : null;
+
     return div([
       div(classes: 'section-toolbar', [
         div([
@@ -564,12 +701,21 @@ class _AdminAppState extends State<AdminApp> {
             text('${groups.length} groups · ${_overview['lessons'] ?? 0} lessons'),
           ]),
         ]),
-        button(
-          classes: 'primary-button',
-          disabled: _busy,
-          onClick: _saveLessons,
-          [text('Save course changes')],
-        ),
+        div(classes: 'topbar-actions', [
+          if (groups.isNotEmpty)
+            button(
+              classes: 'ghost-button',
+              disabled: _busy,
+              onClick: () => _openCreateCourse(_selectedProjectIndex ?? 0),
+              [text('＋ Add course')],
+            ),
+          button(
+            classes: 'primary-button',
+            disabled: _busy,
+            onClick: () => _saveLessons(),
+            [text('Save course changes')],
+          ),
+        ]),
       ]),
       div(classes: 'lesson-workspace', [
         div(classes: 'lesson-tree panel', [
@@ -577,12 +723,14 @@ class _AdminAppState extends State<AdminApp> {
             _lessonGroup(groupIndex, groups[groupIndex]),
         ]),
         div(classes: 'lesson-editor panel', [
-          lesson == null
-              ? div(classes: 'empty-editor', [
-                  h3([text('Select a lesson')]),
-                  p(classes: 'muted', [text('Choose a lesson from the left.')]),
-                ])
-              : _lessonForm(lesson),
+          creatingGroup != null
+              ? _newCourseForm(creatingGroup)
+              : lesson == null
+                  ? div(classes: 'empty-editor', [
+                      h3([text('Select a lesson')]),
+                      p(classes: 'muted', [text('Choose a lesson from the left.')]),
+                    ])
+                  : _lessonForm(lesson),
         ]),
       ]),
       div(classes: 'panel json-panel', [
@@ -619,12 +767,19 @@ class _AdminAppState extends State<AdminApp> {
           strong([text(group['title']?.toString() ?? 'Untitled group')]),
           span([text('${lessons.length} lessons')]),
         ]),
+        button(
+          classes: 'ghost-button compact-button',
+          disabled: _busy,
+          onClick: () => _openCreateCourse(groupIndex),
+          [text('＋')],
+        ),
       ]),
       div(classes: 'lesson-list', [
         for (var lessonIndex = 0; lessonIndex < lessons.length; lessonIndex++)
           button(
             classes: 'lesson-row${_selectedProjectIndex == groupIndex && _selectedLessonIndex == lessonIndex ? ' selected' : ''}',
             onClick: () => setState(() {
+              _creatingCourseGroupIndex = null;
               _selectedProjectIndex = groupIndex;
               _selectedLessonIndex = lessonIndex;
             }),
@@ -642,6 +797,96 @@ class _AdminAppState extends State<AdminApp> {
               ]),
             ],
           ),
+      ]),
+    ]);
+  }
+
+  Component _newCourseForm(Map<String, dynamic> group) {
+    return div(key: const Key('new-course-editor'), [
+      div(classes: 'editor-heading', [
+        div([
+          p(classes: 'eyebrow', [text('NEW COURSE')]),
+          h2([text('Add course')]),
+          p(classes: 'muted', [
+            text('Add a course to ${group['title']?.toString() ?? 'this group'}.'),
+          ]),
+        ]),
+        span(classes: 'badge', [text('Draft')]),
+      ]),
+      _field(
+        'Course title',
+        _newCourseTitle,
+        (value) => _newCourseTitle = value,
+      ),
+      _field(
+        'Course ID',
+        _newCourseId,
+        (value) => _newCourseId = value,
+      ),
+      p(classes: 'muted editor-note', [
+        text('Leave the ID empty to generate it from the English title.'),
+      ]),
+      _area(
+        'Description',
+        _newCourseDescription,
+        (value) => _newCourseDescription = value,
+      ),
+      div(classes: 'form-grid', [
+        _field(
+          'Category',
+          _newCourseCategory,
+          (value) => _newCourseCategory = value,
+        ),
+        _field(
+          'Difficulty',
+          _newCourseDifficulty,
+          (value) => _newCourseDifficulty = value,
+        ),
+      ]),
+      div(classes: 'form-grid', [
+        _field(
+          'Estimated minutes',
+          _newCourseMinutes,
+          (value) => _newCourseMinutes = value,
+          type: 'number',
+        ),
+        _field(
+          'Tags (comma separated)',
+          _newCourseTags,
+          (value) => _newCourseTags = value,
+        ),
+      ]),
+      label(classes: 'toggle-row', [
+        input<bool>(
+          attributes: {
+            'type': 'checkbox',
+            if (_newCourseComingSoon) 'checked': 'checked',
+          },
+          events: events<bool>(onChange: (value) {
+            setState(() => _newCourseComingSoon = value);
+          }),
+        ),
+        span([
+          strong([text('Coming soon')]),
+          span(classes: 'muted', [text('Create the course but keep it unavailable to students.')]),
+        ]),
+      ]),
+      div(classes: 'topbar-actions', [
+        button(
+          classes: 'ghost-button',
+          disabled: _busy,
+          onClick: _cancelCreateCourse,
+          [text('Cancel')],
+        ),
+        button(
+          classes: 'primary-button',
+          disabled: _busy,
+          onClick: _createCourse,
+          [text(_busy ? 'Creating…' : 'Create course')],
+        ),
+      ]),
+      p(classes: 'muted editor-note', [
+        text('A new course starts with zero lesson steps. Add steps later through Advanced catalog JSON.'),
       ]),
     ]);
   }
