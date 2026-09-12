@@ -4,6 +4,7 @@ import '../../../core/l10n/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../controller/lesson_controller.dart';
 import '../data/author_answer_repository.dart';
+import '../data/lesson_catalog_repository.dart';
 import '../data/lesson_progress_store.dart';
 import '../models/code_reference.dart';
 import '../models/lesson.dart';
@@ -32,20 +33,48 @@ class LessonScreen extends StatefulWidget {
 class _LessonScreenState extends State<LessonScreen> {
   late final LessonController controller;
   late final AuthorAnswerRepository answerRepository;
+  late final LessonCatalogRepository _catalogRepository;
 
   bool _showAnswerPanel = false;
   bool _isAnswerExpanded = false;
   CodeReference? _standardAnswerTarget;
+  String? _contentLanguage;
+  int _languageLoadSerial = 0;
 
   @override
   void initState() {
     super.initState();
     answerRepository = AuthorAnswerRepository();
+    _catalogRepository = LessonCatalogRepository();
     controller = LessonController(
       lesson: widget.lesson,
       store: widget.store,
       answerRepository: answerRepository,
     )..addListener(_refresh);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final languageCode =
+        Localizations.localeOf(context).languageCode.toLowerCase().startsWith('en')
+            ? 'en'
+            : 'zh';
+    if (_contentLanguage == languageCode) return;
+    _contentLanguage = languageCode;
+    final serial = ++_languageLoadSerial;
+    Future<void>.microtask(
+      () => _reloadLocalizedLesson(languageCode, serial),
+    );
+  }
+
+  Future<void> _reloadLocalizedLesson(String languageCode, int serial) async {
+    final localized = await _catalogRepository.loadLesson(
+      widget.lesson.id,
+      languageCode: languageCode,
+    );
+    if (!mounted || serial != _languageLoadSerial || localized == null) return;
+    controller.replaceLesson(localized);
   }
 
   void _refresh() {
@@ -118,6 +147,7 @@ class _LessonScreenState extends State<LessonScreen> {
   void dispose() {
     controller.removeListener(_refresh);
     controller.dispose();
+    _catalogRepository.close();
     super.dispose();
   }
 
