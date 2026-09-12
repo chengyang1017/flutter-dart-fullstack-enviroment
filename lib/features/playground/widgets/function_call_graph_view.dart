@@ -3,6 +3,7 @@ import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../controllers/concept_label_controller.dart';
 import '../services/dart_code_flow_analyzer.dart';
 
@@ -190,6 +191,7 @@ class _FunctionCallGraphViewState extends State<FunctionCallGraphView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     final layout = _FunctionGraphLayout.build(
       widget.root,
       expandedNodeKeys: _expandedNodeKeys,
@@ -267,6 +269,8 @@ class _FunctionCallGraphViewState extends State<FunctionCallGraphView> {
                                     labelColor:
                                         theme.colorScheme.onSurfaceVariant,
                                     labelSurface: theme.colorScheme.surface,
+                                    callerLabel: l10n.tr('调用', 'Calls'),
+                                    calleeLabel: l10n.tr('被调用', 'Called'),
                                   ),
                                 ),
                               ),
@@ -315,6 +319,7 @@ class _GraphZoomToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
     return Material(
       color: theme.colorScheme.surfaceContainerLow.withOpacity(0.96),
@@ -329,7 +334,7 @@ class _GraphZoomToolbar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _GraphZoomButton(
-              tooltip: '缩小',
+              tooltip: l10n.tr('缩小', 'Zoom out'),
               icon: Icons.remove_rounded,
               onPressed: onZoomOut,
             ),
@@ -351,7 +356,7 @@ class _GraphZoomToolbar extends StatelessWidget {
               },
             ),
             _GraphZoomButton(
-              tooltip: '放大',
+              tooltip: l10n.tr('放大', 'Zoom in'),
               icon: Icons.add_rounded,
               onPressed: onZoomIn,
             ),
@@ -360,7 +365,7 @@ class _GraphZoomToolbar extends StatelessWidget {
               child: VerticalDivider(width: 1),
             ),
             Tooltip(
-              message: '实际大小 100%',
+              message: l10n.tr('实际大小 100%', 'Actual size 100%'),
               child: TextButton(
                 style: TextButton.styleFrom(
                   minimumSize: const Size(42, 34),
@@ -372,7 +377,7 @@ class _GraphZoomToolbar extends StatelessWidget {
               ),
             ),
             _GraphZoomButton(
-              tooltip: '适合窗口',
+              tooltip: l10n.tr('适合窗口', 'Fit to window'),
               icon: Icons.fit_screen_rounded,
               onPressed: onFit,
             ),
@@ -381,7 +386,7 @@ class _GraphZoomToolbar extends StatelessWidget {
               child: VerticalDivider(width: 1),
             ),
             PopupMenuButton<void>(
-              tooltip: '电线说明',
+              tooltip: l10n.tr('电线说明', 'Wire legend'),
               padding: EdgeInsets.zero,
               iconSize: 18,
               icon: const Icon(Icons.help_outline_rounded, size: 18),
@@ -391,7 +396,10 @@ class _GraphZoomToolbar extends StatelessWidget {
                   child: _LegendItem(
                     icon: Icons.circle,
                     iconSize: 9,
-                    label: '调用者：圆点发出调用',
+                    label: l10n.tr(
+                      '调用者：圆点发出调用',
+                      'Caller: the dot starts the call',
+                    ),
                     color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
@@ -400,7 +408,10 @@ class _GraphZoomToolbar extends StatelessWidget {
                   child: _LegendItem(
                     icon: Icons.arrow_right_alt,
                     iconSize: 20,
-                    label: '被调用者：箭头指向这里',
+                    label: l10n.tr(
+                      '被调用者：箭头指向这里',
+                      'Callee: the arrow points here',
+                    ),
                     color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
@@ -409,7 +420,10 @@ class _GraphZoomToolbar extends StatelessWidget {
                   child: _LegendItem(
                     icon: Icons.more_horiz_rounded,
                     iconSize: 20,
-                    label: '虚线：应用 ↔ 后端',
+                    label: l10n.tr(
+                      '虚线：应用 ↔ 后端',
+                      'Dashed line: App ↔ Backend',
+                    ),
                     color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
@@ -511,6 +525,7 @@ Future<void> _showFunctionNodeNameDialog(
   CodeFlowNode node,
   ConceptLabelController labels,
 ) async {
+  final l10n = context.l10n;
   final existing = labels.nodeNameRuleFor(
     path: node.location.filePath,
     originalName: node.displayName,
@@ -526,7 +541,7 @@ Future<void> _showFunctionNodeNameDialog(
       return StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: const Text('给这个容器取名字'),
+            title: Text(l10n.tr('给这个容器取名字', 'Name this container')),
             content: SizedBox(
               width: 420,
               child: Column(
@@ -534,12 +549,18 @@ Future<void> _showFunctionNodeNameDialog(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    '原函数：${node.displayName}',
+                    l10n.tr(
+                      '原函数：${node.displayName}',
+                      'Original function: ${node.displayName}',
+                    ),
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '名字只属于这个函数容器；函数移动或内部代码变化后会继续智能跟随。',
+                    l10n.tr(
+                      '名字只属于这个函数容器；函数移动或内部代码变化后会继续智能跟随。',
+                      'This name belongs only to this function container and will keep following it when the function moves or its code changes.',
+                    ),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -549,8 +570,8 @@ Future<void> _showFunctionNodeNameDialog(
                     controller: nameController,
                     autofocus: true,
                     decoration: InputDecoration(
-                      labelText: '容器名称',
-                      hintText: '例如：获取商品',
+                      labelText: l10n.tr('容器名称', 'Container name'),
+                      hintText: l10n.tr('例如：获取商品', 'For example: Fetch products'),
                       errorText: errorText,
                       border: const OutlineInputBorder(),
                     ),
@@ -567,21 +588,26 @@ Future<void> _showFunctionNodeNameDialog(
                       Navigator.of(dialogContext).pop(false);
                     }
                   },
-                  child: const Text('恢复原名'),
+                  child: Text(l10n.tr('恢复原名', 'Restore original name')),
                 ),
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('取消'),
+                child: Text(l10n.tr('取消', 'Cancel')),
               ),
               FilledButton(
                 onPressed: () {
                   if (nameController.text.trim().isEmpty) {
-                    setDialogState(() => errorText = '名称不能为空');
+                    setDialogState(
+                      () => errorText = l10n.tr(
+                        '名称不能为空',
+                        'Name cannot be empty',
+                      ),
+                    );
                     return;
                   }
                   Navigator.of(dialogContext).pop(true);
                 },
-                child: const Text('保存'),
+                child: Text(l10n.tr('保存', 'Save')),
               ),
             ],
           );
@@ -627,6 +653,7 @@ class _FunctionNodeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     final muted = theme.colorScheme.onSurfaceVariant;
     final customName = labels?.nodeNameFor(
       path: node.location.filePath,
@@ -707,7 +734,9 @@ class _FunctionNodeCard extends StatelessWidget {
                       ),
                       if (labels != null)
                         IconButton(
-                          tooltip: customName == null ? '给容器取名字' : '修改容器名称',
+                          tooltip: customName == null
+                              ? l10n.tr('给容器取名字', 'Name container')
+                              : l10n.tr('修改容器名称', 'Rename container'),
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
@@ -723,7 +752,7 @@ class _FunctionNodeCard extends StatelessWidget {
                         ),
                       if (isRoot) ...[
                         Text(
-                          '当前',
+                          l10n.tr('当前', 'Current'),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.primary,
                             fontWeight: FontWeight.w700,
@@ -768,7 +797,7 @@ class _FunctionNodeCard extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Workspace 原始源码',
+                          l10n.tr('Workspace 原始源码', 'Workspace source code'),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: muted,
                             fontWeight: FontWeight.w700,
@@ -782,7 +811,7 @@ class _FunctionNodeCard extends StatelessWidget {
                         ),
                         onPressed: onOpenSource,
                         icon: const Icon(Icons.open_in_new_rounded, size: 14),
-                        label: const Text('打开源码'),
+                        label: Text(l10n.tr('打开源码', 'Open source')),
                       ),
                     ],
                   ),
@@ -890,6 +919,7 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
     final selected = _selectedSource();
     if (labels == null || selected == null) return;
 
+    final l10n = context.l10n;
     final labelController = TextEditingController();
     String? errorText;
 
@@ -899,7 +929,7 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('添加位置标签'),
+              title: Text(l10n.tr('添加位置标签', 'Add position label')),
               content: SizedBox(
                 width: 460,
                 child: Column(
@@ -907,13 +937,18 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      '${widget.node.location.filePath}:${selected.globalLine} '
-                      '· 第 ${selected.startColumn + 1}–${selected.endColumn} 列',
+                      l10n.tr(
+                        '${widget.node.location.filePath}:${selected.globalLine} · 第 ${selected.startColumn + 1}–${selected.endColumn} 列',
+                        '${widget.node.location.filePath}:${selected.globalLine} · columns ${selected.startColumn + 1}–${selected.endColumn}',
+                      ),
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '只绑定这一处源码；上方增删行或函数移动后会智能重新定位。',
+                      l10n.tr(
+                        '只绑定这一处源码；上方增删行或函数移动后会智能重新定位。',
+                        'This label is bound only to this source location and will intelligently relocate after lines are added or removed above it, or when the function moves.',
+                      ),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant,
@@ -921,9 +956,9 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
                     ),
                     const SizedBox(height: 10),
                     InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: '选中的源码',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.tr('选中的源码', 'Selected source'),
+                        border: const OutlineInputBorder(),
                       ),
                       child: SelectableText(
                         selected.source,
@@ -936,8 +971,8 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
                       autofocus: true,
                       maxLines: 3,
                       decoration: InputDecoration(
-                        labelText: '显示成什么',
-                        hintText: '例如：等待',
+                        labelText: l10n.tr('显示成什么', 'Display as'),
+                        hintText: l10n.tr('例如：等待', 'For example: Wait'),
                         errorText: errorText,
                         border: const OutlineInputBorder(),
                       ),
@@ -948,17 +983,22 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
+                  child: Text(l10n.tr('取消', 'Cancel')),
                 ),
                 FilledButton(
                   onPressed: () {
                     if (labelController.text.trim().isEmpty) {
-                      setDialogState(() => errorText = '标签不能为空');
+                      setDialogState(
+                        () => errorText = l10n.tr(
+                          '标签不能为空',
+                          'Label cannot be empty',
+                        ),
+                      );
                       return;
                     }
                     Navigator.of(dialogContext).pop(true);
                   },
-                  child: const Text('保存'),
+                  child: Text(l10n.tr('保存', 'Save')),
                 ),
               ],
             );
@@ -989,6 +1029,7 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     final sourceStyle = TextStyle(
       color: theme.colorScheme.onSurface,
       fontFamily: 'monospace',
@@ -1058,10 +1099,19 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
               Expanded(
                 child: Text(
                   widget.labelModeEnabled
-                      ? '先关闭电线标签显示，再选择源码添加标签'
+                      ? l10n.tr(
+                          '先关闭电线标签显示，再选择源码添加标签',
+                          'Turn off wire labels first, then select source code to add a label',
+                        )
                       : selected == null
-                          ? '选择同一行的一段源码即可添加标签'
-                          : '已选择：${selected.source}',
+                          ? l10n.tr(
+                              '选择同一行的一段源码即可添加标签',
+                              'Select source code on a single line to add a label',
+                            )
+                          : l10n.tr(
+                              '已选择：${selected.source}',
+                              'Selected: ${selected.source}',
+                            ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -1080,7 +1130,7 @@ class _FunctionSourceViewportState extends State<_FunctionSourceViewport> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 icon: const Icon(Icons.label_outline_rounded, size: 15),
-                label: const Text('添加标签'),
+                label: Text(l10n.tr('添加标签', 'Add label')),
               ),
             ],
           ),
@@ -1796,6 +1846,8 @@ class _FunctionCallEdgePainter extends CustomPainter {
     required this.lineColor,
     required this.labelColor,
     required this.labelSurface,
+    required this.callerLabel,
+    required this.calleeLabel,
   });
 
   final List<_HierarchyEdge> edges;
@@ -1803,6 +1855,8 @@ class _FunctionCallEdgePainter extends CustomPainter {
   final Color lineColor;
   final Color labelColor;
   final Color labelSurface;
+  final String callerLabel;
+  final String calleeLabel;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1881,14 +1935,14 @@ class _FunctionCallEdgePainter extends CustomPainter {
 
       _paintEndpointLabel(
         canvas,
-        text: '调用',
+        text: callerLabel,
         anchor: start,
         callerIsLeft: callerIsLeft,
         isCaller: true,
       );
       _paintEndpointLabel(
         canvas,
-        text: '被调用',
+        text: calleeLabel,
         anchor: end,
         callerIsLeft: callerIsLeft,
         isCaller: false,
@@ -1953,5 +2007,7 @@ class _FunctionCallEdgePainter extends CustomPainter {
       oldDelegate.direction != direction ||
       oldDelegate.lineColor != lineColor ||
       oldDelegate.labelColor != labelColor ||
-      oldDelegate.labelSurface != labelSurface;
+      oldDelegate.labelSurface != labelSurface ||
+      oldDelegate.callerLabel != callerLabel ||
+      oldDelegate.calleeLabel != calleeLabel;
 }
