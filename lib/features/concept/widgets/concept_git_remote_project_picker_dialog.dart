@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../workspace/models/workspace_git_pull.dart';
 
 Future<WorkspaceGitFlutterProjectCandidate?>
@@ -39,10 +40,11 @@ class _ConceptGitRemoteProjectPickerDialogState
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
 
     return AlertDialog(
       key: const ValueKey('concept-git-project-picker'),
-      title: const Text('选择 Flutter App'),
+      title: Text(l10n.tr('选择 Flutter App', 'Choose Flutter app')),
       content: SizedBox(
         width: 620,
         child: Column(
@@ -55,7 +57,10 @@ class _ConceptGitRemoteProjectPickerDialogState
             ),
             const SizedBox(height: 4),
             Text(
-              '检测到 ${widget.candidates.length} 个可运行 Flutter App。选择后系统会记住这个路径，之后 Pull / Push 不需要再次选择。',
+              l10n.tr(
+                '检测到 ${widget.candidates.length} 个可运行 Flutter App。选择后系统会记住这个路径，之后 Pull / Push 不需要再次选择。',
+                'Found ${widget.candidates.length} runnable Flutter apps. After you choose one, the path will be remembered so future Pull / Push operations do not need another selection.',
+              ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -101,7 +106,7 @@ class _ConceptGitRemoteProjectPickerDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.tr('取消', 'Cancel')),
         ),
         FilledButton.icon(
           key: const ValueKey('concept-git-project-select'),
@@ -111,7 +116,7 @@ class _ConceptGitRemoteProjectPickerDialogState
                     widget.candidates[selectedIndex],
                   ),
           icon: const Icon(Icons.arrow_forward_rounded),
-          label: const Text('打开这个 App'),
+          label: Text(l10n.tr('打开这个 App', 'Open this app')),
         ),
       ],
     );
