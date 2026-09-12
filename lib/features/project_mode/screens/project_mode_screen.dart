@@ -208,7 +208,6 @@ class _ProjectModeScreenState extends State<ProjectModeScreen> {
         },
       );
 
-      // 先让弹窗真正绘制出来，再开始解析项目。
       await WidgetsBinding.instance.endOfFrame;
 
       final bundle = const FlutterProjectDirectoryImportService().parse(files);
@@ -698,7 +697,7 @@ class _ProjectCard extends StatelessWidget {
     final subtitle = _subtitle(context, project);
     final namespace = accountUsername == null
         ? project.slug
-        : '$accountUsername / ${project.slug}';
+        : '$accountUsername/${project.slug}';
     final l10n = context.l10n;
 
     return Card(
