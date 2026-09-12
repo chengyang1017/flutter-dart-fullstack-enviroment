@@ -60,8 +60,8 @@ void main() {
     expect(commands.first.arguments.take(4), [
       'create',
       '--no-pub',
+      '--platforms=android,web',
       '--project-name',
-      'recreated_practice',
     ]);
     expect(commands.last.arguments, ['pub', 'get']);
     expect(commands.last.workingDirectory, p.normalize(p.absolute(output)));
@@ -159,6 +159,15 @@ dependencies:
 Uint8List _packageBytes(Map<String, String> files) {
   final archive = Archive();
   final payloadFiles = files.keys.toList()..sort();
+  final changes = <Map<String, String>>[
+    for (final path in payloadFiles)
+      <String, String>{
+        'type': path == 'pubspec.yaml' || path == 'lib/main.dart'
+            ? 'modified'
+            : 'created',
+        'path': path,
+      },
+  ];
   final manifest = jsonEncode({
     'formatVersion': 2,
     'projectType': 'flutter',
@@ -166,7 +175,7 @@ Uint8List _packageBytes(Map<String, String> files) {
     'projectName': 'recreated_practice',
     'flutterPlatforms': const <String>['android', 'web'],
     'exportedAt': DateTime.utc(2026, 9, 3).toIso8601String(),
-    'changes': const <Object>[],
+    'changes': changes,
     'payloadFiles': payloadFiles,
     'basePayloadFiles': const <String>[],
   });
