@@ -11,7 +11,10 @@ import 'http_workspace_remote_persistence.dart';
 class WorkspaceCloudRuntime {
   WorkspaceCloudRuntime._();
 
-  static const apiUrl = String.fromEnvironment('WORKSPACE_STORAGE_API_URL');
+  static const apiUrl = String.fromEnvironment(
+    'WORKSPACE_STORAGE_API_URL',
+    defaultValue: 'https://workspace-storage-production.up.railway.app',
+  );
   static const _environmentAccessToken =
       String.fromEnvironment('WORKSPACE_ACCESS_TOKEN');
 
