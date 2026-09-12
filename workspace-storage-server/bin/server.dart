@@ -7,14 +7,17 @@ Future<void> main() async {
   final environment = Platform.environment;
   final port = int.tryParse(environment['PORT'] ?? '') ?? 8090;
   final host = environment['HOST'] ?? '0.0.0.0';
-  final storageRoot = environment['WORKSPACE_STORAGE_ROOT'] ?? '.workspace-storage';
+  final storageRoot =
+      environment['WORKSPACE_STORAGE_ROOT'] ?? '.workspace-storage';
   final temporaryTtlHours =
       int.tryParse(environment['TEMPORARY_WORKSPACE_TTL_HOURS'] ?? '') ?? 168;
   final sessionTtlDays =
       int.tryParse(environment['WORKSPACE_SESSION_TTL_DAYS'] ?? '') ?? 30;
 
   if (temporaryTtlHours <= 0) {
-    stderr.writeln('TEMPORARY_WORKSPACE_TTL_HOURS must be greater than zero.');
+    stderr.writeln(
+      'TEMPORARY_WORKSPACE_TTL_HOURS must be greater than zero.',
+    );
     exitCode = 64;
     return;
   }
@@ -56,7 +59,8 @@ Future<void> main() async {
   StaticBearerWorkspaceAuthenticator? legacyAuthenticator;
   if (authTokens != null && authTokens.trim().isNotEmpty) {
     try {
-      legacyAuthenticator = StaticBearerWorkspaceAuthenticator.fromJson(authTokens);
+      legacyAuthenticator =
+          StaticBearerWorkspaceAuthenticator.fromJson(authTokens);
       authenticators.insert(0, legacyAuthenticator);
     } on FormatException catch (error) {
       stderr.writeln(error.message);
@@ -100,7 +104,7 @@ Future<void> main() async {
     workspaceStore: workspaceStore,
     secretStore: secretStore,
   );
-  final handler = WorkspaceAdminHttpHandler(
+  final adminHandler = WorkspaceAdminHttpHandler(
     store: adminStore,
     accounts: accounts,
     authenticator: authenticator,
@@ -108,10 +112,20 @@ Future<void> main() async {
     adminUsernames: adminUsernames,
     allowedOrigin: adminAllowedOrigin,
   );
+  final adminAgentService =
+      WorkspaceAdminAgentService.fromEnvironment(environment);
+  final handler = WorkspaceAdminAgentHttpHandler(
+    service: adminAgentService,
+    authenticator: authenticator,
+    fallback: adminHandler.handle,
+    adminUsernames: adminUsernames,
+    allowedOrigin: adminAllowedOrigin,
+  );
 
   final server = await HttpServer.bind(host, port);
   stdout.writeln(
-    'Workspace storage listening on http://${server.address.address}:${server.port}',
+    'Workspace storage listening on '
+    'http://${server.address.address}:${server.port}',
   );
   stdout.writeln('Storage root: ${root.absolute.path}');
   stdout.writeln('Temporary Workspace TTL: $temporaryTtlHours hours');
@@ -120,10 +134,18 @@ Future<void> main() async {
   stdout.writeln('Workspace secret vault: AES-GCM-256 enabled');
   stdout.writeln(
     adminUsernames.isEmpty
-        ? 'Workspace admin API: disabled (WORKSPACE_ADMIN_USERNAMES is empty)'
+        ? 'Workspace admin API: disabled '
+            '(WORKSPACE_ADMIN_USERNAMES is empty)'
         : 'Workspace admin API: enabled for ${adminUsernames.join(', ')}',
   );
   stdout.writeln('Workspace admin API CORS: $adminAllowedOrigin');
+  stdout.writeln(
+    adminAgentService.isConfigured
+        ? 'Workspace admin agent: enabled '
+            '(model ${adminAgentService.model})'
+        : 'Workspace admin agent: disabled '
+            '(set WORKSPACE_ADMIN_AGENT_OPENAI_API_KEY or OPENAI_API_KEY)',
+  );
   if (authTokens != null && authTokens.trim().isNotEmpty) {
     stdout.writeln('Static development bearer identities: enabled');
     stdout.writeln('Legacy account claiming: enabled');
