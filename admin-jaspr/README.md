@@ -27,16 +27,16 @@ The bootstrap endpoint refuses to overwrite an existing catalog.
 
 ## Run locally
 
-This is a pure client-side Jaspr app, so SSR must be disabled when serving it:
+Install the current Jaspr CLI and dependencies:
 
 ```bash
 dart pub global activate jaspr_cli
 cd admin-jaspr
 dart pub get
-jaspr serve --no-ssr
+jaspr serve
 ```
 
-Jaspr generates `lib/main.client.options.dart` and the `main.client.dart.js` bundle during serve/build.
+In client mode, `jaspr serve` automatically discovers `lib/main.client.dart`, generates `lib/main.client.options.dart`, compiles the client bundle, and serves files from `web/`.
 
 The default Workspace Storage API is:
 
@@ -44,19 +44,23 @@ The default Workspace Storage API is:
 https://workspace-storage-production.up.railway.app
 ```
 
-To build against another backend, provide `WORKSPACE_STORAGE_API_URL` as a Dart define supported by your Jaspr build environment.
+To build against another backend, pass a client define, for example:
+
+```bash
+jaspr serve --dart-define-client=WORKSPACE_STORAGE_API_URL=https://example.com
+```
 
 ## Build
 
 ```bash
-jaspr build --no-ssr
+jaspr build
 ```
 
-The no-SSR build produces static client assets that can be deployed behind nginx or any static host.
+Client-mode output can be deployed behind nginx or another static host.
 
 ## Docker / Railway
 
-The included Dockerfile builds the Jaspr client app with `--no-ssr` and serves it through nginx on port `8080` with SPA fallback.
+The included Dockerfile builds the Jaspr client app and serves the resulting static files through nginx on port `8080` with SPA fallback.
 
 For a Railway service created from this monorepo, set:
 
