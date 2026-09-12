@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_monaco/flutter_monaco.dart';
 import 'package:re_editor/re_editor.dart';
 
+import '../../../core/l10n/app_localizations.dart';
 import '../../../core/navigation/monaco_route_observer.dart';
+import '../../../core/theme/workbench_palette.dart';
 import '../controllers/concept_label_controller.dart';
 import '../controllers/playground_controller.dart';
 
@@ -30,28 +32,17 @@ class MonacoCodeEditorPanel extends StatefulWidget {
 }
 
 class _MonacoCodeEditorPanelState extends State<MonacoCodeEditorPanel> {
-  static const _background = Color(0xff111318);
-  static const _themeId = 'code-tutor-dark';
+  static const _darkThemeId = 'code-tutor-dark';
+  static const _lightThemeId = 'code-tutor-light';
 
   static const _page = MonacoPageConfig(
     customCss: '''
-html, body, #container { background: #111318 !important; }
-.monaco-editor,
-.monaco-editor-background,
-.monaco-editor .margin {
-  background-color: #111318 !important;
-}
 .monaco-editor .margin-view-overlays .line-numbers {
   left: 0 !important;
   width: 46px !important;
   padding: 0 !important;
-  color: #626a77 !important;
   text-align: right !important;
   font-variant-numeric: tabular-nums;
-}
-.monaco-editor .current-line ~ .line-numbers,
-.monaco-editor .line-numbers.active-line-number {
-  color: #c7ccd6 !important;
 }
 
 /* Concept labels stay inside the same Monaco model. */
@@ -144,6 +135,7 @@ html, body, #container { background: #111318 !important; }
   bool _syncingMirror = false;
   int _syncGeneration = 0;
   late String _initialText;
+  Brightness? _appliedBrightness;
 
   @override
   void initState() {
@@ -151,6 +143,15 @@ html, body, #container { background: #111318 !important; }
     _initialText = widget.controller.textController.text;
     _attach(widget.controller);
     _attachLabels(widget.labels);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final brightness = Theme.of(context).brightness;
+    if (_monaco != null && _appliedBrightness != brightness) {
+      unawaited(_applyMonacoTheme());
+    }
   }
 
   @override
@@ -217,29 +218,42 @@ html, body, #container { background: #111318 !important; }
     unawaited(_syncFromMirror());
   }
 
+  Future<void> _applyMonacoTheme([MonacoController? readyController]) async {
+    final controller = readyController ?? _monaco;
+    if (controller == null || !mounted) return;
+
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final themeId = dark ? _darkThemeId : _lightThemeId;
+    final themeData = <String, dynamic>{
+      'base': dark ? 'vs-dark' : 'vs',
+      'inherit': true,
+      'rules': <Object?>[],
+      'colors': <String, String>{
+        'editor.background': dark ? '#111318' : '#ffffff',
+        'editor.foreground': dark ? '#d6deeb' : '#1f2937',
+        'editorLineNumber.foreground': dark ? '#59606c' : '#8a95a5',
+        'editorLineNumber.activeForeground': dark ? '#c7ccd6' : '#374151',
+        'editor.selectionBackground': dark ? '#264f78' : '#bfdbfe',
+        'editor.inactiveSelectionBackground': dark ? '#1f3b59' : '#dbeafe',
+        'editorGutter.background': dark ? '#111318' : '#ffffff',
+        'minimap.background': dark ? '#111318' : '#ffffff',
+      },
+    };
+
+    await controller.defineTheme(
+      MonacoThemeDefinition.fromMonacoThemeData(themeId, themeData),
+    );
+    await controller.setTheme(MonacoTheme(themeId));
+    _appliedBrightness = Theme.of(context).brightness;
+  }
+
   Future<void> _handleReady(MonacoController controller) async {
     _monaco = controller;
     if (mounted) {
       setState(() {});
     }
 
-    await controller.defineTheme(
-      MonacoThemeDefinition.fromMonacoThemeData(
-        _themeId,
-        const <String, dynamic>{
-          'base': 'vs-dark',
-          'inherit': true,
-          'rules': <Object?>[],
-          'colors': <String, String>{
-            'editor.background': '#111318',
-            'editorLineNumber.foreground': '#59606c',
-            'editorLineNumber.activeForeground': '#c7ccd6',
-            'editor.selectionBackground': '#264f78',
-          },
-        },
-      ),
-    );
-    await controller.setTheme(const MonacoTheme(_themeId));
+    await _applyMonacoTheme(controller);
 
     // Match Code Tutor Studio's Monaco gutter geometry exactly. Monaco decides
     // contentLeft from the current font metrics, line-number digits, and WebView
@@ -615,8 +629,10 @@ html, body, #container { background: #111318 !important; }
 
   @override
   Widget build(BuildContext context) {
+    final palette = WorkbenchPalette.of(context);
+
     return ColoredBox(
-      color: _background,
+      color: palette.editorBackground,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -626,16 +642,16 @@ html, body, #container { background: #111318 !important; }
             page: _page,
             autofocus: false,
             showStatusBar: false,
-            backgroundColor: _background,
+            backgroundColor: palette.editorBackground,
             contentDebounce: const Duration(milliseconds: 24),
             onReady: (controller) {
               unawaited(_handleReady(controller));
             },
             onContentChanged: _handleMonacoContent,
             onSelectionChanged: _handleMonacoSelection,
-            loadingBuilder: (context) => const ColoredBox(
-              color: _background,
-              child: Center(
+            loadingBuilder: (context) => ColoredBox(
+              color: palette.editorBackground,
+              child: const Center(
                 child: SizedBox.square(
                   dimension: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
@@ -643,14 +659,17 @@ html, body, #container { background: #111318 !important; }
               ),
             ),
             errorBuilder: (context, error, stackTrace) => ColoredBox(
-              color: _background,
+              color: palette.editorBackground,
               child: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: SelectableText(
-                    'Monaco Editor 启动失败\n$error',
+                    context.l10n.tr(
+                      'Monaco Editor 启动失败\n$error',
+                      'Failed to start Monaco Editor\n$error',
+                    ),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Color(0xffd7dae0)),
+                    style: TextStyle(color: palette.text),
                   ),
                 ),
               ),
